@@ -1,0 +1,100 @@
+#Important Notes
+
+- Only CentOS 6 and Ubuntu 12.10 and up have been tested.
+- Only a Linux 64-bit version of our software is available at this time.
+- Currently, the default install path is valid only on UNIX-like
+platforms.
+
+#Requirements
+
+
+##Hardware
+
+You will need a fast computer with plenty of RAM and disk space. This pipeline
+is very CPU and IO intensive, and will require plenty of system memory and
+space for output.
+
+##Software
+
+### Build requirements
+Installation requires cmake (http://www.cmake.org/), minimum version 2.8
+
+On Ubuntu, this can be installed using:
+
+    sudo apt-get install cmake
+
+On Red Hat 6/CentOS 6, run (as root):
+
+    yum install cmake28
+
+On Fedora (13 and up), run (as root):
+
+    yum install cmake
+
+On archlinux, run:
+
+    pacman -Sy cmake
+
+Additionally you will need GCC version 4.1.2 on Mac/Linux/CYGWIN
+
+### Runtime requirements
+The following programs are required for the pipeline to run:
+
+- MySQL client (5.0.95)
+- Perl (5.8.8)
+
+A MySQL server is required, but can be hosted on a remote machine.
+
+The Perl `DBI` and `DBD::mysql` modules are required for interacting
+with a MySQL server.
+
+TRF is also required, but is downloaded during installation. If for some
+reason the download fails, you can download it manually from
+[the website](http://tandem.bu.edu/trf/trf407b.linux.download.html)
+and save it as `trf407b-ngs.linux.exe` in the build directory (see [Installation](#installation)
+below).
+
+#Installation
+
+To build and install to the default directory, simply run the following commands:
+
+    tar xzvf vntrseekN.NN.tar.gz
+    cd vntrseekN.NNsrc
+	mkdir build
+	cd build
+	cmake ..     # may be cmake28 on some systems
+	make install # or sudo make install, if needed
+
+By default, this will install the pipeline to `/usr/local/vntrseekN.NN` (eg,
+`/usr/local/vntrseek1.05`).
+
+If you would like to choose a different installation prefix, simply run:
+
+	cmake -DCMAKE_INSTALL_PREFIX=<full path> ..
+
+For example, to install to your home directory, `${HOME}/vntrseekN.NN`, use:
+
+	cmake -DCMAKE_INSTALL_PREFIX=${HOME} ..
+
+**If you installed this pipeline as root, and are creating an INDIST
+file** you may need to run it as root unless you give your user
+permission to write to the installation directory.
+
+If you installed to a non-standard location, you may need to add
+`/path/to/prefix/bin` to your `PATH` variable (eg, if your prefix
+was `/opt`, you will need to have `/opt/bin` in your `PATH`).
+
+**IMPORTANT:** for correct execution, please add these lines to the
+`[mysqld]` section of the `my.cnf` file and restart mysql process:
+
+    innodb_buffer_pool_size=1G
+    innodb_additional_mem_pool_size=20M
+
+# Uninstalling
+
+On UNIX, simply run:
+
+	xargs rm < install_manifest.txt # or sudo xargs rm < install_manifest.txt
+
+from the build directory you created above. The directory will
+remain, however, so you will not lose any reference files.

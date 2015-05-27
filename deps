@@ -1,0 +1,6 @@
+Unimplemented deps:
+libxml-libxml-perl
+libgd-graph-perl
+
+Need:
+- mysql_local_infile=1 in the DBD connect command in run_rankflankmap.pl

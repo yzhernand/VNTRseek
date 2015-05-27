@@ -1,0 +1,88 @@
+# COPY THIS FILE TO A DIFFERENT LOCATION AND SET ALL VARIABLES. 
+# DO NOT FORGET TO CHMOD THIS FILE TO PREVENT OTHER PEOPLE ON 
+# THE SYSTEM FROM LEARNING YOUR MYSQL CREDENTIALS.
+
+# mysql credentials
+LOGIN=
+PASS=
+HOST=localhost
+
+# set this to the number of processors on your system 
+# (or less if sharing the system with others or RAM is limited)
+# eg, 8
+NPROCESSES=-1
+
+# minimum required flank on both sides for a read TR to be considered
+# eg, 10
+MIN_FLANK_REQUIRED=10
+
+# maximum flank length used in flank alignments
+# set to big number to use all
+# if read flanks are long with a lot of errors, 
+# it might be useful to set this to something like 50
+# max number of errors per flank is currently set to 8 (can be changed in main script only)
+# eg, 1000
+MAX_FLANK_CONSIDERED=50
+
+# minimum number of mapped reads which agree on copy number to call an allele
+# eg, 2
+MIN_SUPPORT_REQUIRED=2
+
+# server name, used for html generating links
+# eg, orca.bu.edu
+SERVER=
+
+# for 454 platform, strip leading 'TCAG' 
+# eg, 1 - yes
+# eg, 0 - no (use no for all other platforms)
+STRIP_454_KEYTAGS=0
+
+# data is paired reads
+# eg, 0 = no 
+# eg, 1 - yes
+IS_PAIRED_READS=0
+
+# html directory (must be writable and executable!)
+# eg, /var/www/html/vntrview
+HTML_DIR=
+
+# input data directory 
+# (plain or gzipped fasta/fastq files)
+# eg, /input
+FASTA_DIR=
+
+# output directory (must be writable and executable!)
+# eg, /output
+OUTPUT_ROOT=
+
+# temp (scratch) directory (must be executable!)
+# eg, /tmp
+TMPDIR=
+
+# names for the reference files 
+
+# (leb36 file, sequence plus flank data file, indistinguishable references file) 
+# files must be in install directory
+
+# eg, reference.leb36
+REFERENCE_FILE=t26__.leb36 
+
+# eg, reference.seq
+REFERENCE_SEQ=t26__.seq 
+
+# this file can be generated bu setting reference_indist_produce to 1
+# eg, reference.indist 
+REFERENCE_INDIST=t26__.indist
+
+# generate a file of indistinguishable references, 
+# necessary only if a file is not already available for the reference set
+# eg, 1 - generate
+# eg, 0 - don't generate
+REFERENCE_INDIST_PRODUCE=0
+
+# total number of reference TRs prior to filtering
+# this is a fixed number to be printed in the latex file
+# set to 0 if it is not applicable
+# eg, 1188939 - human
+REFS_TOTAL=1188939 
+

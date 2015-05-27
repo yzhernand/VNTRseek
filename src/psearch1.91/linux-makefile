@@ -1,0 +1,1 @@
+cc psearch.c bitwise\ edit\ distance\ alignment\ multiple\ word\ no\ end\ penalty.c bitwise\ LCS\ single\ word.c bitwise\ LCS\ multiple\ word.c -lm -O2 -o psearch.exe
