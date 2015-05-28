@@ -1,4 +1,18 @@
 *******************************************************************************************************
+* ver - 1.09 
+*
+* 	July 10, 2014
+*
+*       - added error check to extra_incex.pl execute statement
+*       - mergealign/aln change in vntrview to fix images not being displayed right, changed file names 
+*           to /tmp/DB/rid* and mergealign uses same name prefix now (before used nonexistant? /tmp/vntr folder)
+*       - index.php change in vntrview to browser center correctly when RC read is present
+*       - pcr dup increased MAXREADLEN to 5000 and added a check to skip if anything larger
+*       - changed pipeline to not exit if no results, must continue all the way to the end to produce 
+*         empty vcf file (it will still exit with error in no TRs were found, which is unlikely in any
+*         genome)
+*
+*******************************************************************************************************
 * ver - 1.08 
 *
 * 	Apr 8, 2014
@@ -6,8 +20,8 @@
 *       - verC: added DBNAME as prefix for all generated files
 *       - verC: pcr duplicate used to be 3 differences and could start 2 characters off, now it is 
 *          2 differences and has to start same place
-*       - verC: changed psearch anf flankalign to use the real flank length to calculate max errors, so
-*          it is 0.4 * flanklenth or 8, whichever is larger
+*       - verC: changed psearch and flankalign to use the real flank length to calculate max errors, so
+*          it is 0.4 * flanklenth or 8, whichever is smaller
 *       - verC: unifuting run and output dirs
 *	- added commandline options to set (overwrites vs.cnf file)
 *	- getnextstep now properly returns 0, when database does not yet exist

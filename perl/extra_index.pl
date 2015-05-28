@@ -78,7 +78,7 @@ my ($LOGIN,$PASS,$HOST) = get_credentials($MSDIR);
  $sth = $dbh->prepare('SELECT map.refid, map.readid, replnk.sid, replnk.first, replnk.last, replnk.copynum, replnk.patsize, replnk.pattern,fasta_reads.dna from map INNER JOIN rank ON rank.refid=map.refid AND rank.readid=map.readid INNER JOIN rankflank ON rankflank.refid=map.refid AND rankflank.readid=map.readid INNER JOIN replnk ON replnk.rid=map.readid INNER JOIN fasta_reads on fasta_reads.sid=replnk.sid ORDER BY map.refid,map.readid;')
                 or die "Couldn't prepare statement: " . $dbh->errstr;
 
- $sth->execute();
+ $sth->execute() or die "Couldn't execute: " . $sth->errstr;
  $num = $sth->rows; 
 
  print "\n best best best records: $num\n";

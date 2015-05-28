@@ -5,7 +5,7 @@
 #include "bitwise LCS single word.h"
 #include "bitwise LCS multiple word.h"
 
-#define MAXREADLENGTH 1000
+#define MAXREADLENGTH 5000
 #define FLANKLENGTH 20
 #define MAXDIFFFORPCRDUPLICATE 2
 //may want to use a combination of length and mismatch/indel differences
@@ -279,33 +279,40 @@ int main (int argc, const char * argv[]) {
 
 	lineCounter = 0;
 	while (!feof(readFilep)) {
-		lineCounter++;
 		if(fgets(line, 10000, readFilep)!=NULL)	//NULL if reading error or blank end line
 		{
 			//the following is the format of a .index.seq file
 			sscanfreturnvalue = sscanf(line,"%lld %s %s %d %d %f %d %s %s",&readid,fastaHeader1,fastaHeader2,&TRstart,&TRend,&copies,&patternsize,pattern,sequence); //%lld is 64 bit signed integer
 			if (sscanfreturnvalue == 9) //not  if blank line or misformatted line
 			{
-				//printf("\n%lld %s %s %d %d %f %d %s %s",readid,fastaHeader1,fastaHeader2,TRstart,TRend,copies,patternsize,pattern,sequence); //%lld is 64 bit signed integer
-					   
-				//store read data in readItemData
-				readItemData = (struct read *)calloc(1, sizeof(struct read));
-				stringlength = strlen(fastaHeader1);
-				readItemData->fastaHeader1 = (char *)calloc(stringlength+1, sizeof(char));
-				stringlength = strlen(fastaHeader2);
-				readItemData->fastaHeader2 = (char *)calloc(stringlength+1, sizeof(char));
-				stringlength = strlen(sequence);
-				readItemData->sequence = (char *)calloc(stringlength+1, sizeof(char));
-				strcpy(readItemData->fastaHeader1,fastaHeader1);
-				strcpy(readItemData->fastaHeader2,fastaHeader2);
-				strcpy(readItemData->sequence,sequence);
-				readItemData->readid=readid;
-				readItemData->TRstart=TRstart;
-				readItemData->TRend=TRend;
-				readItemData->length=strlen(sequence);
+
+				int seqstrlen = strlen(sequence);
+
+				if (seqstrlen<=MAXREADLENGTH) {
+
+					lineCounter++;
+
+					//printf("\n%lld %s %s %d %d %f %d %s %s",readid,fastaHeader1,fastaHeader2,TRstart,TRend,copies,patternsize,pattern,sequence); //%lld is 64 bit signed integer
+						   
+					//store read data in readItemData
+					readItemData = (struct read *)calloc(1, sizeof(struct read));
+					stringlength = strlen(fastaHeader1);
+					readItemData->fastaHeader1 = (char *)calloc(stringlength+1, sizeof(char));
+					stringlength = strlen(fastaHeader2);
+					readItemData->fastaHeader2 = (char *)calloc(stringlength+1, sizeof(char));
+					stringlength = seqstrlen;
+					readItemData->sequence = (char *)calloc(stringlength+1, sizeof(char));
+					strcpy(readItemData->fastaHeader1,fastaHeader1);
+					strcpy(readItemData->fastaHeader2,fastaHeader2);
+					strcpy(readItemData->sequence,sequence);
+					readItemData->readid=readid;
+					readItemData->TRstart=TRstart;
+					readItemData->TRend=TRend;
+					readItemData->length=seqstrlen;
 				
-				//store readItemData on linked list by TRstart
-				linkedListInsertItemAtHead(trStartList[TRstart], (char *)readItemData);
+					//store readItemData on linked list by TRstart
+					linkedListInsertItemAtHead(trStartList[TRstart], (char *)readItemData);
+				}
 			}
 			
 			else printf("\nerror: %s",line);
