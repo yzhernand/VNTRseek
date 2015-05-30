@@ -1,5 +1,12 @@
 *******************************************************************************************************
-* ver - 1.09 
+* ver - 1.09
+*
+*   May 29, 2015
+*
+*		- Bumped version in vntrseek.pl
+*       - Reformatted vntrseek.pl with perltidy for readability.
+*       - Removed subroutine prototype.
+*       - No longer using bareword file handles. Now using lexical variables.
 *
 * 	July 10, 2014
 *
