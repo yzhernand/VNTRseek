@@ -221,7 +221,7 @@ int main (int argc, const char * argv[]) {
 	for(i=0;i<argc;i++)
 		printf("%s ",argv[i]);
 	
-	printf("\n%d %d",sizeof(char *), sizeof(long long int));
+	printf("\n%ld %ld",sizeof(char *), sizeof(long long int));
 	
 	if(argc!=5)
 	{

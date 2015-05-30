@@ -5,7 +5,7 @@ SET(PSEARCH_SRCS
     bitwise\ LCS\ multiple\ word.c
     )
 ADD_EXECUTABLE(psearch.exe ${PSEARCH_SRCS})
-TARGET_LINK_LIBRARIES(psearch.exe PUBLIC m)
+TARGET_LINK_LIBRARIES(psearch.exe easylife m)
 
 INSTALL(TARGETS psearch.exe
     RUNTIME DESTINATION ${InstallSuffix}

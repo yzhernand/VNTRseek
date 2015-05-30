@@ -709,7 +709,7 @@ int main(int argc, char** argv)
     }
 
   
-    printf("\n\n%llu profiles read, %llu profiles marked nonredundant. (time: %d seconds)\n\n",nread,nwritten,time(NULL) - startTime); fflush(stdout);
+    printf("\n\n%llu profiles read, %llu profiles marked nonredundant. (time: %ld seconds)\n\n",nread,nwritten,time(NULL) - startTime); fflush(stdout);
 
 
     return 0;

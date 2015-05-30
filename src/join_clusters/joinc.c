@@ -142,7 +142,7 @@ int main(int argc, char** argv)
     // open out file
     fpo = fopen(argv[2],"w");
     if (NULL==fpo) {
-        printf("\n\nError, cannot open file 's' for writing!\n",argv[2]);
+        printf("\n\nError, cannot open file '%s' for writing!\n",argv[2]);
         exit(1);
     }
 

@@ -8,11 +8,14 @@
 
 #include <stdio.h>
 
+#include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include <stdlib.h>
 #include <stdarg.h>
+#include <ctype.h>
 #include <math.h>
 #include <zlib.h>
 #include <string.h>
@@ -281,7 +284,7 @@ int main(int argc, char *argv[]) {
 
    /* enter out dir */
    if (chdir(outdir)) {
-     mkdir(outdir);
+     mkdir(outdir, 0755);
         
      if (chdir(outdir)) {
 
@@ -483,7 +486,7 @@ if (hasdata)
        for ( nd1=read_list->head; nd1!=NULL; nd1=nd1->next ) {
 
         read_ptr = (FLANK*)EasyListItem(nd1);
-        fprintf(fp,"\n%ld	'	%d	%d	1	1	1	",read_ptr->id,read_ptr->leftlen,read_ptr->rightlen);
+        fprintf(fp,"\n%lld	'	%d	%d	1	1	1	",read_ptr->id,read_ptr->leftlen,read_ptr->rightlen);
 
         comma = 0;
         for ( nd2=windowstart; nd2!=NULL; nd2=nd2->next ) { 
@@ -611,7 +614,7 @@ if (hasdata)
 
             /* print comma separated refs with errors */
             if (1==comma) { fprintf(fp,","); }
-            fprintf(fp,"%ld:%d:%d",ref_ptr->id,lerr,rerr);
+            fprintf(fp,"%lld:%d:%d",ref_ptr->id,lerr,rerr);
             comma=1;
           } 
 
@@ -697,7 +700,7 @@ if (hasdata)
 
   /* done */
   fclose(rd_fp);
-  printf("\ndone!!! processed: %ld, ThreadCounter: %d\n",processed,ThreadCounter);
+  printf("\ndone!!! processed: %lld, ThreadCounter: %d\n",processed,ThreadCounter);
   
   return 0;
 } 

@@ -3,7 +3,7 @@ SET(FLANKALIGN_SRCS
     "bitwise edit distance alignment multiple word no end penalty.c"
     )
 ADD_EXECUTABLE(flankalign.exe ${FLANKALIGN_SRCS})
-TARGET_LINK_LIBRARIES(flankalign.exe PUBLIC m)
+TARGET_LINK_LIBRARIES(flankalign.exe easylife m)
 
 INSTALL(TARGETS flankalign.exe
     RUNTIME DESTINATION ${InstallSuffix}
