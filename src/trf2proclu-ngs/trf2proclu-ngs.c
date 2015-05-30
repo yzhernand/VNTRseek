@@ -34,8 +34,7 @@
 #define max(a,b) (((a)>=(b))?(a):(b))
 #define min(a,b) (((a)<=(b))?(a):(b))
 
-#include "easylife.h"
-#include "easylife.c"
+#include "../libs/easylife/easylife.h"
 #include "patupdt.h"
 #include "profile.h"
 

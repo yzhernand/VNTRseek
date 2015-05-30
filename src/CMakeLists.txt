@@ -3,6 +3,8 @@ INSTALL(FILES eucledian.dst
     DESTINATION ${InstallSuffix}
     )
 
+ADD_SUBDIRECTORY(libs)
+
 ADD_SUBDIRECTORY(pcr_dup)
 ADD_SUBDIRECTORY(redund_code)
 ADD_SUBDIRECTORY(newflankalign)

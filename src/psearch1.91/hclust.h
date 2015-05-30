@@ -23,7 +23,8 @@
 
 #include <math.h>
 
-#include "easylife.h"
+#include "../libs/easylife/easylife.h"
+#include "profile.h"
 
 //#pragma pack(push)  /* push current alignment to stack */
 //#pragma pack(1)     /* set alignment to 1 byte boundary */

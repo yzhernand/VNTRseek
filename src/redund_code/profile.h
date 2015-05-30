@@ -71,7 +71,7 @@
 #include <limits.h>
 #include <math.h>
 
-#include "easylife.h"
+#include "../libs/easylife/easylife.h"
 
 /* the following structure is used to pass a sequence to the algorithm */
 #define MAXSEQNAMELEN 200

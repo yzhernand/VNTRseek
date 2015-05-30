@@ -30,6 +30,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include "../libs/easylife/easylife.h"
 
 
 /* 1key function prototypes */

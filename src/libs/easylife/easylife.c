@@ -2039,7 +2039,7 @@ void simpleMemorySummaryDebug( int printUnfreed ) {
 
 #ifdef _WIN_32_YES
     /* print */
-    printf(""
+    printf("\n"
         "total allocations: \t\t\t%I64d\n"
         "allocations not deleted: \t\t%I64d\n"
         "total bytes allocated: \t\t\t%I64d\n"
@@ -2047,7 +2047,7 @@ void simpleMemorySummaryDebug( int printUnfreed ) {
         __EasyLifeSimpleArrayAllocations, allocationsLeft, __EasyLifeSimpleArrayBytes, bytesLeft );
 #else
     /* print */
-    printf(""
+    printf("\n"
         "total allocations: \t\t\t%lld\n"
         "allocations not deleted: \t\t%lld\n"
         "total bytes allocated: \t\t\t%lld\n"

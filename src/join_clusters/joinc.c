@@ -8,8 +8,7 @@
 #include <string.h>
 #include <stdarg.h>
 
-#include "easylife.h"
-#include "easylife.c"
+#include "../libs/easylife/easylife.h"
 #include "ghash.h"
 
 #define max3(a,b,c) (((a)>=(b))?(((a)>=(c))?(a):(c)):(((b)>=(c))?(b):(c)))

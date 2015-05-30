@@ -77,7 +77,7 @@
 #include <limits.h>
 #include <math.h>
 
-#include "easylife.h"
+#include "../libs/easylife/easylife.h"
 
 extern char *GetReverse(char *);
 extern char *GetComplement(char *);

@@ -100,8 +100,7 @@
 
 char *Complementascii = NULL;
 
-#include "easylife.h"
-#include "easylife.c"
+#include "../libs/easylife/easylife.h"
 #include "profile.h"
 
 
