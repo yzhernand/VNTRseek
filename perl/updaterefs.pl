@@ -37,6 +37,8 @@ my $MIN_SUPPORT_REQUIRED = $ARGV[9];
 my $VERSION = $ARGV[10];
 my $TEMPDIR = $ARGV[11];
 
+my $BASENAME = $DBNAME =~ s/VNTRPIPE_//r;
+
 # set these mysql credentials in vs.cnf (in installation directory)
 my ($LOGIN,$PASS,$HOST) = get_credentials($MSDIR);
 
@@ -550,7 +552,7 @@ sub print_vcf {
     print VCFFILE "##FORMAT=<ID=SP,Number=A,Type=Integer,Description=\"Number of Spanning Reads\">\n";
     print VCFFILE "##FORMAT=<ID=CGL,Number=A,Type=Integer,Description=\"Copies Gained or Lost with respect to reference\">\n";
 
-    print VCFFILE "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t[Subject name or id]\n";
+    print VCFFILE "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t$BASENAME\n";
 
   
    my $refdir="";
@@ -801,7 +803,7 @@ sub print_vcf2 {
     print VCFFILE2 "##FORMAT=<ID=SP,Number=A,Type=Integer,Description=\"Number of Spanning Reads\">\n";
     print VCFFILE2 "##FORMAT=<ID=CGL,Number=A,Type=Integer,Description=\"Copies Gained or Lost with respect to reference\">\n";
 
-    print VCFFILE2 "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t[Subject name or id]\n";
+    print VCFFILE2 "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t$BASENAME\n";
 
   
    my $refdir="";
