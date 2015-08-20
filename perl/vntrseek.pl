@@ -34,6 +34,7 @@ use Cwd;
 
 use FindBin;
 use File::Basename;
+use File::Copy;
 
 use Getopt::Long qw(GetOptionsFromArray);
 
@@ -829,7 +830,7 @@ if ( $STEP == 2 ) {
         warn "\nWarning: Failed to create output directory!\n";
     }
 
-    system("cp $reference_file $reference_folder/start.leb36");
+    copy("$reference_file", "$reference_folder/start.leb36");
     if ( $? == -1 ) {
         SetError( $STEP, "command failed: $!", -1 );
         die "command failed: $!\n";
