@@ -1414,9 +1414,9 @@ if ( $STEP == 11 ) {
 
     # update DB
     print STDERR "\n\n(updating database with dist/undist info)...";
-    $exstring
-        = "./vntrpipe_xml2sql.pl -r -k5 -t50 -d $DBNAME -u $MSDIR $reference_indist";
-    system($exstring);
+    $exstring = "./vntrpipe_xml2sql.pl";
+    my @exargs = (qw(-r -k5 -t50 -d), $DBNAME, "-u", $MSDIR, $reference_indist);
+    system($exstring, @exargs);
     if ( $? == -1 ) {
         SetError( $STEP, "command failed: $!", -1 );
         die "command failed: $!\n";
@@ -1479,9 +1479,9 @@ if ( $STEP == 13 ) {
 
     $timestart = time();
     print STDERR "\n\nExecuting step #$STEP (calculating edges)...";
-    my $exstring
-        = "./run_edges.pl  $reference_file $edges_folder $DBNAME $MSDIR $MINPROFSCORE $NPROCESSES $PROCLU_EXECUTABLE $TMPDIR";
-    system($exstring);
+    my $exstring = "./run_edges.pl";
+    my @exargs = ("$reference_file", "$edges_folder", "$DBNAME", "$MSDIR", "$MINPROFSCORE", "$NPROCESSES", "$PROCLU_EXECUTABLE", "$TMPDIR");
+    system($exstring, @exargs);
     if ( $? == -1 ) {
         SetError( $STEP, "command failed: $!", -1 );
         die "command failed: $!\n";
@@ -1508,9 +1508,9 @@ if ( $STEP == 14 ) {
     print STDERR
         "\n\nExecuting step #$STEP (generating .index files for pcr_dup)...";
 
-    my $exstring
-        = "./extra_index.pl $read_profiles_folder_clean/best $DBNAME $MSDIR $TMPDIR";
-    system($exstring);
+    my $exstring = "./extra_index.pl";
+    my @exargs = ("$read_profiles_folder_clean/best", "$DBNAME", "$MSDIR", "$TMPDIR");
+    system($exstring, @exargs);
     if ( $? == -1 ) {
         SetError( $STEP, "command failed: $!", -1 );
         die "command failed: $!\n";
@@ -1537,9 +1537,9 @@ if ( $STEP == 15 ) {
     $timestart = time();
     print STDERR "\n\nExecuting step #$STEP (calculating PCR duplicates) ...";
 
-    my $exstring
-        = "./pcr_dup.pl $read_profiles_folder_clean/best $read_profiles_folder_clean $DBNAME $MSDIR $NPROCESSES $TMPDIR";
-    system($exstring);
+    my $exstring = "./pcr_dup.pl";
+    my @exargs = ("$read_profiles_folder_clean/best", "$read_profiles_folder_clean", "$DBNAME", "$MSDIR", "$NPROCESSES", "$TMPDIR");
+    system($exstring, @exargs);
     if ( $? == -1 ) {
         SetError( $STEP, "command failed: $!", -1 );
         die "command failed: $!\n";
@@ -1675,7 +1675,7 @@ if ( $STEP == 19 ) {
 # lets do this setdbstats again (sometimes when copying databases steps are omited so this might not have been executed)
     print STDERR "setting additional statistics...\n";
     system(
-        "./setdbstats.pl $reference_file $read_profiles_folder $reference_folder $read_profiles_folder_clean $DBNAME $MSDIR"
+        "./setdbstats.pl", "$reference_file", "$read_profiles_folder", "$reference_folder", "$read_profiles_folder_clean", "$DBNAME", "$MSDIR"
     );
     if ( $? == -1 ) {
         SetError( $STEP, "command failed: $!", -1 );
@@ -1690,9 +1690,9 @@ if ( $STEP == 19 ) {
     }
 
     # distribution, image and latex files
-    my $exstring
-        = "perl updaterefs.pl $read_profiles_folder $read_profiles_folder_clean $DBNAME $MSDIR $read_profiles_folder_clean/out/representatives.txt ${read_profiles_folder_clean}/result/${DBNAME} $REFS_TOTAL $REFS_REDUND $HTTPSERVER $MIN_SUPPORT_REQUIRED $VERSION $TMPDIR";
-    system($exstring);
+    my $exstring = "perl";
+    my @exargs = ("updaterefs.pl", "$read_profiles_folder", "$read_profiles_folder_clean", "$DBNAME", "$MSDIR", "$read_profiles_folder_clean/out/representatives.txt", "${read_profiles_folder_clean}/result/${DBNAME}", "$REFS_TOTAL", "$REFS_REDUND", "$HTTPSERVER", "$MIN_SUPPORT_REQUIRED", "$VERSION", "$TMPDIR");
+    system($exstring, @exargs);
     if ( $? == -1 ) {
         SetError( $STEP, "command failed: $!", -1 );
         die "command failed: $!\n";
