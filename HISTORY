@@ -1,6 +1,12 @@
 *******************************************************************************************************
 * ver - 1.09
 *
+*   Nov 9, 2015
+*
+*       - Changed data type for several columns in the 'stats' table from "INT(11)" to "BIGINT".
+*           These columns counted input reads & read TRs, but with very high coverage read sets,
+*           it's easy to pass the 2^32 - 1 maximum that "INT" can count.
+*
 *   May 29, 2015
 *
 *		- Bumped version in vntrseek.pl
