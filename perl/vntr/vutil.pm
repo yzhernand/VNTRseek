@@ -371,6 +371,7 @@ vntr_support (
 `representative` INT(11) NULL,
  PRIMARY KEY (refid,copies)
 ) ENGINE=INNODB;
+CREATE INDEX read_index ON vntr_support (representative);
 
 drop table IF EXISTS fasta_ref_reps;
 CREATE TABLE
