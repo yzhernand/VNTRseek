@@ -90,7 +90,7 @@ my $totalReadsWithTRsPatternGE7 = 0;
 my $totalReadsWithTRs = 0;
 my $readTRsWPGE7AfterCyclicRedundancyElimination = 0;
 
-open($input, "cat $readpf/*.index | ./ge7.pl |");
+open($input, "-|", "./ge7.pl $readpf/*.index");
 $rc = <$input>;
 if ($rc =~ /(\d+) (\d+) (\d+)/) {
    $readTRsWithPatternGE7 = $1;
@@ -100,7 +100,7 @@ if ($rc =~ /(\d+) (\d+) (\d+)/) {
 close($input);
 
 
-open($input, "cat $readpf/*.indexhist | ./ge7.pl |");
+open($input, "-|", "./ge7.pl $readpf/*.indexhist");
 $rc = <$input>;
 if ($rc =~ /(\d+) (\d+) (\d+)/) {
   $totalReadsWithTRs = $3;
@@ -108,7 +108,7 @@ if ($rc =~ /(\d+) (\d+) (\d+)/) {
 close($input);
 
 
-open($input, "cat $rpfc/*.rotindex | wc |");
+open($input, "-|", "cat $rpfc/*.rotindex | wc");
 $rc = <$input>;
 if ($rc =~ /(\d+) (\d+) (\d+)/) {
   $readTRsWPGE7AfterCyclicRedundancyElimination = $1;
