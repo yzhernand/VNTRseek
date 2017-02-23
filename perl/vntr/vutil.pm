@@ -6,7 +6,7 @@ use FindBin;
 
 package vutil;
 use base 'Exporter';
-our @EXPORT_OK = ('read_global_config_file','get_config','get_config_vars','get_credentials','set_config','set_config_vars','set_credentials','write_mysql','stats_set','stats_get','set_datetime','print_config');
+our @EXPORT_OK = ('read_global_config_file','get_config','get_config_vars','get_credentials','set_config','set_config_vars','set_credentials','write_mysql','stats_set','stats_get','set_datetime','print_config', 'trim');
 
 # vutil.pm
 # author: Yevgeniy Gelfand
