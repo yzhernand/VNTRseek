@@ -20,16 +20,6 @@ use vutil ('get_credentials');
 use vutil ('write_mysql');
 use vutil ('stats_set');
 
-my $sec;
-my $min;
-my $hour;
-my $mday;
-my $mon;
-my $year;
-my $wday;
-my $yday;
-my $isdst;
-
 print strftime("\n\nstart: %F %T\n\n\n", localtime);
 
 my $argc = @ARGV;
