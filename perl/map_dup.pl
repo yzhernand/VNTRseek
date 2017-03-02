@@ -16,9 +16,7 @@ use File::Basename;
 use lib "$FindBin::Bin/vntr";
 require "vutil.pm";
 
-use vutil ('get_credentials');
-use vutil ('write_mysql');
-use vutil ('stats_set');
+use vutil qw(get_credentials write_mysql stats_set);
 
 print strftime("\n\nstart: %F %T\n\n\n", localtime);
 
@@ -27,6 +25,7 @@ my $argc = @ARGV;
 if ( $argc < 3 ) { die "Usage: map_dup.pl dbname msdir tempdir\n"; }
 
 my $curdir = getcwd;
+my $maxRepeatsPerRead = -1;
 
 my $DBNAME  = $ARGV[0];
 my $MSDIR   = $ARGV[1];

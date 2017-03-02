@@ -158,9 +158,8 @@ sub fork_trf {
             #print STDERR "Starting TRF: $TRF_PARAM";
             defined( my $trf_pid = open( TRF, "| $TRF_PARAM" ) )
                 or die "Cannot start TRF: $!\n";
-        FILE:
             foreach (@file_slice) {
-                next FILE if not defined $_;
+                next if not defined $_;
 
                 # TODO: not parsing FASTA files at the moment:
                 # assuming all extracted files are in FASTA format
@@ -173,7 +172,7 @@ sub fork_trf {
                 }
                 else {
                     warn "File $_ has wrong extension. Skipping this file\n";
-                    next FILE;
+                    next;
                 }
 
                 # if this is a paired file, add .1 and .2 to all headers
