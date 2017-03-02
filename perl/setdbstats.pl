@@ -54,34 +54,35 @@ sub SetStatistics {
 
 my $rc;
 my $exstring;
+my $input;
 
-open(INPUT, "wc -l $reffile | tail -1 |");
-$rc = <INPUT>;
+open($input, "-|", "wc", "-l", "$reffile");
+$rc = <$input>;
 if ($rc =~ /(\d+)/) {
   SetStatistics('NUMBER_REF_TRS',$rc);
 }
-close(INPUT);
+close($input);
 
-open(INPUT, "wc -l $readpf/*.indexhist | tail -1 |");
-$rc = <INPUT>;
+open($input, "-|", "wc -l $readpf/*.indexhist");
+$rc = <$input>;
 if ($rc =~ /(\d+)/) {
   SetStatistics('NUMBER_TRS_IN_READS',$rc);
 }
-close(INPUT);
+close($input);
 
-open(INPUT, "wc -l $reffolder/reference.leb36.rotindex | tail -1 |");
-$rc = <INPUT>;
+open($input, "-|", "wc", "-l", "$reffolder/reference.leb36.rotindex");
+$rc = <$input>;
 if ($rc =~ /(\d+)/) {
   SetStatistics('NUMBER_REFS_TRS_AFTER_REDUND',$rc);
 }
-close(INPUT);
+close($input);
 
-open(INPUT, "wc -l $rpfc/*.rotindex | tail -1 |");
-$rc = <INPUT>;
+open($input, "-|", "wc -l $rpfc/*.rotindex");
+$rc = <$input>;
 if ($rc =~ /(\d+)/) {
   SetStatistics('NUMBER_TRS_IN_READS_AFTER_REDUND',$rc);
 }
-close(INPUT);
+close($input);
 
 
 my $readTRsWithPatternGE7 = 0;
@@ -89,30 +90,30 @@ my $totalReadsWithTRsPatternGE7 = 0;
 my $totalReadsWithTRs = 0;
 my $readTRsWPGE7AfterCyclicRedundancyElimination = 0;
 
-open(INPUT, "cat $readpf/*.index | ./ge7.pl |");
-$rc = <INPUT>;
+open($input, "-|", "./ge7.pl $readpf/*.index");
+$rc = <$input>;
 if ($rc =~ /(\d+) (\d+) (\d+)/) {
    $readTRsWithPatternGE7 = $1;
    $totalReadsWithTRsPatternGE7 = $2;
    $totalReadsWithTRs = $3;
 }
-close(INPUT);
+close($input);
 
 
-open(INPUT, "cat $readpf/*.indexhist | ./ge7.pl |");
-$rc = <INPUT>;
+open($input, "-|", "./ge7.pl $readpf/*.indexhist");
+$rc = <$input>;
 if ($rc =~ /(\d+) (\d+) (\d+)/) {
   $totalReadsWithTRs = $3;
 }
-close(INPUT);
+close($input);
 
 
-open(INPUT, "cat $rpfc/*.rotindex | wc |");
-$rc = <INPUT>;
+open($input, "-|", "cat $rpfc/*.rotindex | wc");
+$rc = <$input>;
 if ($rc =~ /(\d+) (\d+) (\d+)/) {
   $readTRsWPGE7AfterCyclicRedundancyElimination = $1;
 }
-close(INPUT);
+close($input);
 
 
 SetStatistics("NUMBER_TRS_IN_READS_GE7",$readTRsWithPatternGE7);
