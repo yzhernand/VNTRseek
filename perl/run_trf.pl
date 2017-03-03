@@ -90,27 +90,28 @@ print STDERR
     "$tarball_count supported files ($input_format format) found in $input_dir\n";
 die "Exiting\n" if $tarball_count == 0;
 
-# /proc/cpuinfo is found on Linux only: use other methods for other platforms
+# /proc/cpuinfo is found on Linux/cygwin only: use other methods for other platforms
 if ( $max_processes == 0 ) {
-    if ( open( CPUINFO, "/proc/cpuinfo" ) ) {
-        while (<CPUINFO>) {
-            $max_processes++ if /^processor\b/;
-        }
-        close(CPUINFO);
+    open my $cpuinfo, "<", "/proc/cpuinfo";
+    if ( $cpuinfo ) {
+        $max_processes = scalar (map /^processor/, <$cpuinfo>);
         print STDERR "$max_processes CPU core(s) detected\n";
+        if ( $max_processes == 0 ) {
+            warn "Unknown formatting in /proc/cpuinfo: Assuming single CPU\n";
+            $max_processes = 1;
+        }
     }
     else {
         warn "Could not open /proc/cpuinfo: Assuming single CPU\n";
-        $max_processes = 1;
-    }
-    if ( $max_processes == 0 ) {
-        warn "Unknown formatting in /proc/cpuinfo: Assuming single CPU\n";
         $max_processes = 1;
     }
 }
 
 # TODO Now figure out how to best call Marzie's script for BAM files before anything else if input
 # is BAM format.
+if ($input_format == "bam") {
+    # Will use samtools for reading instead. Pass on execution to the BAM file reading script
+}
 
 # because of the limit of number of open files at the same time, let's keep number of files to under 200
 # redundancy step (3) opens them all at the same time, and if multiple pipelines are run it might be possible
