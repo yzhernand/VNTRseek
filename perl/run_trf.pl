@@ -39,9 +39,9 @@ my $HEADER_SUFFIX = ""
 $max_processes = $opts{'p'} if defined $opts{'p'};
 
 # Input directory
-my $tgz_dir = $ARGV[0];
-die "Need to provide input directory\n" if !defined $tgz_dir;
-die "Input directory does not exist\n"  if !-d $tgz_dir;
+my $input_dir = $ARGV[0];
+die "Need to provide input directory\n" if !defined $input_dir;
+die "Input directory does not exist\n"  if !-d $input_dir;
 
 # Output directory
 my $output_dir = $ARGV[1];
@@ -51,19 +51,43 @@ die "Need to provide output directory\n" if !defined $output_dir;
 mkdir $output_dir;
 
 # get a list of input files
-opendir( DIR, $tgz_dir );
+opendir( my $dirhandle, $input_dir );
 
-# the only extensions are .tgz, .tar.gz, and .gz
-my @tarballs = sort grep( /^fasta.*\.(?:tgz|gz)$/, readdir(DIR) );
+# List all supported file extensions and input formats here. Order of
+# input formats is in priority order: first format if found is used.
+my @supported_formats             = qw(fasta fastq bam);
+my @gzip_extensions               = qw(gz);
+my @targz_extensions              = qw(tgz tar.gz);
+my @bzip_extensions               = qw(bz bz2);
+my @tarbzip2_extensions           = qw(tbz tbz2 tar.bz tar.bz2);
+my @supported_compression_formats = (
+    @gzip_extensions, @targz_extensions,
+    @bzip_extensions, @tarbzip2_extensions
+);
 
-unless (@tarballs) {    # Look for fastq files if no fasta files found
-    rewinddir(DIR);
-    @tarballs = sort grep( /^fastq.*\.(?:tgz|gz)$/, readdir(DIR) );
+# Compile the possible extensions into an re
+my $compression_formats_re = join "|", @supported_compression_formats;
+$compression_formats_re = qr/(?:$compression_formats_re)/;
+
+# Get all supported files. See note above on priority of input formats
+my @tarballs;
+my $input_format;
+for my $sf (@supported_formats) {
+    if ( @tarballs
+        = sort
+        grep( /^$sf.*\.${compression_formats_re}$/, readdir($dirhandle) ) )
+    {
+        $input_format = $sf;
+        last;
+    }
+    rewinddir($dirhandle);
 }
-closedir(DIR);
+
+closedir($dirhandle);
 
 my $tarball_count = @tarballs;
-print STDERR "$tarball_count supported files found in $tgz_dir\n";
+print STDERR
+    "$tarball_count supported files ($input_format format) found in $input_dir\n";
 die "Exiting\n" if $tarball_count == 0;
 
 # /proc/cpuinfo is found on Linux only: use other methods for other platforms
@@ -84,6 +108,9 @@ if ( $max_processes == 0 ) {
         $max_processes = 1;
     }
 }
+
+# TODO Now figure out how to best call Marzie's script for BAM files before anything else if input
+# is BAM format.
 
 # because of the limit of number of open files at the same time, let's keep number of files to under 200
 # redundancy step (3) opens them all at the same time, and if multiple pipelines are run it might be possible
@@ -163,12 +190,12 @@ sub fork_trf {
 
                 # TODO: not parsing FASTA files at the moment:
                 # assuming all extracted files are in FASTA format
-                print STDERR "Unzipping $tgz_dir/$_\n";
+                print STDERR "Unzipping $input_dir/$_\n";
                 if ( $_ =~ /\.(?:tgz|tar\.gz)$/ ) {
-                    open( FASTA_IN, "tar xzfmoO '$tgz_dir/$_' |" );
+                    open( FASTA_IN, "tar xzfmoO '$input_dir/$_' |" );
                 }
                 elsif ( $_ =~ /\.gz$/ ) {
-                    open( FASTA_IN, "gunzip -c '$tgz_dir/$_' |" );
+                    open( FASTA_IN, "gunzip -c '$input_dir/$_' |" );
                 }
                 else {
                     warn "File $_ has wrong extension. Skipping this file\n";
