@@ -30,6 +30,7 @@ my $TRF2PROCLU_PARAM = $opts{'u'};
 my $strip_454_TCAG   = ( defined $opts{'s'} && $opts{'s'} ) ? 1 : 0;
 my $warn_454_TCAG    = ( defined $opts{'w'} && $opts{'w'} ) ? 1 : 0;
 my $IS_PAIRED_READS  = ( defined $opts{'r'} && $opts{'r'} ) ? 1 : 0;
+my $input_seq_fh;
 
 my $reverse_read = 1; # if 1, each read will be reversed and processed as well
 
@@ -52,50 +53,51 @@ mkdir $output_dir;
 
 # get a list of input files
 opendir( my $dirhandle, $input_dir );
+my @dircontents = readdir($dirhandle);
+closedir($dirhandle);
+
+warn join( ",", @dircontents ) . "\n";
 
 # List all supported file extensions and input formats here. Order of
 # input formats is in priority order: first format if found is used.
 my @supported_formats             = qw(fasta fastq bam);
 my @gzip_extensions               = qw(gz);
-my @targz_extensions              = qw(tgz tar.gz);
+my @targz_extensions              = qw(tgz tar\.gz);
 my @bzip_extensions               = qw(bz bz2);
-my @tarbzip2_extensions           = qw(tbz tbz2 tar.bz tar.bz2);
-my @supported_compression_formats = (
-    @gzip_extensions, @targz_extensions,
-    @bzip_extensions, @tarbzip2_extensions
-);
-
-# Compile the possible extensions into an re
-my $compression_formats_re = join "|", @supported_compression_formats;
-$compression_formats_re = qr/(?:$compression_formats_re)/;
+my @tarbzip2_extensions           = qw(tbz tbz2 tar\.bz tar\.bz2);
+my $targz_extensions              = qr/tgz|tar\.gz/;
+my $gzip_extensions               = qr/gz/;
+my $tarbzip2_extensions           = qr/tbz|tbz2|tar\.bz|tar\.bz2/;
+my $bzip_extensions               = qr/bz|bz2/;
+# my @supported_compression_formats = (
+#     @gzip_extensions, @targz_extensions,
+#     @bzip_extensions, @tarbzip2_extensions
+# );
 
 # Get all supported files. See note above on priority of input formats
 my @tarballs;
-my $input_format;
+my ( $input_format, $cmpext );
 for my $sf (@supported_formats) {
-    if ( @tarballs
-        = sort
-        grep( /^$sf.*\.${compression_formats_re}$/, readdir($dirhandle) ) )
+    if (@tarballs = sort
+        grep( /^${sf}.*$/, @dircontents )
+        )
     {
         $input_format = $sf;
         last;
     }
-    rewinddir($dirhandle);
 }
 
-closedir($dirhandle);
-
 my $tarball_count = @tarballs;
-print STDERR
+die "0 supported files found in $input_dir. Exiting\n" if $tarball_count == 0;
+warn
     "$tarball_count supported files ($input_format format) found in $input_dir\n";
-die "Exiting\n" if $tarball_count == 0;
 
 # /proc/cpuinfo is found on Linux/cygwin only: use other methods for other platforms
 if ( $max_processes == 0 ) {
     open my $cpuinfo, "<", "/proc/cpuinfo";
-    if ( $cpuinfo ) {
-        $max_processes = scalar (map /^processor/, <$cpuinfo>);
-        print STDERR "$max_processes CPU core(s) detected\n";
+    if ($cpuinfo) {
+        $max_processes = scalar( map /^processor/, <$cpuinfo> );
+        warn "$max_processes CPU core(s) detected\n";
         if ( $max_processes == 0 ) {
             warn "Unknown formatting in /proc/cpuinfo: Assuming single CPU\n";
             $max_processes = 1;
@@ -109,8 +111,9 @@ if ( $max_processes == 0 ) {
 
 # TODO Now figure out how to best call Marzie's script for BAM files before anything else if input
 # is BAM format.
-if ($input_format == "bam") {
-    # Will use samtools for reading instead. Pass on execution to the BAM file reading script
+if ( $input_format == "bam" ) {
+
+# Will use samtools for reading instead. Pass on execution to the BAM file reading script
 }
 
 # because of the limit of number of open files at the same time, let's keep number of files to under 200
@@ -119,8 +122,8 @@ if ($input_format == "bam") {
 while ( int( $tarball_count / $files_to_process ) > 200 ) {
     $files_to_process++;
 }
-print STDERR "Will use $max_processes processes\n";
-print STDERR "Will process $files_to_process file(s) per batch\n";
+warn "Will use $max_processes processes\n";
+warn "Will process $files_to_process file(s) per batch\n";
 
 # fork as many new processes as there are CPUs
 for ( my $i = 0; $i < $max_processes; $i++ ) { $p{ fork_trf() } = 1 }
@@ -131,15 +134,15 @@ while ( ( my $pid = wait ) != -1 ) {
     # check return value
     my ( $rc, $sig, $core ) = ( $? >> 8, $? & 127, $? & 128 );
     if ($core) {
-        print STDERR "run_trf process $pid dumped core\n";
+        warn "run_trf process $pid dumped core\n";
         exit(1000);
     }
     elsif ( $sig == 9 ) {
-        print STDERR "run_trf process $pid was murdered!\n";
+        warn "run_trf process $pid was murdered!\n";
         exit(1001);
     }
     elsif ( $rc != 0 ) {
-        print STDERR "run_trf process $pid has returned $rc!\n";
+        warn "run_trf process $pid has returned $rc!\n";
         exit($rc);
     }
 
@@ -153,7 +156,7 @@ while ( ( my $pid = wait ) != -1 ) {
         die "ERROR: Do not remember process PID=$pid\n";
     }
 }
-print STDERR "Processing complete -- processed $files_processed file(s).\n";
+warn "Processing complete -- processed $files_processed file(s).\n";
 0;
 
 ############################ Procedures ###############################################################
@@ -166,7 +169,7 @@ sub fork_trf {
     # unzip a predefined number of files
     my $until = $files_processed + $files_to_process - 1;
     $until = $tarball_count - 1 if $until > ( $tarball_count - 1 );
-    print STDERR 'Processing files '
+    warn 'Processing files '
         . ( $files_processed + 1 ) . ' to '
         . ( $until + 1 ) . "\n";
     my $output_prefix    = "$output_dir/$files_processed-$until";
@@ -174,33 +177,51 @@ sub fork_trf {
     my $file_slice_count = @file_slice;
     $files_processed += $files_to_process;
 
+    # Try to fork
     defined( my $pid = fork )
         or die "Unable to fork: $!\n";
+
+    # Child process. This process use open() to fork again. Its child,
+    # "grandchild" will run TRF. The parent process, "child", will have
+    # a filehandle to the *output* of TRF and will use that as input
     if ( $pid == 0 ) {
 
-        #print STDERR "This is child\n";
+        #warn "This is child\n";
+        # Open a filehandle to the input of a child process. Forks a child.
         defined( my $grandchild_pid = open GRANDCHILD, '-|' )
             or die "Unable to open grandchild: $!\n";
+
+        # This branch is that child process, "grandchild". Runs TRF.
         if ( $grandchild_pid == 0 ) {
 
-            #print STDERR "Starting TRF: $TRF_PARAM";
+            #warn "Starting TRF: $TRF_PARAM";
             defined( my $trf_pid = open( TRF, "| $TRF_PARAM" ) )
                 or die "Cannot start TRF: $!\n";
             foreach (@file_slice) {
                 next if not defined $_;
 
-                # TODO: not parsing FASTA files at the moment:
-                # assuming all extracted files are in FASTA format
-                print STDERR "Unzipping $input_dir/$_\n";
-                if ( $_ =~ /\.(?:tgz|tar\.gz)$/ ) {
-                    open( FASTA_IN, "tar xzfmoO '$input_dir/$_' |" );
+                # Read from sequence files. Detect if files are compressed,
+                # and decompress using appropriate decom binary + options
+                # If file has none of the known compression extensions, assume
+                # decompressed and read from file.
+                # TODO Test
+                warn "Reading from sequence files $input_dir/$_\n";
+                if ( $_ =~ /\.(?:$targz_extensions)$/ ) {
+                    open( $input_seq_fh, "-|", "tar xzfmO '$input_dir/$_'" );
                 }
-                elsif ( $_ =~ /\.gz$/ ) {
-                    open( FASTA_IN, "gunzip -c '$input_dir/$_' |" );
+                elsif ( $_ =~ /\.(?:$gzip_extensions)$/ ) {
+                    open( $input_seq_fh, "-|", "gunzip -c '$input_dir/$_'" );
+                }
+                if ( $_ =~ /\.(?:$targz_extensions)$/ ) {
+                    open( $input_seq_fh, "-|", "tar xjfmO '$input_dir/$_'" );
+                }
+                elsif ( $_ =~ /\.(?:$bzip_extensions)$/ ) {
+                    open( $input_seq_fh, "-|", "bzip2 -c '$input_dir/$_'" );
                 }
                 else {
-                    warn "File $_ has wrong extension. Skipping this file\n";
-                    next;
+                    warn "File $_ has wrong extension. Assuming uncompressed...\n";
+                    open( $input_seq_fh, "<", "$input_dir/$_" );
+                    # next;
                 }
 
                 # if this is a paired file, add .1 and .2 to all headers
@@ -214,7 +235,7 @@ sub fork_trf {
 
                 # Parse the input file. Currently supports FASTA and FASTQ
                 parse_readfile();
-                close FASTA_IN;
+                close $input_seq_fh;
             }
 
             #close TRF;
@@ -222,33 +243,37 @@ sub fork_trf {
             # check return value
             #my ($rc, $sig, $core) = ($? >> 8, $? & 127, $? & 128);
             #if ($core){
-            #    print STDERR "trf process $trf_pid dumped core\n";
+            #    warn "trf process $trf_pid dumped core\n";
             #    exit (1000);
             #}elsif($sig == 9){
             #    print  STDERR "trf process $trf_pid was murdered!\n";
             #    exit (1001);
             #}elsif ($rc != 0){
-            #    print STDERR  "trf process $trf_pid has returned $rc!\n";
+            #    warn  "trf process $trf_pid has returned $rc!\n";
             #    exit ($rc);
             #}
 
             if ( !close TRF ) {
                 if ($!) {
-                    print STDERR
+                    warn
                         "Error closing trf process $trf_pid pipe: $!\n";
                     exit(1002);
                 }
                 elsif ( $? != 0 ) {
-                    print STDERR "trf process $trf_pid has returned $?!\n";
+                    warn "trf process $trf_pid has returned $?!\n";
                     exit($?);
                 }
             }
 
-            #print STDERR "Exiting grandchild\n";
+            #warn "Exiting grandchild\n";
             exit 0;
         }
+
+# This is the parent process, "child". Has the filehandle to the output of TRF.
+# Uses TRF output to pipe into trf2proclu.
         else {
-            #print STDERR "This is parent of grandchild $grandchild_pid\n";
+            #warn "This is parent of grandchild $grandchild_pid\n";
+            # Open a pipe to trf2proclu process
             defined(
                 my $trf2proclu_pid = open( TRF2PROCLU,
                     "| $TRF2PROCLU_PARAM -o '$output_prefix.index' > '$output_prefix.leb36'"
@@ -263,6 +288,7 @@ sub fork_trf {
 
             my $debug_trs_found = 0;
 
+   # while input comes in from TRF, pipe into the input of trf2proclu process.
             while (<GRANDCHILD>) {
                 print TRF2PROCLU $_;
 
@@ -281,12 +307,12 @@ sub fork_trf {
 
             if ( !close TRF2PROCLU ) {
                 if ($!) {
-                    print STDERR
+                    warn
                         "Error closing trf2proclu process $trf2proclu_pid pipe: $!\n";
                     exit(1002);
                 }
                 elsif ( $? < -2 ) {
-                    print STDERR
+                    warn
                         "trf2proclu process $trf2proclu_pid has returned $?!\n";
                     exit($?);
                 }
@@ -297,13 +323,13 @@ sub fork_trf {
   # check return value
   #my ($rc, $sig, $core) = ($? >> 8, $? & 127, $? & 128);
   #if ($core){
-  #    print STDERR "trf2proclu process $trf2proclu_pid dumped core\n";
+  #    warn "trf2proclu process $trf2proclu_pid dumped core\n";
   #    exit (1000);
   #}elsif($sig == 9){
   #    print  STDERR "trf2proclu process $trf2proclu_pid was murdered!\n";
   #    exit (1001);
   #}elsif ($rc < -1){
-  #    print STDERR  "trf2proclu process $trf2proclu_pid has returned $rc!\n";
+  #    warn  "trf2proclu process $trf2proclu_pid has returned $rc!\n";
   #    exit ($rc);
   #}
 
@@ -314,35 +340,35 @@ sub fork_trf {
         # check return value
         my ( $rc, $sig, $core ) = ( $? >> 8, $? & 127, $? & 128 );
         if ($core) {
-            print STDERR "run_trf process $grandchild_pid dumped core\n";
+            warn "run_trf process $grandchild_pid dumped core\n";
             exit(1000);
         }
         elsif ( $sig == 9 ) {
-            print STDERR "run_trf process $grandchild_pid was murdered!\n";
+            warn "run_trf process $grandchild_pid was murdered!\n";
             exit(1001);
         }
         elsif ( $rc != 0 ) {
-            print STDERR
+            warn
                 "run_trf process $grandchild_pid has returned $rc!\n";
             exit($rc);
         }
 
   #if (!close GRANDCHILD) {
   # if ($!)  {
-  #   print STDERR "Error closing run_trf process $grandchild_pid pipe: $!\n";
+  #   warn "Error closing run_trf process $grandchild_pid pipe: $!\n";
   #   exit(1002);
   # } elsif ($? != 0) {
-  #   print STDERR "run_trf process $grandchild_pid has returned $?!\n";
+  #   warn "run_trf process $grandchild_pid has returned $?!\n";
   #   exit($?);
   # }
   #}
 
-        #print STDERR "Exiting child\n";
+        #warn "Exiting child\n";
         exit 0;    # child must never return
     }
     else {
         # parent process -- do nothing
-        #print STDERR "This is parent of child $pid\n";
+        #warn "This is parent of child $pid\n";
         return $pid;
     }
 
@@ -363,7 +389,7 @@ sub reverse_complement {
 sub parse_readfile {
 
     # Grab first line and save it so parser can use it
-    my $line = <FASTA_IN>;
+    my $line = <$input_seq_fh>;
 
     # Determine file format and run correct parser. Very simplistic.
     my $last_state;
@@ -400,13 +426,13 @@ sub parse_fasta {
 
     # Start in state 1 because calling function read header first
     my $read_state = 1;    # read state 1: read, 0: header
-    while (<FASTA_IN>) {
+    while (<$input_seq_fh>) {
         if ( !$read_state && /^>.*(?:\n|\r)/ ) {
 
             # previous reversed read
             if ( $reverse_read && $header ne "" ) {
 
-                #print STDERR $header."_RC\n";
+                #warn $header."_RC\n";
                 print TRF $header
                     . $HEADER_SUFFIX . "_"
                     . length($body)
@@ -470,7 +496,7 @@ sub parse_fastq {
     # Start in state 1 since calling function read first line already.
     my $read_state      = 1;
     my $read_line_count = 0;
-    while (<FASTA_IN>) {
+    while (<$input_seq_fh>) {
 
         #warn "Read state: $read_state\nLine: $_\n";
         if ( !$read_state && /^@/ ) {
@@ -529,7 +555,7 @@ sub parse_fastq {
             # Discard remaining score lines
             # Already consumed one line, so stop at 1
             while ( $read_line_count > 1 ) {
-                my $ignore = <FASTA_IN>;
+                my $ignore = <$input_seq_fh>;
                 $read_line_count--;
             }
             $read_state = 0;    #Next line should be next header or EOF
