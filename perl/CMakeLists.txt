@@ -20,5 +20,6 @@ if(CMAKE_HOST_UNIX)
     ")
     INSTALL(FILES "vntrseek"
         DESTINATION bin
+        OPTIONAL
         )
 endif(CMAKE_HOST_UNIX)
