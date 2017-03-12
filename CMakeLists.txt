@@ -9,7 +9,7 @@ SET(VNTRVer "1.09")
 SET(InstallSuffix "vntrseek${VNTRVer}")
 
 # Set current TRF version. Not user configurable
-SET(TRFVer "407b")
+SET(TRFVer "409")
 
 ## Set install directory
 #IF(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
