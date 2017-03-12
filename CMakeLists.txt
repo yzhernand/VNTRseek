@@ -86,7 +86,6 @@ FILE(DOWNLOAD http://tandem.bu.edu/trf/downloads/trf${TRFVer}.${ARCH}
     "${CMAKE_CURRENT_BINARY_DIR}/${TRFBin}"
     TIMEOUT 30
     STATUS TRFdlStat
-    EXPECTED_MD5 26d83513f43f1456542123c6fe8eecf2
     SHOW_PROGRESS)
 LIST(GET TRFdlStat 0 TRFdlErrNo)
 IF (TRFdlErrNo)
