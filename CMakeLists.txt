@@ -40,9 +40,16 @@ ELSEIF (ARCH STREQUAL "i386")
     MESSAGE(FATAL_ERROR "32-bit architecture is not supported. Installation cannot continue.")
 ENDIF()
 
-MESSAGE(STATUS "Your processor is ${CMAKE_SYSTEM_PROCESSOR} and you are running ${CMAKE_SYSTEM_NAME}. This means we'll download trf${TRFVer}.${ARCH}")
+pkg_check_modules (GLIB2   glib-2.0)
+SET(GLIB2_LEGACY_VERSION "2.14")
+IF (GLIB2_VERSION VERSION_LESS ${GLIB2_LEGACY_VERSION} OR GLIB2_VERSION VERSION_EQUAL ${GLIB2_LEGACY_VERSION})
+    SET(TRFDLName "trf${TRFVer}.legacy${ARCH}")
+ELSE()
+    SET(TRFDLName "trf${TRFVer}.${ARCH}")
+endif()
+MESSAGE(STATUS "Your processor is ${CMAKE_SYSTEM_PROCESSOR} and you are running ${CMAKE_SYSTEM_NAME}. This means we'll download ")
 # May need to change if other platforms are supported
-#SET(TRFBin "trf${TRFVer}.${ARCH}.exe")
+#SET(TRFBin "${TRFDLName}.exe")
 SET(TRFBin "trf${TRFVer}-ngs.linux.exe")
 
 ## Check for required installed programs and versions
@@ -82,7 +89,7 @@ INSTALL(FILES ${MISC_FILES}
     )
 
 # Download and install trf
-FILE(DOWNLOAD http://tandem.bu.edu/trf/downloads/trf${TRFVer}.${ARCH}
+FILE(DOWNLOAD http://tandem.bu.edu/trf/downloads/${TRFDLName}
     "${CMAKE_CURRENT_BINARY_DIR}/${TRFBin}"
     TIMEOUT 30
     STATUS TRFdlStat
