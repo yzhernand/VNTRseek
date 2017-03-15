@@ -56,41 +56,70 @@ opendir( my $dirhandle, $input_dir );
 my @dircontents = readdir($dirhandle);
 closedir($dirhandle);
 
-warn join( ",", @dircontents ) . "\n";
+if ( $ENV{DEBUG} ) {
+    warn join( ",", @dircontents ) . "\n";
+}
 
 # List all supported file extensions and input formats here. Order of
 # input formats is in priority order: first format if found is used.
-my @supported_formats             = qw(fasta fastq bam);
-my @gzip_extensions               = qw(gz);
-my @targz_extensions              = qw(tgz tar\.gz);
-my @bzip_extensions               = qw(bz bz2);
-my @tarbzip2_extensions           = qw(tbz tbz2 tar\.bz tar\.bz2);
-my $targz_extensions              = qr/tgz|tar\.gz/;
-my $gzip_extensions               = qr/gz/;
-my $tarbzip2_extensions           = qr/tbz|tbz2|tar\.bz|tar\.bz2/;
-my $bzip_extensions               = qr/bz|bz2/;
+my %supported_formats = (
+    fasta => "fasta",
+    fastq => "fastq",
+    bam   => "bam"
+);
+my @supported_format_names = qw(fasta fastq bam);
+my @gzip_extensions        = qw(gz);
+my @targz_extensions       = qw(tgz tar\.gz);
+my @bzip_extensions        = qw(bz bz2);
+my @tarbzip_extensions     = qw(tbz tbz2 tar\.bz tar\.bz2);
+my %compressed_formats     = (
+    targz   => qr/tgz|tar\.gz/,
+    gzip    => qr/gz/,
+    tarbzip => qr/tbz|tbz2|tar\.bz|tar\.bz2/,
+    bzip    => qr/bz|bz2/
+);
+my @compressed_format_types = qw(targz gzip tarbzip bzip);
+my %decompress_cmds         = (
+    targz   => "tar xzfmO",
+    gzip    => "gunzip -c",
+    tarbzip => "tar xjfmO",
+    bzip    => "bzip2 -c"
+);
+
 # my @supported_compression_formats = (
 #     @gzip_extensions, @targz_extensions,
-#     @bzip_extensions, @tarbzip2_extensions
+#     @bzip_extensions, @tarbzip_extensions
 # );
 
 # Get all supported files. See note above on priority of input formats
 my @tarballs;
-my ( $input_format, $cmpext );
-for my $sf (@supported_formats) {
+my ( $input_format, $compression );
+for my $sf (@supported_format_names) {
+    my $pat_re = $supported_formats{$sf};
     if (@tarballs = sort
-        grep( /^${sf}.*$/, @dircontents )
+        grep( /^${pat_re}.*$/, @dircontents )
         )
     {
         $input_format = $sf;
+        for my $cf (@compressed_format_types) {
+            my $cf_re = $compressed_formats{$cf};
+            if ( $tarballs[0] =~ /.*\.(?:${cf_re})/ ) {
+                $compression = $cf;
+                last;
+            }
+        }
         last;
     }
 }
 
 my $tarball_count = @tarballs;
+my $compression_msg
+    = ($compression)
+    ? "compressed as $compression"
+    : "unknown compression (assuming uncompressed)";
 die "0 supported files found in $input_dir. Exiting\n" if $tarball_count == 0;
 warn
-    "$tarball_count supported files ($input_format format) found in $input_dir\n";
+    "$tarball_count supported files ($input_format format, $compression) found in $input_dir\n";
 
 # /proc/cpuinfo is found on Linux/cygwin only: use other methods for other platforms
 if ( $max_processes == 0 ) {
@@ -222,8 +251,10 @@ sub fork_trf {
                     open( $input_seq_fh, "-|", "bzip2 -c '$input_dir/$_'" );
                 }
                 else {
-                    warn "File $_ has wrong extension. Assuming uncompressed...\n";
+                    warn
+                        "File $_ has wrong extension. Assuming uncompressed...\n";
                     open( $input_seq_fh, "<", "$input_dir/$_" );
+
                     # next;
                 }
 
@@ -258,8 +289,7 @@ sub fork_trf {
 
             if ( !close TRF ) {
                 if ($!) {
-                    warn
-                        "Error closing trf process $trf_pid pipe: $!\n";
+                    warn "Error closing trf process $trf_pid pipe: $!\n";
                     exit(1002);
                 }
                 elsif ( $? != 0 ) {
@@ -323,18 +353,18 @@ sub fork_trf {
 
             #close TRF2PROCLU;
 
-  # check return value
-  #my ($rc, $sig, $core) = ($? >> 8, $? & 127, $? & 128);
-  #if ($core){
-  #    warn "trf2proclu process $trf2proclu_pid dumped core\n";
-  #    exit (1000);
-  #}elsif($sig == 9){
-  #    print  STDERR "trf2proclu process $trf2proclu_pid was murdered!\n";
-  #    exit (1001);
-  #}elsif ($rc < -1){
-  #    warn  "trf2proclu process $trf2proclu_pid has returned $rc!\n";
-  #    exit ($rc);
-  #}
+      # check return value
+      #my ($rc, $sig, $core) = ($? >> 8, $? & 127, $? & 128);
+      #if ($core){
+      #    warn "trf2proclu process $trf2proclu_pid dumped core\n";
+      #    exit (1000);
+      #}elsif($sig == 9){
+      #    print  STDERR "trf2proclu process $trf2proclu_pid was murdered!\n";
+      #    exit (1001);
+      #}elsif ($rc < -1){
+      #    warn  "trf2proclu process $trf2proclu_pid has returned $rc!\n";
+      #    exit ($rc);
+      #}
 
         }
 
@@ -351,20 +381,19 @@ sub fork_trf {
             exit(1001);
         }
         elsif ( $rc != 0 ) {
-            warn
-                "run_trf process $grandchild_pid has returned $rc!\n";
+            warn "run_trf process $grandchild_pid has returned $rc!\n";
             exit($rc);
         }
 
-  #if (!close GRANDCHILD) {
-  # if ($!)  {
-  #   warn "Error closing run_trf process $grandchild_pid pipe: $!\n";
-  #   exit(1002);
-  # } elsif ($? != 0) {
-  #   warn "run_trf process $grandchild_pid has returned $?!\n";
-  #   exit($?);
-  # }
-  #}
+        #if (!close GRANDCHILD) {
+        # if ($!)  {
+        #   warn "Error closing run_trf process $grandchild_pid pipe: $!\n";
+        #   exit(1002);
+        # } elsif ($? != 0) {
+        #   warn "run_trf process $grandchild_pid has returned $?!\n";
+        #   exit($?);
+        # }
+        #}
 
         #warn "Exiting child\n";
         exit 0;    # child must never return
