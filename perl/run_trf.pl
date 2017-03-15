@@ -116,7 +116,7 @@ if ( $input_format == "bam" ) {
     # Will use samtools for reading instead. Pass on execution to the BAM file reading script
     my $bamfile = shift @tarballs;
     system("./fromBam.sh $max_processes \"$bamfile\" \"$output_dir\" \"$TRF_PARAM\" \"$TRF2PROCLU_PARAM\"" );
-    exit;
+    return 0;
 }
 
 # because of the limit of number of open files at the same time, let's keep number of files to under 200
