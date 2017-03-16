@@ -18,13 +18,13 @@ require "vutil.pm";
 
 use vutil qw(get_credentials write_mysql stats_set);
 
-print strftime("\n\nstart: %F %T\n\n\n", localtime);
+print strftime( "\n\nstart: %F %T\n\n\n", localtime );
 
 my $argc = @ARGV;
 
 if ( $argc < 3 ) { die "Usage: map_dup.pl dbname msdir tempdir\n"; }
 
-my $curdir = getcwd;
+my $curdir            = getcwd;
 my $maxRepeatsPerRead = -1;
 
 my $DBNAME  = $ARGV[0];
@@ -89,9 +89,10 @@ my $readTRsMappedMultipleRefs_sth
     = $dbh->prepare(
     "SELECT replnk.sid,count(map.refid) FROM map INNER JOIN replnk on replnk.rid=map.readid WHERE bbb=1 GROUP BY replnk.sid HAVING count(map.refid)>1;"
     ) or die "Couldn't prepare statement: " . $dbh->errstr;
-$readTRsMappedMultipleRefs_sth->execute() or die "Cannot execute: " . $readTRsMappedMultipleRefs_sth->errstr();
+$readTRsMappedMultipleRefs_sth->execute()
+    or die "Cannot execute: " . $readTRsMappedMultipleRefs_sth->errstr();
 my $numReadTRsMappedMultipleRefs = $readTRsMappedMultipleRefs_sth->rows;
-my $i   = 0;
+my $i                            = 0;
 while ( $i < $numReadTRsMappedMultipleRefs ) {
     my @data = $readTRsMappedMultipleRefs_sth->fetchrow_array();
     $i++;
@@ -127,10 +128,10 @@ while ( $i < $numReadTRsMappedMultipleRefs ) {
                 . $data[1] . ")";
         }
 
-# 1st entry can only be deleted due to NOT being on same chromosome and close together as 2nd entry (or more than 2 entries exist)
-        if ($j == 2
+        # 1st entry can only be deleted due to NOT being on same chromosome and close together as 2nd entry (or more than $maxRepeatsPerRead entries exist)
+        if ($j == $maxRepeatsPerRead
             && (  !( $data2[5] eq $oldrefhead && $RefDiff <= $readlen )
-                || ( $numTRsInRead > 2 ) )
+                || ( $numTRsInRead > $maxRepeatsPerRead ) )
             )
         {
             #$sth3->execute($oldrefid,$oldreadid);
@@ -145,8 +146,8 @@ while ( $i < $numReadTRsMappedMultipleRefs ) {
             . $data2[1]
             . " P=$data2[3] F=$data2[4] ";
 
-# delete every entry (except first which is deleted in another block) if more than 2 exist
-        if ( $j > 1 && $numTRsInRead > 2 ) {
+        # delete every entry (except first which is deleted in another block) if more than $maxRepeatsPerRead exist
+        if ( $j > 1 && $numTRsInRead > $maxRepeatsPerRead ) {
 
             #$sth3->execute($data2[1],$data2[0]);
             print $TEMPFILE $data2[1], ",", $data2[0], "\n";
@@ -155,11 +156,11 @@ while ( $i < $numReadTRsMappedMultipleRefs ) {
             $isDeleted = 1;
         }
 
-# else we are on 2nd etnry, delete 2nd entry if previous entry score is equal to this entry
-#elsif ($j==2 && $data2[3]==$oldp && $data2[4]==$oldf) {
-        elsif ( $j == 2 ) {
+        # else we are on 2nd etnry, delete 2nd entry if previous entry score is equal to this entry
+        #elsif ($j==2 && $data2[3]==$oldp && $data2[4]==$oldf) {
+        elsif ( $j == $maxRepeatsPerRead ) {
 
-# make an exception (DO NOT DELETE) if references are on same chromosome and close together as previous entry
+            # make an exception (DO NOT DELETE) if references are on same chromosome and close together as previous entry
             if ( $data2[5] eq $oldrefhead && $RefDiff <= $readlen ) {
 
             }
@@ -249,7 +250,7 @@ $dbh->disconnect();
 printf "\n\n%d entries deleted!\n", $deleted;
 printf "%d reads deleted!\n",       $ReadsDeleted;
 
-print strftime("\n\nend: %F %T\n\n\n", localtime);
+print strftime( "\n\nend: %F %T\n\n\n", localtime );
 
 1;
 
