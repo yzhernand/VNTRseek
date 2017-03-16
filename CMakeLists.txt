@@ -48,7 +48,7 @@ IF (GLIB2_VERSION VERSION_LESS ${GLIB2_LEGACY_VERSION} OR GLIB2_VERSION VERSION_
 ELSE()
     SET(TRFDLName "trf${TRFVer}.${ARCH}")
 endif()
-MESSAGE(STATUS "Your processor is ${CMAKE_SYSTEM_PROCESSOR} and you are running ${CMAKE_SYSTEM_NAME}. This means we'll download ")
+MESSAGE(STATUS "Your processor is ${CMAKE_SYSTEM_PROCESSOR} and you are running ${CMAKE_SYSTEM_NAME}. This means we'll download ${TRFDLName}")
 # May need to change if other platforms are supported
 #SET(TRFBin "${TRFDLName}.exe")
 SET(TRFBin "trf${TRFVer}-ngs.linux.exe")
