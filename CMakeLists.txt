@@ -40,6 +40,7 @@ ELSEIF (ARCH STREQUAL "i386")
     MESSAGE(FATAL_ERROR "32-bit architecture is not supported. Installation cannot continue.")
 ENDIF()
 
+include(FindPkgConfig)
 pkg_check_modules (GLIB2   glib-2.0)
 SET(GLIB2_LEGACY_VERSION "2.14")
 IF (GLIB2_VERSION VERSION_LESS ${GLIB2_LEGACY_VERSION} OR GLIB2_VERSION VERSION_EQUAL ${GLIB2_LEGACY_VERSION})
