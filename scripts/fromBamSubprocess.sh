@@ -22,12 +22,12 @@ do
     # region by region
     echo "$chr":"$start"-"$end" " @ " "$spid"
     if [ "$chr" = "$umapped_template" ]; then
-        samtools view -f 4 "$bamfile" | awk '{print ">" $1 "\n" $10}'
+        samtools view -f 4 "$bamfile"
     else
-        samtools view "$bamfile" "$chr":"$start"-"$end" | awk '{print ">" $1 "\n" $10}'
+        samtools view "$bamfile" "$chr":"$start"-"$end"
     fi
     # postfix=$((postfix+1))
-done < "${bedfile}" | "$trf_param" | "$trf2proclu_param" "$output_dir"/"$spid"-"$spid"
+done < "${bedfile}"  | awk '{print ">" $1 "\n" $10}' | "$trf_param" | "$trf2proclu_param" "$output_dir"/"$spid"-"$spid"
 
 while pgrep -P "$BASHPID" > /dev/null; do
     wait
