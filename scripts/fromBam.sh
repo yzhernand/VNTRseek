@@ -17,7 +17,7 @@ samtools idxstats "$bamfile" | java MakeBedFiles "$procs" "$output_dir"
 for spid in $(seq 0 $((procs-1)))
 do
     #run subprocess
-    ./subprocess.sh "$spid" "$bamfile" "$output_dir"/bed"$spid" "$output_dir" "$trf_param" "$trf2proclu_param" &
+    ./fromBamSubprocess.sh "$spid" "$bamfile" "$output_dir"/bed"$spid" "$output_dir" "$trf_param" "$trf2proclu_param" &
 done
 
 #rm -I ${output_dir}/bed*

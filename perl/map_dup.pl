@@ -82,19 +82,19 @@ my $trsInRead_sth
     "SELECT map.readid,map.refid,(SELECT head FROM fasta_reads WHERE fasta_reads.sid=replnk.sid),rank.score,rankflank.score,fasta_ref_reps.head as refhead,fasta_ref_reps.firstindex,fasta_ref_reps.lastindex,(SELECT length(DNA) FROM fasta_reads WHERE fasta_reads.sid=replnk.sid) FROM map INNER JOIN replnk on replnk.rid=map.readid INNER JOIN rank ON rank.refid=map.refid AND rank.readid=map.readid INNER JOIN rankflank ON rankflank.refid=map.refid AND rankflank.readid=map.readid INNER JOIN fasta_ref_reps ON fasta_ref_reps.rid=map.refid WHERE replnk.sid=? AND bbb=1 ORDER BY rank.score ASC, rankflank.score ASC, map.refid ASC;"
     ) or die "Couldn't prepare statement: " . $dbh->errstr;
 
-# first get list of read TRs that are mapped to more than one reference (sorted by read id)
+# first get list of reads with multiple TRs that are mapped to more than one reference (sorted by read id)
 my $deleted      = 0;
 my $ReadsDeleted = 0;
-my $readTRsMappedMultipleRefs_sth
+my $readsWithMultTRsMappedMultRefs_sth
     = $dbh->prepare(
     "SELECT replnk.sid,count(map.refid) FROM map INNER JOIN replnk on replnk.rid=map.readid WHERE bbb=1 GROUP BY replnk.sid HAVING count(map.refid)>1;"
     ) or die "Couldn't prepare statement: " . $dbh->errstr;
-$readTRsMappedMultipleRefs_sth->execute()
-    or die "Cannot execute: " . $readTRsMappedMultipleRefs_sth->errstr();
-my $numReadTRsMappedMultipleRefs = $readTRsMappedMultipleRefs_sth->rows;
+$readsWithMultTRsMappedMultRefs_sth->execute()
+    or die "Cannot execute: " . $readsWithMultTRsMappedMultRefs_sth->errstr();
+my $numReadsWithMultTRsMappedMultRefs = $readsWithMultTRsMappedMultRefs_sth->rows;
 my $i                            = 0;
-while ( $i < $numReadTRsMappedMultipleRefs ) {
-    my @data = $readTRsMappedMultipleRefs_sth->fetchrow_array();
+while ( $i < $numReadsWithMultTRsMappedMultRefs ) {
+    my @data = $readsWithMultTRsMappedMultRefs_sth->fetchrow_array();
     $i++;
 
     $trsInRead_sth->execute( $data[0] );
@@ -189,7 +189,7 @@ while ( $i < $numReadTRsMappedMultipleRefs ) {
 
 # $sth3->finish();
 $trsInRead_sth->finish();
-$readTRsMappedMultipleRefs_sth->finish();
+$readsWithMultTRsMappedMultRefs_sth->finish();
 
 # load the file into tempfile
 close($TEMPFILE);
