@@ -111,8 +111,6 @@ sub commify {
 
 ####################################
 # Print VCF file for all VNTRs with support
-# TODO Use bind columns throughout for speed
-# TODO merge with print_vcf2, with an extra argument, to cut down on code duplication
 sub print_vcf {
     my $dbh = shift;
 
@@ -126,7 +124,8 @@ sub print_vcf {
     $numsup_sth->execute() or die "Cannot execute: " . $numsup_sth->errstr();
     $numsup_sth->bind_columns( \$numsup );
     $numsup_sth->fetch;
-    $numsup_sth->finish;
+
+    # $numsup_sth->finish;
 
     # Get number of VNTRs supported
     my $numvntrs_sth
@@ -147,95 +146,105 @@ sub print_vcf {
         or die "Couldn't prepare statement: " . $dbh->errstr;
     $update_spanN_sth->execute($numvntrs)
         or die "Cannot execute: " . $update_spanN_sth->errstr();
-    $update_spanN_sth->finish;
 
-    print VCFFILE "##fileformat=VCFv4.1\n";
-    print VCFFILE strftime( "##fileDate=\"%Y%m%d\"\n", localtime );
-    print VCFFILE "##source=\"Vntrseek ver. $VERSION\"\n";
-    print VCFFILE "##TRFParameters=\"", GetStatistics("PARAM_TRF"), "\"\n";
-    print VCFFILE "##referenceseq=\"", GetStatistics("FILE_REFERENCE_SEQ"),
+    # $update_spanN_sth->finish;
+    open my $vcffile, ">", "${DBNAME}.span${MIN_SUPPORT_REQUIRED}.vcf"
+        or die
+        "\nCan't open for writing ${DBNAME}.span${MIN_SUPPORT_REQUIRED}.vcf\n\n";
+    print $vcffile "##fileformat=VCFv4.1\n";
+    print $vcffile strftime( "##fileDate=\"%Y%m%d\"\n", localtime );
+    print $vcffile "##source=\"Vntrseek ver. $VERSION\"\n";
+    print $vcffile "##TRFParameters=\"", GetStatistics("PARAM_TRF"), "\"\n";
+    print $vcffile "##referenceseq=\"", GetStatistics("FILE_REFERENCE_SEQ"),
         "\"\n";
-    print VCFFILE "##referenceprofile=\"",
+    print $vcffile "##referenceprofile=\"",
         GetStatistics("FILE_REFERENCE_LEB"), "\"\n";
-    print VCFFILE "##numrefTRs=\"", GetStatistics("NUMBER_REF_TRS"), "\"\n";
-    print VCFFILE "##readseqfolder=\"", GetStatistics("FOLDER_FASTA"), "\"\n";
-    print VCFFILE "##readprofilefolder=\"", GetStatistics("FOLDER_PROFILES"),
+    print $vcffile "##numrefTRs=\"", GetStatistics("NUMBER_REF_TRS"), "\"\n";
+    print $vcffile "##readseqfolder=\"", GetStatistics("FOLDER_FASTA"), "\"\n";
+    print $vcffile "##readprofilefolder=\"", GetStatistics("FOLDER_PROFILES"),
         "\"\n";
-    print VCFFILE "##numreads=\"", GetStatistics("NUMBER_READS"), "\"\n";
-    print VCFFILE "##numreadTRs=\"", GetStatistics("NUMBER_TRS_IN_READS"),
+    print $vcffile "##numreads=\"", GetStatistics("NUMBER_READS"), "\"\n";
+    print $vcffile "##numreadTRs=\"", GetStatistics("NUMBER_TRS_IN_READS"),
         "\"\n";
-    print VCFFILE "##numVNTRs=\"",          $numvntrs, "\"\n";
-    print VCFFILE "##numTRsWithSupport=\"", $numsup,   "\"\n";
-    print VCFFILE "##database=\"",          $DBNAME,   "\"\n";
-    print VCFFILE
+    print $vcffile "##numVNTRs=\"",          $numvntrs, "\"\n";
+    print $vcffile "##numTRsWithSupport=\"", $numsup,   "\"\n";
+    print $vcffile "##database=\"",          $DBNAME,   "\"\n";
+    print $vcffile
         "##databaseurl=\"http://${HTTPSERVER}/result.php?db=${DBNAME}\" \n";
-    print VCFFILE
+    print $vcffile
         "##INFO=<ID=RC,Number=1,Type=Float,Description=\"Reference Copies\">\n";
-    print VCFFILE
+    print $vcffile
         "##INFO=<ID=RPL,Number=1,Type=Integer,Description=\"Reference Pattern Length\">\n";
-    print VCFFILE
+    print $vcffile
         "##INFO=<ID=RAL,Number=1,Type=Integer,Description=\"Reference Tandem Array Length\">\n";
-    print VCFFILE
+    print $vcffile
         "##INFO=<ID=RCP,Number=1,Type=String,Description=\"Reference Consensus Pattern\">\n";
-    print VCFFILE
+    print $vcffile
         "##INFO=<ID=ALGNURL,Number=1,Type=String,Description=\"Alignment URL\">\n";
-    print VCFFILE "##FILTER=<ID=SC,Description=\"Reference is Singleton\">\n";
+    print $vcffile "##FILTER=<ID=SC,Description=\"Reference is Singleton\">\n";
 
-    print VCFFILE
+    print $vcffile
         "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">\n";
-    print VCFFILE
+    print $vcffile
         "##FORMAT=<ID=SP,Number=A,Type=Integer,Description=\"Number of Spanning Reads\">\n";
-    print VCFFILE
+    print $vcffile
         "##FORMAT=<ID=CGL,Number=A,Type=Integer,Description=\"Copies Gained or Lost with respect to reference\">\n";
 
-    print VCFFILE
+    print $vcffile
         "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t$BASENAME\n";
 
-    # Get information on all VNTRs
-    my $refdir = "";
+# Get information on all VNTRs
+# "SELECT rid,alleles_sup,allele_sup_same_as_ref,is_singleton,is_dist,is_indist,firstindex,lastindex,copynum,pattern,clusterid,reserved,reserved2,head,sequence,flankleft,direction FROM fasta_ref_reps INNER JOIN clusterlnk ON fasta_ref_reps.rid=-clusterlnk.repeatid INNER JOIN clusters ON clusters.cid=clusterlnk.clusterid WHERE support_vntr>0 ORDER BY head, firstindex;"
     my $get_vntrs_sth
         = $dbh->prepare(
-        "SELECT rid,alleles_sup,allele_sup_same_as_ref,is_singleton,is_dist,is_indist,firstindex,lastindex,copynum,pattern,clusterid,reserved,reserved2,head,sequence,flankleft,direction FROM fasta_ref_reps INNER JOIN clusterlnk ON fasta_ref_reps.rid=-clusterlnk.repeatid INNER JOIN clusters ON clusters.cid=clusterlnk.clusterid WHERE support_vntr>0 ORDER BY head, firstindex;"
+        "SELECT rid,is_singleton,is_dist,firstindex,(lastindex - firstindex) + 1 AS arlen,copynum,pattern,head,sequence,flankleft,direction FROM fasta_ref_reps INNER JOIN clusterlnk ON fasta_ref_reps.rid=-clusterlnk.repeatid INNER JOIN clusters ON clusters.cid=clusterlnk.clusterid WHERE support_vntr>0 ORDER BY head, firstindex;"
         ) or die "Couldn't prepare statement: " . $dbh->errstr;
-    my $num = 0;
     $get_vntrs_sth->execute()
         or die "Cannot execute: " . $get_vntrs_sth->errstr();
-    $num = $get_vntrs_sth->rows;
-    my $i = 0;
+    my ($rid,   $singleton,   $disting,     $pos1,
+        $arlen, $copiesfloat, $consenuspat, $head,
+        $seq,   $leftflank,   $refdir
+    );
+    $get_vntrs_sth->bind_columns(
+        \(  $rid,   $singleton,   $disting,     $pos1,
+            $arlen, $copiesfloat, $consenuspat, $head,
+            $seq,   $leftflank,   $refdir
+        )
+    );
 
     # Given a TRID, get all read TRs supporting VNTR call
     my $vntr_support_sth
         = $dbh->prepare(
-        "SELECT copies,sameasref,support,copiesfloat,first,last,dna,direction FROM vntr_support LEFT OUTER JOIN replnk ON vntr_support.representative=replnk.rid LEFT OUTER JOIN clusterlnk ON replnk.rid=clusterlnk.repeatid LEFT OUTER JOIN fasta_reads ON replnk.sid=fasta_reads.sid  WHERE refid=-? ORDER BY sameasref DESC;"
+        "SELECT copies,sameasref,support,first,last,dna,direction FROM vntr_support LEFT OUTER JOIN replnk ON vntr_support.representative=replnk.rid LEFT OUTER JOIN clusterlnk ON replnk.rid=clusterlnk.repeatid LEFT OUTER JOIN fasta_reads ON replnk.sid=fasta_reads.sid  WHERE refid=-? ORDER BY sameasref DESC;"
         ) or die "Couldn't prepare statement: " . $dbh->errstr;
 
     # Loop over all VNTRs
-    while ( $i < $num ) {
-        my @ref_data = $get_vntrs_sth->fetchrow_array();
-        $i++;
-
-        my ( $rid, $head, $pos1, $refdir, $singleton, $disting, $copiesfloat )
-            = @ref_data[ 0, 13, 6, 16, 3, 4, 8 ];
-        my $seq = uc( nowhitespace( $ref_data[14] ? $ref_data[14] : "" ) );
-        my $leftflank
-            = uc( nowhitespace( $ref_data[15] ? $ref_data[15] : "" ) );
+    while ( $get_vntrs_sth->fetch() ) {
+        $seq = ($seq) ? uc( nowhitespace($seq) ) : "";
+        $leftflank
+            = ($leftflank) ? uc( nowhitespace($leftflank) ) : "";
 
         warn ">$rid\n" if $ENV{DEBUG};
 
-        my ( $copies, $first, $subSameAsRef1, $j, $al ) = (0) x 5;
+        my ( $first, $subSameAsRef1, $j, $al ) = (0) x 4;
         my ( $subjectA, $subjectB, $subjectC, $subjectB1, $subjectC1, $alt )
             = ("") x 6;
-        my $arlen  = $ref_data[7] - $ref_data[6] + 1;
-        my $patlen = length( $ref_data[9] );
+
+        my $patlen = length($consenuspat);
 
         # start 1 position before, else put an N there
-        if ( $leftflank ne "" ) {
-            $seq = ( substr( $leftflank, -1 ) . $seq );
-        }
-        else { $seq = ( "N" . $seq ); }
+        $seq = ( ($leftflank) ? substr( $leftflank, -1 ) : "N" ) . $seq;
 
-        # get vntr support
+# get vntr support
+# "SELECT copies,sameasref,support,first,last,dna,direction FROM vntr_support LEFT OUTER JOIN replnk ON vntr_support.representative=replnk.rid LEFT OUTER JOIN clusterlnk ON replnk.rid=clusterlnk.repeatid LEFT OUTER JOIN fasta_reads ON replnk.sid=fasta_reads.sid  WHERE refid=-? ORDER BY sameasref DESC;"
         $vntr_support_sth->execute($rid);
+        my ( $copies, $sameasref, $support, $readTRStart, $readTRStop, $dna,
+            $readdir );
+        $vntr_support_sth->bind_columns(
+            \(  $copies,     $sameasref, $support, $readTRStart,
+                $readTRStop, $dna,       $readdir
+            )
+        );
         my $jnum = $vntr_support_sth->rows;
         if ( 0 == $jnum ) {
             print STDERR
@@ -245,22 +254,16 @@ sub print_vcf {
 
         #print STDERR "\n";
 
-        my $readdir                = "";
         my $alleleWithSupportFound = 0;
         warn "\tAlt (before read TR loop): $alt\n" if $ENV{DEBUG};
 
-        # Looop over all allele supporting read TRs
-        while ( $j < $jnum ) {
-            my @readTR_data = $vntr_support_sth->fetchrow_array();
-
-            my ( $sameasref, $support, $copies, $read1, $read2, $readdir )
-                = @readTR_data[ 1, 2, 0, 4, 5, 7 ];
-            my $dna = uc(
-                nowhitespace( $readTR_data[6] ? $readTR_data[6] : "" ) );
+        # Loop over all allele supporting read TRs
+        while ( $vntr_support_sth->fetch ) {
+            $dna = ($dna) ? uc( nowhitespace($dna) ) : "";
 
             #if (0 != $j) { print STDERR "ref: $refdir = read: $readdir\n"; }
 
-            if ( 0 == $j ) {
+            if ( $j == 0 ) {
                 $first = $copies;
             }
 
@@ -304,7 +307,7 @@ sub print_vcf {
                     }
 
 # If the stop position is beyond the length of the read sequence, exit with error
-                    if ( $read2 > ( length($dna) ) ) {
+                    if ( $readTRStop > ( length($dna) ) ) {
                         print STDERR
                             "Error: last position outside of the range of the source sequence buffer for ref ($rid) alternate allele $al!";
                         exit(1);
@@ -318,13 +321,13 @@ sub print_vcf {
                         $dna = RC($dna);
 
                         #print STDERR "$dna\n";
-                        my $temp = $read1;
-                        $read1 = ($tdlen - $read2) + 1;
-                        $read2 = ($tdlen - $temp) + 1;
+                        my $temp = $readTRStart;
+                        $readTRStart = ( $tdlen - $readTRStop ) + 1;
+                        $readTRStop  = ( $tdlen - $temp ) + 1;
                     }
 
                     warn
-                        "\t\tSequence: $dna, TR start: $read1, TR stop: $read2\n"
+                        "\t\tSequence: $dna, TR start: $readTRStart, TR stop: $readTRStop\n"
                         if $ENV{DEBUG};
 
                     # find the first similar character
@@ -334,23 +337,36 @@ sub print_vcf {
                         if $ENV{DEBUG};
 
                     my $atemp = "N";
-                    $atemp .= substr( $dna, $read1 - 1,
-                        ( $read2 - $read1 + 1 ) )
-                        ;    # in case character is not encountered
+                    $atemp .= substr(
+                        $dna,
+                        $readTRStart - 1,
+                        ( $readTRStop - $readTRStart + 1 )
+                    );    # in case character is not encountered
 
                     my $extra = 1;
-                    # Proposed fix: Use start index factoring in $extra 
-                    for ( my $start = $read1 - ($extra + 1) ; $start >= 1; --$start, ++$extra ) {
+
+                 # Proposed fix: Use start index factoring in extra nucleotide
+                 # by subtracting 2 from the start (one for 1 extra base, one
+                 # more since substr indexes start at 0). Decrement start by 1
+                 # each iter, and increment extra by one.
+                    for (
+                        my $start = $readTRStart - 2;
+                        $start >= 1;
+                        --$start, ++$extra
+                        )
+                    {
                         my $ll = substr( $dna, $start, 1 );
 
-                        # Check if backtracked character matches last from left flank in ref.
+         # Check if backtracked character matches last from left flank in ref.
                         if ( $fl eq $ll ) {
-                            my $substr_len = ( $read2 - $read1 + 1 + $extra );
+                            my $substr_len
+                                = ( $readTRStop - $readTRStart + 1 + $extra );
                             $atemp = substr( $dna, $start, $substr_len );
                             warn
                                 "\t\t\tfl == ll; extra: $extra, start: $start, ll: $ll, atemp: $atemp\n"
                                 if $ENV{DEBUG};
-                            warn "\t\t\t\tWill take substring at (0-indexed) position "
+                            warn
+                                "\t\t\t\tWill take substring at (0-indexed) position "
                                 . $start
                                 . " with length "
                                 . $substr_len . "\n"
@@ -399,19 +415,20 @@ sub print_vcf {
         my $info
             = sprintf(
             "RC=%.2lf;RPL=$patlen;RAL=$arlen;RCP=%s;ALGNURL=http://${HTTPSERVER}/index.php?db=${DBNAME}&ref=-$rid&isref=1&istab=1&ispng=1&rank=3",
-            $copiesfloat, $ref_data[9] );
+            $copiesfloat, $consenuspat );
         my $format = "GT:SP:CGL";
 
         if ($alleleWithSupportFound) {
-            print VCFFILE "$head\t"
+            print $vcffile "$head\t"
                 . ( $pos1 - 1 )
                 . "\ttd$rid\t$seq\t$alt\t$qual\t$filter\t$info\t$format\t$subjectA:$subjectB:$subjectC\n";
         }
     }
-    $get_vntrs_sth->finish;
 
-    $vntr_support_sth->finish;
+    # $get_vntrs_sth->finish;
 
+    # $vntr_support_sth->finish;
+    close $vcffile;
 }
 
 ############################ All Supported VCF file ###############################################################
@@ -2439,9 +2456,6 @@ open( STDFILE, ">", "${latex}.span${MIN_SUPPORT_REQUIRED}.tex" )
 open( DISTRFILE, ">", "${latex}.span${MIN_SUPPORT_REQUIRED}.txt" )
     or die
     "\nCan't open for reading ${latex}.span${MIN_SUPPORT_REQUIRED}.txt\n\n";
-open( VCFFILE, ">", "${latex}.span${MIN_SUPPORT_REQUIRED}.vcf" )
-    or die
-    "\nCan't open for writing ${latex}.span${MIN_SUPPORT_REQUIRED}.vcf\n\n";
 open( VCFFILE2, ">",
     "${latex}.allwithsupport.span${MIN_SUPPORT_REQUIRED}.vcf" )
     or die
@@ -2788,7 +2802,6 @@ $dbh->disconnect();
 print STDFILE $STDBUFFER;
 close STDFILE;
 close DISTRFILE;
-close VCFFILE;
 close VCFFILE2;
 
 #close VCFFILE2;
