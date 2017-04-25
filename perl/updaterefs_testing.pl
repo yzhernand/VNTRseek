@@ -61,8 +61,10 @@ sub commify {
 }
 
 sub print_vcf {
-    # TODO Add second param for file name
-    my $dbh = shift;
+
+    # TODO Add code for "all with support" functionality
+    my $dbh            = shift;
+    my $allwithsupport = shift;
 
     # Get total number of TRs supported
     my $numsup_sth
@@ -98,50 +100,39 @@ sub print_vcf {
         or die "Cannot execute: " . $update_spanN_sth->errstr();
 
     # $update_spanN_sth->finish;
-    open my $vcffile, ">", "${DBNAME}.span${MIN_SUPPORT_REQUIRED}.vcf"
-        or die
-        "\nCan't open for writing ${DBNAME}.span${MIN_SUPPORT_REQUIRED}.vcf\n\n";
-    print $vcffile "##fileformat=VCFv4.1\n";
-    print $vcffile strftime( "##fileDate=\"%Y%m%d\"\n", localtime );
-    print $vcffile "##source=\"Vntrseek ver. $VERSION\"\n";
-    print $vcffile "##TRFParameters=\"", GetStatistics("PARAM_TRF"), "\"\n";
-    print $vcffile "##referenceseq=\"", GetStatistics("FILE_REFERENCE_SEQ"),
-        "\"\n";
-    print $vcffile "##referenceprofile=\"",
-        GetStatistics("FILE_REFERENCE_LEB"), "\"\n";
-    print $vcffile "##numrefTRs=\"", GetStatistics("NUMBER_REF_TRS"), "\"\n";
-    print $vcffile "##readseqfolder=\"", GetStatistics("FOLDER_FASTA"), "\"\n";
-    print $vcffile "##readprofilefolder=\"", GetStatistics("FOLDER_PROFILES"),
-        "\"\n";
-    print $vcffile "##numreads=\"", GetStatistics("NUMBER_READS"), "\"\n";
-    print $vcffile "##numreadTRs=\"", GetStatistics("NUMBER_TRS_IN_READS"),
-        "\"\n";
-    print $vcffile "##numVNTRs=\"",          $numvntrs, "\"\n";
-    print $vcffile "##numTRsWithSupport=\"", $numsup,   "\"\n";
-    print $vcffile "##database=\"",          $DBNAME,   "\"\n";
-    print $vcffile
-        "##databaseurl=\"http://${HTTPSERVER}/result.php?db=${DBNAME}\" \n";
-    print $vcffile
-        "##INFO=<ID=RC,Number=1,Type=Float,Description=\"Reference Copies\">\n";
-    print $vcffile
-        "##INFO=<ID=RPL,Number=1,Type=Integer,Description=\"Reference Pattern Length\">\n";
-    print $vcffile
-        "##INFO=<ID=RAL,Number=1,Type=Integer,Description=\"Reference Tandem Array Length\">\n";
-    print $vcffile
-        "##INFO=<ID=RCP,Number=1,Type=String,Description=\"Reference Consensus Pattern\">\n";
-    print $vcffile
-        "##INFO=<ID=ALGNURL,Number=1,Type=String,Description=\"Alignment URL\">\n";
-    print $vcffile "##FILTER=<ID=SC,Description=\"Reference is Singleton\">\n";
+    my $filename
+        = "${DBNAME}."
+        . ( ($allwithsupport) ? "allwithsupport." : "" )
+        . "span${MIN_SUPPORT_REQUIRED}" . ".vcf";
+    open my $vcffile, ">", $filename
+        or die "\nCan't open for writing $filename\n\n";
 
-    print $vcffile
-        "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">\n";
-    print $vcffile
-        "##FORMAT=<ID=SP,Number=A,Type=Integer,Description=\"Number of Spanning Reads\">\n";
-    print $vcffile
-        "##FORMAT=<ID=CGL,Number=A,Type=Integer,Description=\"Copies Gained or Lost with respect to reference\">\n";
-
-    print $vcffile
-        "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t$BASENAME\n";
+    print $vcffile "##fileformat=VCFv4.1\n"
+        . strftime( "##fileDate=\"%Y%m%d\"\n", localtime )
+        . qq[##source="Vntrseek ver. $VERSION"
+##TRFParameters="] . GetStatistics("PARAM_TRF") . qq["
+##referenceseq="] . GetStatistics("FILE_REFERENCE_SEQ") . qq["
+##referenceprofile="] . GetStatistics("FILE_REFERENCE_LEB") . qq["
+##numrefTRs="] . GetStatistics("NUMBER_REF_TRS") . qq["
+##readseqfolder="] . GetStatistics("FOLDER_FASTA") . qq["
+##readprofilefolder="] . GetStatistics("FOLDER_PROFILES") . qq["
+##numreads="] . GetStatistics("NUMBER_READS") . qq["
+##numreadTRs="] . GetStatistics("NUMBER_TRS_IN_READS") . qq["
+##numVNTRs="$numvntrs"
+##numTRsWithSupport="$numsup"
+##database="$DBNAME"
+##databaseurl="http://${HTTPSERVER}/result.php?db=${DBNAME}"
+##INFO=<ID=RC,Number=1,Type=Float,Description="Reference Copies">
+##INFO=<ID=RPL,Number=1,Type=Integer,Description="Reference Pattern Length">
+##INFO=<ID=RAL,Number=1,Type=Integer,Description="Reference Tandem Array Length">
+##INFO=<ID=RCP,Number=1,Type=String,Description="Reference Consensus Pattern">
+##INFO=<ID=ALGNURL,Number=1,Type=String,Description="Alignment URL">
+##FILTER=<ID=SC,Description="Reference is Singleton">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##FORMAT=<ID=SP,Number=A,Type=Integer,Description="Number of Spanning Reads">
+##FORMAT=<ID=CGL,Number=A,Type=Integer,Description="Copies Gained or Lost with respect to reference">
+#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t$BASENAME
+];
 
 # Get information on all VNTRs
 # "SELECT rid,alleles_sup,allele_sup_same_as_ref,is_singleton,is_dist,is_indist,firstindex,lastindex,copynum,pattern,clusterid,reserved,reserved2,head,sequence,flankleft,direction FROM fasta_ref_reps INNER JOIN clusterlnk ON fasta_ref_reps.rid=-clusterlnk.repeatid INNER JOIN clusters ON clusters.cid=clusterlnk.clusterid WHERE support_vntr>0 ORDER BY head, firstindex;"
@@ -181,10 +172,6 @@ sub print_vcf {
             = ("") x 6;
 
         my $patlen = length($consenuspat);
-
-        # Change: no longer grabbing extra 5' base
-        # start 1 position before, else put an N there
-        # $seq = ( ($leftflank) ? substr( $leftflank, -1 ) : "N" ) . $seq;
 
 # get vntr support
 # "SELECT copies,sameasref,support,first,last,dna,direction FROM vntr_support LEFT OUTER JOIN replnk ON vntr_support.representative=replnk.rid LEFT OUTER JOIN clusterlnk ON replnk.rid=clusterlnk.repeatid LEFT OUTER JOIN fasta_reads ON replnk.sid=fasta_reads.sid  WHERE refid=-? ORDER BY sameasref DESC;"
@@ -281,54 +268,11 @@ sub print_vcf {
                         "\t\tSequence: $dna, TR start: $readTRStart, TR stop: $readTRStop\n"
                         if $ENV{DEBUG};
 
-                    # Change: no longer grabbing extra 5' base
-                    # # find the first similar character
-                    # my $fl = substr( $seq, 0, 1 );
-
-                    # warn "\t\tFirst similar character in refseq: $fl\n"
-                    #     if $ENV{DEBUG};
-
                     my $atemp = substr(
                         $dna,
                         $readTRStart - 1,
-                        ( ($readTRStop - $readTRStart) + 1 )
-                    );    # in case character is not encountered
-
-                    # Change: no longer grabbing extra 5' base
-         #            my $extra = 1;
-
-         #         # Proposed fix: Use start index factoring in extra nucleotide
-         #         # by subtracting 2 from the start (one for 1 extra base, one
-         #         # more since substr indexes start at 0). Decrement start by 1
-         #         # each iter, and increment extra by one.
-         #            for (
-         #                my $start = $readTRStart - 2;
-         #                $start >= 1;
-         #                --$start, ++$extra
-         #                )
-         #            {
-         #                my $ll = substr( $dna, $start, 1 );
-
-         # # Check if backtracked character matches last from left flank in ref.
-         #                if ( $fl eq $ll ) {
-         #                    my $substr_len
-         #                        = ( $readTRStop - $readTRStart + 1 + $extra );
-         #                    $atemp = substr( $dna, $start, $substr_len );
-         #                    warn
-         #                        "\t\t\tfl == ll; extra: $extra, start: $start, ll: $ll, atemp: $atemp\n"
-         #                        if $ENV{DEBUG};
-         #                    warn
-         #                        "\t\t\t\tWill take substring at (0-indexed) position "
-         #                        . $start
-         #                        . " with length "
-         #                        . $substr_len . "\n"
-         #                        if $ENV{DEBUG};
-         #                    last;
-         #                }
-         #                warn
-         #                    "\t\t\textra: $extra, ll: $ll, start: $start, atemp: $atemp\n"
-         #                    if $ENV{DEBUG};
-         #            }
+                        ( ( $readTRStop - $readTRStart ) + 1 )
+                    );
 
                     $alt .= $atemp;
                     warn "\t\tAlt: $alt\n" if $ENV{DEBUG};
@@ -387,4 +331,7 @@ my $dbh = DBI->connect( "DBI:mysql:$DBNAME;mysql_local_infile=1;host=$HOST",
     "$LOGIN", "$PASS" )
     || die "Could not connect to database: $DBI::errstr";
 
+# Span N
 print_vcf($dbh);
+# all with support
+print_vcf($dbh, 1);
