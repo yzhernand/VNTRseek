@@ -1,0 +1,75 @@
+##fileformat=VCFv4.1
+##fileDate=[date generated yyyymmdd, example 20120417]
+##source="VNTR-Seek Pipeline"
+##TRFParameters="./trf406-ngs.linux.exe - 2 7 7 80 10 50 2000 -d -h -ngs" 
+##referenceseq=HG19-anyborders-jan6.seq 
+##referenceprofile=HG19-anyborders-jan6.leb36
+##numrefTRs=219504
+##readseqfolder=/bfdisk/watson
+##readprofilefolder=/home/eugene/watson/watson_out/ 
+##numreadTRs=7928656
+##database=VNTRPIPE_full_jan19_szerr10
+##databaseurl="http://orca.bu.edu/vntrview/result.php?db=VNTRPIPE_full_jan19_szerr10" 
+##INFO=<ID=RC,Number=1,Type=Float,Description="Reference Copies">
+##INFO=<ID=RPL,Number=1,Type=Integer,Description="Reference Pattern Length">
+##INFO=<ID=RAL,Number=1,Type=Integer,Description="Reference Tandem Array Length">
+##INFO=<ID=RCP,Number=1,Type=String,Description="Reference Consensus Pattern">
+##INFO=<ID=ALGNURL,Number=1,Type=String,Description="Alignment URL">
+##FILTER=<ID=SC,Description="Reference from Singleton Cluster">
+##FILTER=<ID=DS50,Description="Reference is Distinguishable at Flank Length 50">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##FORMAT=<ID=SP,Number=A,Type=Integer,Description="Number of Spanning Reads">
+##FORMAT=<ID=CGL,Number=A,Type=Integer,Description="Copies Gained or Lost with respect to reference">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	[Subject name or id]
+3	195564736	.	[reference sequence plus 1 character before]	[read sequence consensus plus 1 character before]	.	PASS	RC=4.05;RPL=62;RAL=251;RCP=GGACTTGGGAGCCGGAGGCGGCACGAGAGCGTCACCCGCACCAAAAGATTCTCGGGGTCTCG;ALGNURL=http://orca.bu.edu/vntrview/index.php?db=VNTRPIPE_full_jan19_szerr10&map=95534&ref=-161875001&isref=1&istab=1&ispng=1&rank=3	GT:SP:CGL	1/1:2:-1
+3	195479413	.	[reference sequence plus 1 character before]	[read sequence consensus plus 1 character before]	.	PASS RC=3.81;RPL=56;RAL=213;RCP=CAGTGACAGAAGGTCGCTGAAGAAACCGGGAGAAGTGGCCCTCACCCTACATTCCA;ALGNURL=http://orca.bu.edu/vntrview/index.php?db=VNTRPIPE_full_jan19_szerr10&map=127122&ref=-161874842&isref=1&istab=1&ispng=1&rank=3	GT:SPC:GL	0/1:1,3:0,-1
+
+
+Notes:
+0. Fields are tab delimited
+1. ID is dot.  We don't have an official ID for each variant yet.  We could use the reference id. 
+2. Ref is reference sequence plus 1 character before
+2A. problem with the 1 character before, in case the read flank or flank consensus contains an indel 1 character before, then read has no character there.  May have to back up reference to first read character in flank or flank consensus(on left)
+3. ALT is comma separated alternative sequences plus 1 character before.  The number of sequences in ALT should be the same as the highest number in the GT field 
+3A. problem with read sequence consensus if don't agree, must generate for each allele
+4. QUAL is dot
+5. FILTER is comma separated list of all FILTERS *not* passed, or PASS, or dot if no filters used
+For now, if a ref is a singleton, the FILTER entry is PASS.  If it is not a singleton, but is distinguishable, the FILTER entry is SC.  If it is not a singleton and not distinguishable, the FILTER entry is SC,DS50
+6. INFO is semicolon delimited name=value pairs for each of the known INFO fields specified in the header
+7. FORMAT is always GT:SP:CGL.  
+8. [Subject name or id field] contains information related to GT, SP, and CGL
+
+***New 2, 2A, 3.  4/25/17
+To deal with indels in the flank in the variants (either a loss of the last base in the flank preceding the TR array or gain of extra bases preceding the array) the POS no longer indicates one character before for either the reference or the variant alleles.  POS now indicates the first character of the TR array, for both the REF and ALT strings.  Note that the first character of the ALT field may not align with the first character of the REF field if there is an indel on the left side of the ALT array. 
+2. REF is reference sequence.
+2A. still applies, solution is to omit the one character before the TR array
+3. ALT is comma separated alternative array sequences.  The number of sequences in ALT should be the same as the highest number in the GT field 
+
+***New 8A. 3/14/14
+GT is genotype or the list of alleles detected, which is coded as 0(=ref)/1(=alternate allele 1)/2(=alternate allele 2)/3(=alternate allele 3). Make the GT field as follows.  Note that the reference (0) only shows up if that allele is detected:
+For one allele it should be 0/0 or 1/1 depending on whether the allele is the reference (0) or an alternate (1).  For two alleles, it should be 0/1 or 1/2 depending on whether one of the alleles is different from the reference (0/1) or both are different from the reference (1/2).  For three or more, it should similarly list the types (for example, 0/1/2 or 1/2/3).
+
+***New 8A 7/11/12
+Make the GT field always 0/1, 0/1/2, 0/1/2/3, etc. depending on the number of alternate alleles (one, two, three) whether or not we have support for the 0 allele
+Make the SP and CGL fields match the GT field in number of values
+SP is the number of spanning reads and will be comma delimited. (can be zero or one or more for the zero allele and must be two or more for the alternate alleles).  CGL will always start with 0 for the zero allele and then list the copies gained or lost for the other alleles in the GT list.
+
+***Old 8A 
+8A. GT is genotype or the list of alleles detected, which is coded as 0(=ref)/1(=alternate allele 1)/2(=alternate allele 2)/3(=alternate allele 3), thus something like 0/1 for two alleles, one of which is reference or 1 for only the alternate allele 1, etc.
+
+***New 8B 3/14/14
+8B. SP is number of reads spanning the matching allele, comma separated if multiple alleles (only one number if the genotype is 0/0 or 1/1.)  It must be two or more for all alleles (should match the minimum number of reads required for support).
+
+
+***Old 8B
+8B. SP is number of reads spanning the matching allele, comma separated if multiple alleles
+
+8C. CGL is copies gained or lost relative to reference, comma separated if multiple alleles
+
+
+***New 11/1/13:
+The DS50 filter is no longer used.  It should not appear in the header lines or in any record
+##FILTER=<ID=DS50,Description="Reference is Distinguishable at Flank Length 50">
+if a ref is a singleton, the FILTER entry is PASS.  If it is not a singleton the FILTER entry is SC.  
+When specifying a repeat that has spanning reads, but is the same as the reference use the following:
+[chrom]	[pos in reference one character before repeat]	[reference id]	[ref sequence plus one character before]	.	.	[PASS|SC]	RC=[reference copy number];RPL=[reference pattern length];RAL=[reference tandem array length];RCP=[reference consensus pattern];ALGNURL=[url for alignment]	GT:SP:CGL	0:[number of spanning reads]:0	

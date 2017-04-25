@@ -61,6 +61,7 @@ sub commify {
 }
 
 sub print_vcf {
+    # TODO Add second param for file name
     my $dbh = shift;
 
     # Get total number of TRs supported
@@ -181,8 +182,9 @@ sub print_vcf {
 
         my $patlen = length($consenuspat);
 
+        # Change: no longer grabbing extra 5' base
         # start 1 position before, else put an N there
-        $seq = ( ($leftflank) ? substr( $leftflank, -1 ) : "N" ) . $seq;
+        # $seq = ( ($leftflank) ? substr( $leftflank, -1 ) : "N" ) . $seq;
 
 # get vntr support
 # "SELECT copies,sameasref,support,first,last,dna,direction FROM vntr_support LEFT OUTER JOIN replnk ON vntr_support.representative=replnk.rid LEFT OUTER JOIN clusterlnk ON replnk.rid=clusterlnk.repeatid LEFT OUTER JOIN fasta_reads ON replnk.sid=fasta_reads.sid  WHERE refid=-? ORDER BY sameasref DESC;"
@@ -279,53 +281,54 @@ sub print_vcf {
                         "\t\tSequence: $dna, TR start: $readTRStart, TR stop: $readTRStop\n"
                         if $ENV{DEBUG};
 
-                    # find the first similar character
-                    my $fl = substr( $seq, 0, 1 );
+                    # Change: no longer grabbing extra 5' base
+                    # # find the first similar character
+                    # my $fl = substr( $seq, 0, 1 );
 
-                    warn "\t\tFirst similar character in refseq: $fl\n"
-                        if $ENV{DEBUG};
+                    # warn "\t\tFirst similar character in refseq: $fl\n"
+                    #     if $ENV{DEBUG};
 
-                    my $atemp = "N";
-                    $atemp .= substr(
+                    my $atemp = substr(
                         $dna,
                         $readTRStart - 1,
-                        ( $readTRStop - $readTRStart + 1 )
+                        ( ($readTRStop - $readTRStart) + 1 )
                     );    # in case character is not encountered
 
-                    my $extra = 1;
+                    # Change: no longer grabbing extra 5' base
+         #            my $extra = 1;
 
-                 # Proposed fix: Use start index factoring in extra nucleotide
-                 # by subtracting 2 from the start (one for 1 extra base, one
-                 # more since substr indexes start at 0). Decrement start by 1
-                 # each iter, and increment extra by one.
-                    for (
-                        my $start = $readTRStart - 2;
-                        $start >= 1;
-                        --$start, ++$extra
-                        )
-                    {
-                        my $ll = substr( $dna, $start, 1 );
+         #         # Proposed fix: Use start index factoring in extra nucleotide
+         #         # by subtracting 2 from the start (one for 1 extra base, one
+         #         # more since substr indexes start at 0). Decrement start by 1
+         #         # each iter, and increment extra by one.
+         #            for (
+         #                my $start = $readTRStart - 2;
+         #                $start >= 1;
+         #                --$start, ++$extra
+         #                )
+         #            {
+         #                my $ll = substr( $dna, $start, 1 );
 
-         # Check if backtracked character matches last from left flank in ref.
-                        if ( $fl eq $ll ) {
-                            my $substr_len
-                                = ( $readTRStop - $readTRStart + 1 + $extra );
-                            $atemp = substr( $dna, $start, $substr_len );
-                            warn
-                                "\t\t\tfl == ll; extra: $extra, start: $start, ll: $ll, atemp: $atemp\n"
-                                if $ENV{DEBUG};
-                            warn
-                                "\t\t\t\tWill take substring at (0-indexed) position "
-                                . $start
-                                . " with length "
-                                . $substr_len . "\n"
-                                if $ENV{DEBUG};
-                            last;
-                        }
-                        warn
-                            "\t\t\textra: $extra, ll: $ll, start: $start, atemp: $atemp\n"
-                            if $ENV{DEBUG};
-                    }
+         # # Check if backtracked character matches last from left flank in ref.
+         #                if ( $fl eq $ll ) {
+         #                    my $substr_len
+         #                        = ( $readTRStop - $readTRStart + 1 + $extra );
+         #                    $atemp = substr( $dna, $start, $substr_len );
+         #                    warn
+         #                        "\t\t\tfl == ll; extra: $extra, start: $start, ll: $ll, atemp: $atemp\n"
+         #                        if $ENV{DEBUG};
+         #                    warn
+         #                        "\t\t\t\tWill take substring at (0-indexed) position "
+         #                        . $start
+         #                        . " with length "
+         #                        . $substr_len . "\n"
+         #                        if $ENV{DEBUG};
+         #                    last;
+         #                }
+         #                warn
+         #                    "\t\t\textra: $extra, ll: $ll, start: $start, atemp: $atemp\n"
+         #                    if $ENV{DEBUG};
+         #            }
 
                     $alt .= $atemp;
                     warn "\t\tAlt: $alt\n" if $ENV{DEBUG};
