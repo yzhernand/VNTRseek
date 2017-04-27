@@ -76,6 +76,9 @@ sub print_vcf {
     $numsup_sth->execute() or die "Cannot execute: " . $numsup_sth->errstr();
     $numsup_sth->bind_columns( \$numsup );
     $numsup_sth->fetch;
+    if ( !defined $numsup ) {
+        die "Error getting number of supported TRs: " . $dbh->errstr;
+    }
 
     # $numsup_sth->finish;
 
@@ -91,6 +94,9 @@ sub print_vcf {
     $numvntrs_sth->bind_columns( \$numvntrs );
     $numvntrs_sth->fetch;
     $numvntrs_sth->finish;
+    if ( !defined $numsup ) {
+        die "Error getting number of supported VNTRs: " . $dbh->errstr;
+    }
 
     # update spanN number on stats
     my $update_spanN_sth
@@ -136,17 +142,19 @@ sub print_vcf {
 
 # Get information on all VNTRs
 # "SELECT rid,alleles_sup,allele_sup_same_as_ref,is_singleton,is_dist,is_indist,firstindex,lastindex,copynum,pattern,clusterid,reserved,reserved2,head,sequence,flankleft,direction FROM fasta_ref_reps INNER JOIN clusterlnk ON fasta_ref_reps.rid=-clusterlnk.repeatid INNER JOIN clusters ON clusters.cid=clusterlnk.clusterid WHERE support_vntr>0 ORDER BY head, firstindex;"
-    my $get_vntrs_sth
+    my $get_trs_sth
         = $dbh->prepare(
-        "SELECT rid,is_singleton,is_dist,firstindex,(lastindex - firstindex) + 1 AS arlen,copynum,pattern,head,sequence,flankleft,direction FROM fasta_ref_reps INNER JOIN clusterlnk ON fasta_ref_reps.rid=-clusterlnk.repeatid INNER JOIN clusters ON clusters.cid=clusterlnk.clusterid WHERE support_vntr>0 ORDER BY head, firstindex;"
-        ) or die "Couldn't prepare statement: " . $dbh->errstr;
-    $get_vntrs_sth->execute()
-        or die "Cannot execute: " . $get_vntrs_sth->errstr();
+        "SELECT rid,is_singleton,is_dist,firstindex,(lastindex - firstindex) + 1 AS arlen,copynum,pattern,head,sequence,flankleft,direction FROM fasta_ref_reps INNER JOIN clusterlnk ON fasta_ref_reps.rid=-clusterlnk.repeatid INNER JOIN clusters ON clusters.cid=clusterlnk.clusterid"
+            . ( ($allwithsupport) ? " " : " WHERE support_vntr>0 " )
+            . "ORDER BY head, firstindex;" )
+        or die "Couldn't prepare statement: " . $dbh->errstr;
+    $get_trs_sth->execute()
+        or die "Cannot execute: " . $get_trs_sth->errstr();
     my ($rid,   $singleton,   $disting,     $pos1,
         $arlen, $copiesfloat, $consenuspat, $head,
         $seq,   $leftflank,   $refdir
     );
-    $get_vntrs_sth->bind_columns(
+    $get_trs_sth->bind_columns(
         \(  $rid,   $singleton,   $disting,     $pos1,
             $arlen, $copiesfloat, $consenuspat, $head,
             $seq,   $leftflank,   $refdir
@@ -160,7 +168,7 @@ sub print_vcf {
         ) or die "Couldn't prepare statement: " . $dbh->errstr;
 
     # Loop over all VNTRs
-    while ( $get_vntrs_sth->fetch() ) {
+    while ( $get_trs_sth->fetch() ) {
         $seq = ($seq) ? uc( nowhitespace($seq) ) : "";
         $leftflank
             = ($leftflank) ? uc( nowhitespace($leftflank) ) : "";
@@ -185,9 +193,9 @@ sub print_vcf {
         );
         my $jnum = $vntr_support_sth->rows;
         if ( 0 == $jnum ) {
-            print STDERR
-                "Error: could not get any VNTR_SUPPORT records for rid=$rid!";
-            exit(1);
+            die "Error: could not get any VNTR_SUPPORT records for rid=$rid!"
+                unless ($allwithsupport);
+            next;
         }
 
         #print STDERR "\n";
@@ -321,7 +329,7 @@ sub print_vcf {
         }
     }
 
-    # $get_vntrs_sth->finish;
+    # $get_trs_sth->finish;
 
     # $vntr_support_sth->finish;
     close $vcffile;
@@ -333,5 +341,6 @@ my $dbh = DBI->connect( "DBI:mysql:$DBNAME;mysql_local_infile=1;host=$HOST",
 
 # Span N
 print_vcf($dbh);
+
 # all with support
-print_vcf($dbh, 1);
+print_vcf( $dbh, 1 );
