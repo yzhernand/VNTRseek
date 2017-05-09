@@ -8,7 +8,7 @@
 
 use strict;
 use warnings;
-
+use feature 'state';
 use Getopt::Std;
 use IO::Handle;
 
@@ -226,15 +226,22 @@ sub read_fasta {
     my $decom_cmd
         = ($compression) ? $decompress_cmds{$compression} : "";
     my $files_processed = 0;
+    # $files_processed contains how many files processed so far.
+    # Use to index into filelist
+    local $/ = ">";
+    open my $fasta_fh, $openmode,
+          $decom_cmd
+        . "'$input_dir/"
+        . $filelist->[ $files_processed++ ] . "'";
+    # Consume first empty record because of the way $/ splits the FASTA format.
+    <$fasta_fh>;
     return sub {
-
-        # $files_processed contains how many files processed so far.
-        # Use to index into filelist
-        open my $fasta_fh, $openmode,
-              $decom_cmd
-            . "'$input_dir/"
-            . $filelist->[ $files_processed++ ] . "'";
-        return $fasta_fh;
+        my $fasta_rec = <$fasta_fh>;
+        my ($header, @seqlines) = split("\n+", $fasta_rec);
+        chomp $header;
+        chomp @seqlines;
+        my $seq = join("", @seqlines);
+        return (">" . $header, $seq);
     };
 }
 
