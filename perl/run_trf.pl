@@ -12,10 +12,31 @@ use warnings;
 use Getopt::Std;
 use IO::Handle;
 
+# TODO fewer globals. All functions get passed the variables they need (or refs to vars)
+# TODO Write a generic function for generating sequences to be passed to a TRF instance/pipe
+#     This function will use different functions as backends depending on the input format.
+#     Should this function use IO::* in some way?
+#     API should look like:
+#     my @seq_splits = this_function($format, $compression, $max_processes, \@file_list);
+#     for (my $i=0; $i < $max_processes; ++$i) {
+#         $p{ fork_trf($seq_splits->())} } = 1;
+#     }
+#
+#     @seq_splits is an array of function references. These are closures with predetermined
+#     splits of the input data, either a subset of the files, as in FASTA/FASTQ files, or
+#     a subset of ranges as in BAM files.
+
 my $files_to_process = 1;    # number of files to process in one batch
 my $files_processed  = 0;    # files processed
 my %p;                       # associates forked pids with output pipe pids
 my $max_processes = 0;
+
+# Dispatch table for use by sequence reader
+my %reader_table = (
+    fasta => \&read_fasta,
+    fastq => \&read_fastq,
+    bam   => \&read_bam
+);
 
 my %opts;
 getopts( 'p:t:u:swr', \%opts );
@@ -30,7 +51,6 @@ my $TRF2PROCLU_PARAM = $opts{'u'};
 my $strip_454_TCAG   = ( defined $opts{'s'} && $opts{'s'} ) ? 1 : 0;
 my $warn_454_TCAG    = ( defined $opts{'w'} && $opts{'w'} ) ? 1 : 0;
 my $IS_PAIRED_READS  = ( defined $opts{'r'} && $opts{'r'} ) ? 1 : 0;
-my $input_seq_fh;
 
 my $reverse_read = 1; # if 1, each read will be reversed and processed as well
 
@@ -68,28 +88,24 @@ my %supported_formats = (
     bam   => "bam"
 );
 my @supported_format_names = qw(fasta fastq bam);
-my @gzip_extensions        = qw(gz);
-my @targz_extensions       = qw(tgz tar\.gz);
-my @bzip_extensions        = qw(bz bz2);
-my @tarbzip_extensions     = qw(tbz tbz2 tar\.bz tar\.bz2);
 my %compressed_formats     = (
     targz   => qr/tgz|tar\.gz/,
     gzip    => qr/gz/,
     tarbzip => qr/tbz|tbz2|tar\.bz|tar\.bz2/,
-    bzip    => qr/bz|bz2/
+    bzip    => qr/bz|bz2/,
+    tarxz   => qr/txz|tar\.xz/,
+    xz      => qr/xz/
 );
-my @compressed_format_types = qw(targz gzip tarbzip bzip);
+my @compressed_format_types = qw(targz gzip tarbzip bzip tarxz xz);
+# All decompression commands end with a space, for convenience
 my %decompress_cmds         = (
-    targz   => "tar xzfmO",
-    gzip    => "gunzip -c",
-    tarbzip => "tar xjfmO",
-    bzip    => "bzip2 -c"
+    targz   => "tar xzfmO ",
+    gzip    => "gunzip -c ",
+    tarbzip => "tar xjfmO ",
+    bzip    => "bzip2 -c ",
+    tarxz   => "tar xJfmO ",
+    xz      => "xzcat "
 );
-
-# my @supported_compression_formats = (
-#     @gzip_extensions, @targz_extensions,
-#     @bzip_extensions, @tarbzip_extensions
-# );
 
 # Get all supported files. See note above on priority of input formats
 my @tarballs;
@@ -142,9 +158,11 @@ if ( $max_processes == 0 ) {
 # is BAM format.
 if ( $input_format == "bam" ) {
 
-    # Will use samtools for reading instead. Pass on execution to the BAM file reading script
+# Will use samtools for reading instead. Pass on execution to the BAM file reading script
     my $bamfile = shift @tarballs;
-    system("./fromBam.sh $max_processes \"$bamfile\" \"$output_dir\" \"$TRF_PARAM\" \"$TRF2PROCLU_PARAM\"" );
+    system(
+        "./fromBam.sh $max_processes \"$bamfile\" \"$output_dir\" \"$TRF_PARAM\" \"$TRF2PROCLU_PARAM\""
+    );
     return 0;
 }
 
@@ -193,6 +211,52 @@ warn "Processing complete -- processed $files_processed file(s).\n";
 
 ############################ Procedures ###############################################################
 
+=item I<read_fasta()>
+
+Given a list of files, return a sub which knows how to open each file and
+where it is in the list of files.
+
+=cut
+
+sub read_fasta {
+    my ( $max_processes, $compression, $filelist ) = @_;
+
+ # If file uncompressed, simply read from file. Else open a pipe to a command.
+    my $openmode = ($compression) ? "-|" : "<";
+    my $decom_cmd
+        = ($compression) ? $decompress_cmds{$compression} : "";
+    my $files_processed = 0;
+    return sub {
+
+        # $files_processed contains how many files processed so far.
+        # Use to index into filelist
+        open my $fasta_fh, $openmode,
+              $decom_cmd
+            . "'$input_dir/"
+            . $filelist->[ $files_processed++ ] . "'";
+        return $fasta_fh;
+    };
+}
+
+=item I<make_file_streams()>
+
+Takes file format and compression format names, and a list of full
+paths to files in that format. Then returns a function which, when
+called, returns a stream to sequences which can be used to run
+TRF/TRF2PROCLU.
+
+=cut
+
+sub make_file_streams {
+
+    # First, take in the format, and the list of items
+    my ( $format, $compression, @files ) = @_;
+
+    # S
+
+    # Now, return the appropriate function
+}
+
 sub fork_trf {
     if ( $files_processed >= $tarball_count ) {
         return 0;
@@ -220,14 +284,14 @@ sub fork_trf {
 
         #warn "This is child\n";
         # Open a filehandle to the input of a child process. Forks a child.
-        defined( my $grandchild_pid = open GRANDCHILD, '-|' )
+        defined( my $grandchild_pid = open my $grandchild, '-|' )
             or die "Unable to open grandchild: $!\n";
 
         # This branch is that child process, "grandchild". Runs TRF.
         if ( $grandchild_pid == 0 ) {
 
             #warn "Starting TRF: $TRF_PARAM";
-            defined( my $trf_pid = open( TRF, "| $TRF_PARAM" ) )
+            defined( my $trf_pid = open( my $trf_fh, "| $TRF_PARAM" ) )
                 or die "Cannot start TRF: $!\n";
             foreach (@file_slice) {
                 next if not defined $_;
@@ -238,24 +302,14 @@ sub fork_trf {
                 # decompressed and read from file.
                 # TODO Test
                 warn "Reading from sequence files $input_dir/$_\n";
-                if ( $_ =~ /\.(?:$targz_extensions)$/ ) {
-                    open( $input_seq_fh, "-|", "tar xzfmO '$input_dir/$_'" );
-                }
-                elsif ( $_ =~ /\.(?:$gzip_extensions)$/ ) {
-                    open( $input_seq_fh, "-|", "gunzip -c '$input_dir/$_'" );
-                }
-                if ( $_ =~ /\.(?:$targz_extensions)$/ ) {
-                    open( $input_seq_fh, "-|", "tar xjfmO '$input_dir/$_'" );
-                }
-                elsif ( $_ =~ /\.(?:$bzip_extensions)$/ ) {
-                    open( $input_seq_fh, "-|", "bzip2 -c '$input_dir/$_'" );
+                my $input_seq_fh;
+                if ($compression) {
+                    open( $input_seq_fh, "-|",
+                        $decompress_cmds{$compression} . " '$input_dir/$_'" );
                 }
                 else {
-                    warn
-                        "File $_ has wrong extension. Assuming uncompressed...\n";
+                    warn "Assuming file $_ uncompressed...\n";
                     open( $input_seq_fh, "<", "$input_dir/$_" );
-
-                    # next;
                 }
 
                 # if this is a paired file, add .1 and .2 to all headers
@@ -268,7 +322,7 @@ sub fork_trf {
                 else { $HEADER_SUFFIX = ""; }
 
                 # Parse the input file. Currently supports FASTA and FASTQ
-                parse_readfile();
+                parse_readfile( $trf_fh, $input_seq_fh );
                 close $input_seq_fh;
             }
 
@@ -287,7 +341,7 @@ sub fork_trf {
             #    exit ($rc);
             #}
 
-            if ( !close TRF ) {
+            if ( !close $trf_fh ) {
                 if ($!) {
                     warn "Error closing trf process $trf_pid pipe: $!\n";
                     exit(1002);
@@ -322,7 +376,7 @@ sub fork_trf {
             my $debug_trs_found = 0;
 
    # while input comes in from TRF, pipe into the input of trf2proclu process.
-            while (<GRANDCHILD>) {
+            while (<$grandchild>) {
                 print TRF2PROCLU $_;
 
                 #DEBUG
@@ -368,7 +422,7 @@ sub fork_trf {
 
         }
 
-        close GRANDCHILD;
+        close $grandchild;
 
         # check return value
         my ( $rc, $sig, $core ) = ( $? >> 8, $? & 127, $? & 128 );
@@ -385,7 +439,7 @@ sub fork_trf {
             exit($rc);
         }
 
-        #if (!close GRANDCHILD) {
+        #if (!close $grandchild) {
         # if ($!)  {
         #   warn "Error closing run_trf process $grandchild_pid pipe: $!\n";
         #   exit(1002);
@@ -419,6 +473,7 @@ sub reverse_complement {
 }
 
 sub parse_readfile {
+    my ( $trf_fh, $input_seq_fh ) = @_;
 
     # Grab first line and save it so parser can use it
     my $line = <$input_seq_fh>;
@@ -428,12 +483,12 @@ sub parse_readfile {
     if ( $line =~ /^>/ ) {
 
         # File is a FASTA file
-        $last_state = parse_fasta($line);
+        $last_state = parse_fasta( $line, $trf_fh, $input_seq_fh );
     }
     elsif ( $line =~ /^@/ ) {
 
         # File is a FASTQ file
-        $last_state = parse_fastq($line);
+        $last_state = parse_fastq( $line, $trf_fh, $input_seq_fh );
     }
     else {
         warn
@@ -447,14 +502,13 @@ sub parse_readfile {
     die "Read must follow a header\n" if $last_state;
 }
 
+# Simple FSM to read a FASTA file
 sub parse_fasta {
-
-    # Simple FSM to read a FASTA file
-    my $header     = "";
-    my $body       = "";
-    my $first_line = shift;
+    my ( $first_line, $trf_fh, $input_seq_fh ) = @_;
+    my $header = "";
+    my $body   = "";
     chomp($first_line);
-    print TRF $first_line . $HEADER_SUFFIX . "\n";
+    print $trf_fh $first_line . $HEADER_SUFFIX . "\n";
 
     # Start in state 1 because calling function read header first
     my $read_state = 1;    # read state 1: read, 0: header
@@ -465,16 +519,16 @@ sub parse_fasta {
             if ( $reverse_read && $header ne "" ) {
 
                 #warn $header."_RC\n";
-                print TRF $header
+                print $trf_fh $header
                     . $HEADER_SUFFIX . "_"
                     . length($body)
                     . "_RCYES\n";
-                print TRF reverse_complement($body) . "\n";
+                print $trf_fh reverse_complement($body) . "\n";
             }
 
             # FASTA header
             chomp;
-            print TRF $_ . $HEADER_SUFFIX . "\n";
+            print $trf_fh $_ . $HEADER_SUFFIX . "\n";
             $header     = $_;
             $read_state = 1;
         }
@@ -491,7 +545,7 @@ sub parse_fasta {
                         "Read does not start with keyseq TCAG. Full sequence: $_\n";
                 }
             }
-            print TRF $_;
+            print $trf_fh $_;
             chomp;
             $body       = $_;
             $read_state = 0;
@@ -499,7 +553,7 @@ sub parse_fasta {
         else {
 
             # Subsequent lines of the read
-            print TRF $_;
+            print $trf_fh $_;
             chomp;
             $body .= $_;
         }
@@ -507,22 +561,25 @@ sub parse_fasta {
 
     # last reversed read
     if ( $reverse_read && $header ne "" ) {
-        print TRF $header . $HEADER_SUFFIX . "_" . length($body) . "_RCYES\n";
-        print TRF reverse_complement($body) . "\n";
+        print $trf_fh $header
+            . $HEADER_SUFFIX . "_"
+            . length($body)
+            . "_RCYES\n";
+        print $trf_fh reverse_complement($body) . "\n";
     }
 
     return $read_state;
 }
 
+# Simple FSM to read a FASTQ file
 sub parse_fastq {
+    my ( $first_line, $trf_fh, $input_seq_fh ) = @_;
 
-    # Simple FSM to read a FASTQ file
-    my $header     = "";
-    my $body       = "";
-    my $first_line = shift;
+    my $header = "";
+    my $body   = "";
     $first_line =~ s/^@/>/;    # Change to FASTA header
     chomp($first_line);
-    print TRF $first_line . $HEADER_SUFFIX . "\n";
+    print $trf_fh $first_line . $HEADER_SUFFIX . "\n";
 
     # read state 0: header, 1: read, 2: quality header, 3: qualities
     # Start in state 1 since calling function read first line already.
@@ -537,18 +594,18 @@ sub parse_fastq {
 
             # previous reversed read
             if ( $reverse_read && $header ne "" ) {
-                print TRF $header
+                print $trf_fh $header
                     . $HEADER_SUFFIX . "_"
                     . length($body)
                     . "_RCYES\n";
-                print TRF reverse_complement($body) . "\n";
+                print $trf_fh reverse_complement($body) . "\n";
             }
 
          # This should be a header. There are some ways to check this is not a
          # quality line, but they depend on the source.
             $_ =~ s/^@/>/;
             chomp;
-            print TRF $_ . $HEADER_SUFFIX . "\n";
+            print $trf_fh $_ . $HEADER_SUFFIX . "\n";
             $header          = $_;
             $read_state      = 1;
             $read_line_count = 0;
@@ -569,7 +626,7 @@ sub parse_fastq {
                         "Read does not start with keyseq TCAG. Full sequence: $_\n";
                 }
             }
-            print TRF $_;
+            print $trf_fh $_;
             chomp;
             $body            = $_;
             $read_state      = 2;
@@ -598,7 +655,7 @@ sub parse_fastq {
 
             # Should only get here on read sequences spanning multiple lines
             # Subsequent lines of the read
-            print TRF $_;
+            print $trf_fh $_;
             chomp;
             $body .= $_;
             $read_line_count++;
@@ -610,8 +667,11 @@ sub parse_fastq {
 
     # last reversed read
     if ( $reverse_read && $header ne "" ) {
-        print TRF $header . $HEADER_SUFFIX . "_" . length($body) . "_RCYES\n";
-        print TRF reverse_complement($body) . "\n";
+        print $trf_fh $header
+            . $HEADER_SUFFIX . "_"
+            . length($body)
+            . "_RCYES\n";
+        print $trf_fh reverse_complement($body) . "\n";
     }
 
     return $read_state;

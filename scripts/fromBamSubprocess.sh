@@ -27,7 +27,7 @@ do
         samtools view "$bamfile" "$chr":"$start"-"$end"
     fi
     # postfix=$((postfix+1))
-done < "${bedfile}"  | awk '{print ">" $1 "\n" $10}' | "$trf_param" | "$trf2proclu_param" "$output_dir"/"$spid"-"$spid".index
+done < "${bedfile}"  | awk '{print ">" $1 "\n" $10}' | "$trf_param" | "$trf2proclu_param" -o "$output_dir"/"$spid"-"$spid".index  > "$output_dir"/"$spid"-"$spid".leb36
 
 while pgrep -P "$BASHPID" > /dev/null; do
     wait
