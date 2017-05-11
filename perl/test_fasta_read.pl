@@ -135,15 +135,16 @@ sub fork_proc {
             # Here the process trf2proclu finished with non-0 AND there was some other
             # problem, since $! is not 0.
             if ($!) {
-                warn "Error closing trf+trf2proclu process pipe: $!\n";
+                warn "Error closing trf+trf2proclu pipe: $!\n";
                 exit(1002);
             }
-            # Here trf2proclue exited with non-0 status but that was the only issue,
+            # Here trf2proclu exited with non-0 status but that was the only issue,
             # so just report that value.
             elsif ( $? < -2 ) {
-                warn "trf+trf2proclu process has returned $?\n";
+                warn "trf+trf2proclu pipe has returned $?\n";
                 exit($?);
             }
+            # TODO Doesn't account for TRF's negative return values
         }
 
         # Check exit error

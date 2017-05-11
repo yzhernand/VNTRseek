@@ -268,7 +268,7 @@ int main(int argc, char** argv) {
 	int i,c,j,error,firstindex,lastindex,period,patsize,matchperc,indelperc,score,acount,ccount,gcount,tcount,cRes,lenleft,lenright,headerlen,rcyes;
 	int thecount;
 	float copynum=0,entropy=0;
-	FILE *fp,*fph;
+	FILE *fp,*fph, *logfp;
 	char *header,*pattern,*sequence,*flankleft,*flankright;
 	int startid=-1000000,match=-1000000,mismatch=-1000000,indel=-1000000,minperiod=-1000000,minflank=-1000000,*sm;
 	REPEAT rep;
@@ -413,6 +413,17 @@ int main(int argc, char** argv) {
 		assert(0); // should never happen
 	}
 
+	// Open log file
+	char *logfile = calloc(strlen(indexfile) + 1, sizeof(char));
+	strncpy(logfile, indexfile, strlen(indexfile)-6);
+	// fprintf(stderr, "Log file name: %s\n", logfile);
+	strncat(logfile, ".log", 4);
+	// fprintf(stderr, "Log file name: %s\n", logfile);
+	logfp = fopen(logfile, "w");
+	if (logfp == NULL)
+		fprintf(stderr, "Unable to open log file %s for writing. TRF progress will not be written out.\n", logfile);
+	setbuf(logfp, NULL); // Flush log file output immediately by disabling buffer
+
 	//if (optind < argc) {
 	//	fprintf (stderr, "non-option ARGV-elements: ");
 	//	while (optind < argc)
@@ -526,12 +537,12 @@ int main(int argc, char** argv) {
 			headerlen = strlen(repPtr->header);
 			rcyes = 0;
 			if (headerlen>=6 && 0==strcmp(repPtr->header+headerlen-6,"_RCYES")) {
-				int seqlen;
+				int seqlen = 0;
 				char *strtemp,*strtemp2,*src;
 
 				rcyes = 1;
 				for (src=repPtr->header+headerlen-7; src!=repPtr->header; src--) {
-				  if (*src=='_') { *src='\0'; seqlen=atoi(src+1); break; }
+				  if (*src=='_') { *src='\0'; seqlen=strtol(src+1, NULL, 10); break; }
 				}
 				if (0==seqlen) {
 					fputs("No sequence len passed though header of the RC read. Aborting.\n", stderr);
@@ -735,9 +746,12 @@ int main(int argc, char** argv) {
 			 /* END FOR SORTING BY MINREPRESENTATION FOR PIPELINE */					
 
 			theid++;
+			if ((thecount % 100) == 0)
+				fprintf(logfp, "TRF output lines processed: %d\n", thecount);
 		}
 	}
 	fclose(fp);
+	fclose(logfp);
 
 
 	/* sort becaue PROCLU expects a file sorted on pattern size ASC */
