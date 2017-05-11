@@ -11,10 +11,10 @@ my $max_processes = 2;
 my $reverse_read = 1; # if 1, each read will be reversed and processed as well
 my $strip_454_TCAG = 0;
 my $warn_454_TCAG  = 0;
-my $TRF_EXE        = "/home/yozen/src/VNTRseek/build/trf407b-ngs.linux.exe";
+my $TRF_EXE        = $ENV{HOME} . "/src/VNTRseek/build/trf409-ngs.linux.exe";
 my $TRF_PARAM      = "'$TRF_EXE' - 2 5 7 80 10 50 2000 -d -h -ngs";
 my $TRF2PROCLU_EXE
-    = '/home/yozen/src/VNTRseek/build/src/trf2proclu-ngs/trf2proclu-ngs.exe';
+    = $ENV{HOME} . '/src/VNTRseek/build/src/trf2proclu-ngs/trf2proclu-ngs.exe';
 my $TRF2PROCLU_PARAM
     = "'$TRF2PROCLU_EXE' -f 1 -m 2 -s 5 -i 7 -p 7 -l 5";
 my ( $format, $compression, @filenames ) = @ARGV;
@@ -112,22 +112,42 @@ sub fork_proc {
         my $output_prefix = "$output_dir/$files_processed";
         exit unless $reader;
         warn "Running child, out_counter = $out_counter...\n";
-        # TODO Error checking if pipe breaks down
-        defined(
-            my $trf_pid = open my $trf_pipe,
-            "|-",
-            "$TRF_PARAM | $TRF2PROCLU_PARAM -o '$output_prefix.index' > '$output_prefix.leb36'"
-        ) or die "Cannot start trf+trf2proclu pipe: $!\n";
+        # TODO Error checking if TRF, in the start of the pipe, breaks down
+        local $SIG{PIPE} = sub { die "Error in trf+trf2proclu pipe: $?\n" };
+        open my $trf_pipe,
+            "|$TRF_PARAM | $TRF2PROCLU_PARAM -o '$output_prefix.index' > '$output_prefix.leb36'"
+            or die "Cannot start TRF+trf2proclu pipe: $!\n";
         # TODO Need way of logging TRF output?
-        open my $logfile, ">", "$output_prefix.log"
-            or die "Error opening file $output_prefix.log: $!\n";
-        $logfile->autoflush;
+        # open my $logfile, ">", "$output_prefix.log"
+        #     or die "Error opening file $output_prefix.log: $!\n";
+        # $logfile->autoflush;
         my $debug_trs_found = 0;
 
         while ( my @data = $reader->() ) {
             # say $logfile $data[0] . "\n" . $data[1];
             pipe_to_trf( $trf_pipe, @data );
         }
+
+        # Normally, close() returns false for failure of a pipe. If the only problem
+        # was that the exit status of the pipe was non-0, then $! == 0.
+        # Important because trf2proclu returns non-0 on success.
+        if ( !close $trf_pipe ) {
+            # Here the process trf2proclu finished with non-0 AND there was some other
+            # problem, since $! is not 0.
+            if ($!) {
+                warn "Error closing trf+trf2proclu process pipe: $!\n";
+                exit(1002);
+            }
+            # Here trf2proclue exited with non-0 status but that was the only issue,
+            # so just report that value.
+            elsif ( $? < -2 ) {
+                warn "trf+trf2proclu process has returned $?\n";
+                exit($?);
+            }
+        }
+
+        # Check exit error
+
 
         exit;
     }
