@@ -8,7 +8,19 @@ use warnings;
 die "Usage: $0 <format> <compression> <fasta file 1> ... <fasta file N>"
     unless @ARGV >= 3;
 my $max_processes = 2;
+my $reverse_read = 1; # if 1, each read will be reversed and processed as well
+my $strip_454_TCAG = 0;
+my $warn_454_TCAG  = 0;
+my $TRF_EXE        = "/home/yozen/src/VNTRseek/build/trf407b-ngs.linux.exe";
+my $TRF_PARAM      = "'$TRF_EXE' - 2 5 7 80 10 50 2000 -d -h -ngs";
+my $TRF2PROCLU_EXE
+    = '/home/yozen/src/VNTRseek/build/src/trf2proclu-ngs/trf2proclu-ngs.exe';
+my $TRF2PROCLU_PARAM
+    = "'$TRF2PROCLU_EXE' -f 1 -m 2 -s 5 -i 7 -p 7 -l 5";
 my ( $format, $compression, @filenames ) = @ARGV;
+
+# For this testing script only
+$compression = ( $compression eq "none" ) ? undef : $compression;
 my %decompress_cmds = (
     targz   => "tar xzfmO ",
     gzip    => "gunzip -c ",
@@ -23,32 +35,15 @@ my %reader_table = (
     bam   => \&read_bam
 );
 
-my $make_bed_file_loc = "~/src/VNTRseek/java/MakeBedFiles.jar";
-
 # Setting here because needed in full program
 my $input_dir   = "";
 my $output_dir  = ".";
 my $out_counter = 0;
 my %p;
 
-# FIXME Need to return 0 from fork parent to stop spawning procs
 for ( my $i = 0; $i < $max_processes; $i++ ) {
-    my $reader = $reader_table{$format};
-    my $pid    = fork();
-    die "Unable to fork: $!\n" unless defined($pid);
-    if ( $pid != 0 ) {    #Parent
-        $p{$pid} = 1;
-    }
-    else {
-        my $reader = $reader_table{$format}->("", \@filenames);
-        open my $outfile, ">", "$output_dir/$out_counter.out"
-            or die "Error opening file $output_dir/$out_counter.out: $!\n";
-        while ( my @data = $reader->() ) {
-            say $outfile $data[0] . "\n" . $data[1];
-        }
-        say "";
-        $out_counter++;
-    }
+    $p{ fork_proc( $compression, $out_counter, \@filenames ) } = 1;
+    $out_counter++;
 }
 
 # wait for processes to finish and then fork new ones
@@ -73,21 +68,17 @@ while ( ( my $pid = wait ) != -1 ) {
 
         # one instance has finished processing -- start a new one
         delete $p{$pid};
-        my $reader = $reader_table{$format};
-        my $newpid = fork();
-        die "Unable to fork: $!\n" unless defined($newpid);
-        if ( $newpid != 0 ) {    #Parent
-            $p{$newpid} = 1;
+
+     # For BAM files (and maybe other formats?) the parent does not know
+     # how many total processes are needed to run the whole file. For these
+     # formats, reader functions need to write out a temporary file signalling
+     # the last processes that needs to run has already begun.
+        if ( -e "$output_dir/trf_alldone" ) {
+            unlink("$output_dir/trf_alldone");
+            last;
         }
         else {
-            my $reader = $reader_table{$format}->("", \@filenames);
-            open my $outfile, ">", "$output_dir/$out_counter.out"
-                or die
-                "Error opening file $output_dir/$out_counter.out: $!\n";
-            while ( my @data = $reader->() ) {
-                say $outfile $data[0] . "\n" . $data[1];
-            }
-            say "";
+            $p{ fork_proc( $compression, $out_counter, \@filenames ) } = 1;
             $out_counter++;
         }
     }
@@ -109,13 +100,91 @@ while ( ( my $pid = wait ) != -1 ) {
 #     $out_counter++;
 # }
 
+sub fork_proc {
+    my ( $compression, $files_processed, $filelist ) = @_;
+    defined( my $pid = fork() )
+        or die "Unable to fork: $!\n";
+    if ( $pid == 0 ) {    #Child
+
+        my $reader
+            = $reader_table{$format}
+            ->( $compression, $out_counter, \@filenames );
+        my $output_prefix = "$output_dir/$files_processed";
+        exit unless $reader;
+        warn "Running child, out_counter = $out_counter...\n";
+        # TODO Error checking if pipe breaks down
+        defined(
+            my $trf_pid = open my $trf_pipe,
+            "|-",
+            "$TRF_PARAM | $TRF2PROCLU_PARAM -o '$output_prefix.index' > '$output_prefix.leb36'"
+        ) or die "Cannot start trf+trf2proclu pipe: $!\n";
+        # TODO Need way of logging TRF output?
+        open my $logfile, ">", "$output_prefix.log"
+            or die "Error opening file $output_prefix.log: $!\n";
+        $logfile->autoflush;
+        my $debug_trs_found = 0;
+
+        while ( my @data = $reader->() ) {
+            # say $logfile $data[0] . "\n" . $data[1];
+            pipe_to_trf( $trf_pipe, @data );
+        }
+
+        exit;
+    }
+    else {    # Parent
+              # warn "Running parent, out_counter = $out_counter...\n";
+        return $pid;
+    }
+}
+
+sub reverse_complement {
+    my $dna = shift;
+
+    # reverse the DNA sequence
+    my $revcomp = reverse($dna);
+
+    # complement the reversed DNA sequence
+    $revcomp =~ tr/ACGTacgt/TGCAtgca/;
+    return $revcomp;
+}
+
+# Processes input FASTA records to reverse them or remove 454 tags
+# Prints processed output directly to given file handle to TRF
+# process.
+sub pipe_to_trf {
+    my ( $trf_fh, $header, $body ) = @_;
+    # warn "Processing header $header";
+
+    if ( $reverse_read && $header ne "" ) {
+        say $trf_fh $header . "_" . length($body) . "_RCYES";
+        say $trf_fh reverse_complement($body);
+    }
+
+    # FASTA header
+    say $trf_fh $header;
+    if ( $strip_454_TCAG && ( $body !~ s/^TCAG//i ) ) {
+        if ($warn_454_TCAG) {
+            warn
+                "Read does not start with keyseq TCAG. Full sequence: $body\n";
+        }
+        else {
+            die
+                "Read does not start with keyseq TCAG. Full sequence: $body\n";
+        }
+    }
+    say $trf_fh $body;
+}
+
 sub read_fasta {
-    my ( $compression, $filelist ) = @_;
-    state $files_processed = 0;
-    warn $files_processed;
+    my ( $compression, $files_processed, $filelist ) = @_;
+    warn "Need to process " . scalar(@$filelist) . " files, working on $files_processed\n";
 
     # Don't do more if we've exhausted the file list
-    return undef if $files_processed == @$filelist;
+    if ( $files_processed >= @$filelist ) {
+        system("touch '$output_dir/trf_alldone'");
+        return undef;
+    }
+    warn $files_processed;
 
  # If file uncompressed, simply read from file. Else open a pipe to a command.
     my $openmode = ($compression) ? "-|" : "<";
@@ -124,17 +193,15 @@ sub read_fasta {
 
     # warn $openmode;
     my $filename
-        = ($compression)
-        ? $decompress_cmds{$compression} . '"'
+        = ( ($compression) ? $decompress_cmds{$compression} : "" ) . '"'
         . "$input_dir/"
-        . $filelist->[$files_processed] . '"'
-        : $filelist->[$files_processed];
-    $files_processed++;
+        . $filelist->[$files_processed] . '"';
 
     # $files_processed contains how many files processed so far.
     # Use to index into filelist
     # warn $filename;
     local $/ = ">";
+    warn "Filename/command = '$filename'\n";
     open my $fasta_fh, $openmode, $filename
         or die "Error opening file " . $filename;
 
@@ -162,53 +229,54 @@ sub read_fastq {
 
 # Requires samtools
 sub read_bam {
-    my ( $compression, $filelist ) = @_;
-    state $files_processed = 0;
+    my ( $compression, $files_processed, $filelist ) = @_;
     my $bamfile = "$input_dir/" . $filelist->[0];
+
     # warn "$bamfile\n";
     my $baifile = $bamfile . ".bai";
+
     # warn "$baifile\n";
     my $unmapped_template = "*";
-    state @samcmds;
+    my @samcmds;
 
-    if ( $files_processed == 0 ) {
+    # Check if .bai file exists and then run MakeBedFiles.jar
+    die
+        "Error reading bam file: corresponding bai file required for processing bam files."
+        unless ( -e -r $baifile );
 
-        # Check if .bai file exists and then run MakeBedFiles.jar
-        die
-            "Error reading bam file: corresponding bai file required for processing bam files."
-            unless ( -e -r $baifile );
-
-        # Requires samtools and java to be installed/available
-        # Make only one bed file
-        system(
-            "samtools idxstats \"$bamfile\" | java -jar $make_bed_file_loc 1 $output_dir"
+    # Requires samtools to be installed/available
+    # Get all regions in the bam file
+    my @regions = qx(
+            samtools idxstats "$bamfile"
         );
 
-# Produces $max_processes bed files. These are all named "bedN" where N is 0 to $max_processes-1
-# Alternative: produce ONE bed file, read in all regions, split these into samtools procs over each TRF proc (like split FASTA files)
-        my $filename = "$output_dir/bed0";
-        open my $bed_fh, "<", $filename
-            or die "Error opening file " . $filename;
+    # Don't do more if we've exhausted the file list
+    warn "Regions: " . scalar(@regions) . "\n";
 
-# We need to read the bed file, line by line, and construct samtools commands
+# We need to read the regions in the bam file and construct samtools commands
 # These are all saved in an array which are interated through like the FASTA files before.
 # Then we catch the output of these through a file handle, and process into FASTA.
-        while ( my $bedline = <$bed_fh> ) {
-            my ( $chr, $start, $end ) = split /\t/, $bedline;
-            my $unmapped = ( $chr eq $unmapped_template );
-            my $region   = "$chr:$start-$end";
-            my $scmd
-                = "samtools view "
-                . ( ($unmapped) ? "-f 4 " : "" )
-                . $bamfile
-                . ( ($unmapped) ? " $region" : "" );
-            push @samcmds, $scmd;
-        }
+    for my $r (@regions) {
+        my ( $chr, $end, $num_aln, $num_unaln ) = split /\s+/, $r;
+        my $unmapped = ( $chr eq $unmapped_template );
+        next if ( ( $num_aln + $num_unaln ) == 0 );
+
+        # $start is always 1
+        my $region = "$chr:1-$end";
+        my $scmd
+            = "samtools view "
+            . ( ($unmapped) ? "-f 4 " : "" )
+            . $bamfile
+            . ( ($unmapped) ? "" : " $region" );
+        push @samcmds, $scmd;
     }
 
-    # Don't do more if we've exhausted the file list
-    return undef if $files_processed == @samcmds;
-    warn "Processing bam chunk using: " . $samcmds[ $files_processed ] . "\n";
+    if ( $files_processed >= @samcmds ) {
+        system("touch '$output_dir/trf_alldone'");
+        return undef;
+    }
+    warn "$files_processed\n";
+    warn "Processing bam chunk using: " . $samcmds[$files_processed] . "\n";
 
     open my $samout, "-|", $samcmds[ $files_processed++ ]
         or die "Error opening samtools pipe: $!\n";

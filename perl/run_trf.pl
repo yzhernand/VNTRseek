@@ -31,11 +31,44 @@ my $files_processed  = 0;    # files processed
 my %p;                       # associates forked pids with output pipe pids
 my $max_processes = 0;
 
-# Dispatch table for use by sequence reader
-my %reader_table = (
-    fasta => \&read_fasta,
-    fastq => \&read_fastq,
-    bam   => \&read_bam
+# List all supported file extensions and input formats here. Order of
+# input formats is in priority order: first format if found is used.
+# For new formats, simply add the name of the format here and require
+# that input file names have it as a prefix (eg, fasta files should
+# have prefix "fasta_")
+my @supported_format_names = qw(fasta fastq bam);
+my %supported_formats;
+@supported_formats{@supported_format_names} = @supported_format_names;
+
+# Dispatch table to call appropriate function for each format.
+# Uses the list @supported_format_names above for hash keys. When
+# adding a new format, add the name first to @supported_format_names,
+# and then add the reference to the reader function in the correct
+# place in the values list.
+my %reader_table;
+@reader_table{@supported_format_names}
+    = ( \&read_fasta, \&read_fastq, \&read_bam );
+
+# Similarly for compression formats, add a new one to the list, then
+# add the regex and command needed to extract in the correct position
+# in the values list
+my @compressed_format_names = qw(targz gzip tarbzip bzip tarxz xz);
+my %compressed_formats;
+@compressed_formats{@compressed_format_names} = (
+    qr/tgz|tar\.gz/,               qr/gz/,
+    qr/tbz|tbz2|tar\.bz|tar\.bz2/, qr/bz|bz2/,
+    qr/txz|tar\.xz/,               qr/xz/
+);
+
+# All decompression commands end with a space, for convenience
+my %decompress_cmds;
+@decompress_cmds{@compressed_format_names} = (
+    "tar xzfmO ",
+    "gunzip -c ",
+    "tar xjfmO ",
+    "bzip2 -c ",
+    "tar xJfmO ",
+    "xzcat "
 );
 
 my %opts;
@@ -80,33 +113,6 @@ if ( $ENV{DEBUG} ) {
     warn join( ",", @dircontents ) . "\n";
 }
 
-# List all supported file extensions and input formats here. Order of
-# input formats is in priority order: first format if found is used.
-my %supported_formats = (
-    fasta => "fasta",
-    fastq => "fastq",
-    bam   => "bam"
-);
-my @supported_format_names = qw(fasta fastq bam);
-my %compressed_formats     = (
-    targz   => qr/tgz|tar\.gz/,
-    gzip    => qr/gz/,
-    tarbzip => qr/tbz|tbz2|tar\.bz|tar\.bz2/,
-    bzip    => qr/bz|bz2/,
-    tarxz   => qr/txz|tar\.xz/,
-    xz      => qr/xz/
-);
-my @compressed_format_types = qw(targz gzip tarbzip bzip tarxz xz);
-# All decompression commands end with a space, for convenience
-my %decompress_cmds         = (
-    targz   => "tar xzfmO ",
-    gzip    => "gunzip -c ",
-    tarbzip => "tar xjfmO ",
-    bzip    => "bzip2 -c ",
-    tarxz   => "tar xJfmO ",
-    xz      => "xzcat "
-);
-
 # Get all supported files. See note above on priority of input formats
 my @tarballs;
 my ( $input_format, $compression );
@@ -117,7 +123,7 @@ for my $sf (@supported_format_names) {
         )
     {
         $input_format = $sf;
-        for my $cf (@compressed_format_types) {
+        for my $cf (@compressed_format_names) {
             my $cf_re = $compressed_formats{$cf};
             if ( $tarballs[0] =~ /.*\.(?:${cf_re})/ ) {
                 $compression = $cf;
@@ -154,17 +160,6 @@ if ( $max_processes == 0 ) {
     }
 }
 
-# TODO Now figure out how to best call Marzie's script for BAM files before anything else if input
-# is BAM format.
-if ( $input_format == "bam" ) {
-
-# Will use samtools for reading instead. Pass on execution to the BAM file reading script
-    my $bamfile = shift @tarballs;
-    system(
-        "./fromBam.sh $max_processes \"$bamfile\" \"$output_dir\" \"$TRF_PARAM\" \"$TRF2PROCLU_PARAM\""
-    );
-    return 0;
-}
 
 # because of the limit of number of open files at the same time, let's keep number of files to under 200
 # redundancy step (3) opens them all at the same time, and if multiple pipelines are run it might be possible
@@ -223,25 +218,24 @@ sub read_fasta {
 
  # If file uncompressed, simply read from file. Else open a pipe to a command.
     my $openmode = ($compression) ? "-|" : "<";
-    my $decom_cmd
-        = ($compression) ? $decompress_cmds{$compression} : "";
+    my $decom_cmd = ($compression) ? $decompress_cmds{$compression} : "";
     my $files_processed = 0;
+
     # $files_processed contains how many files processed so far.
     # Use to index into filelist
     local $/ = ">";
     open my $fasta_fh, $openmode,
-          $decom_cmd
-        . "'$input_dir/"
-        . $filelist->[ $files_processed++ ] . "'";
-    # Consume first empty record because of the way $/ splits the FASTA format.
+        $decom_cmd . "'$input_dir/" . $filelist->[ $files_processed++ ] . "'";
+
+   # Consume first empty record because of the way $/ splits the FASTA format.
     <$fasta_fh>;
     return sub {
         my $fasta_rec = <$fasta_fh>;
-        my ($header, @seqlines) = split("\n+", $fasta_rec);
+        my ( $header, @seqlines ) = split( "\n+", $fasta_rec );
         chomp $header;
         chomp @seqlines;
-        my $seq = join("", @seqlines);
-        return (">" . $header, $seq);
+        my $seq = join( "", @seqlines );
+        return ( ">" . $header, $seq );
     };
 }
 
