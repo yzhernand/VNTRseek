@@ -244,6 +244,7 @@ sub read_fasta {
 }
 
 sub read_fastq {
+    # Code modified from https://www.biostars.org/p/11599/#11657
     my ( $compression, $files_processed, $filelist ) = @_;
 
     # Don't do more if we've exhausted the file list
