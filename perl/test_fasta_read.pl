@@ -3,6 +3,7 @@
 use 5.010;
 use strict;
 use warnings;
+use Carp;
 
 # Test reading FASTA files and outputting a sequence and header.
 die "Usage: $0 <format> <compression> <fasta file 1> ... <fasta file N>"
@@ -125,6 +126,7 @@ sub fork_proc {
 
         while ( my @data = $reader->() ) {
             # say $logfile $data[0] . "\n" . $data[1];
+            say $data[0] . "\n" . $data[1];
             pipe_to_trf( $trf_pipe, @data );
         }
 
@@ -198,21 +200,18 @@ sub pipe_to_trf {
 
 sub read_fasta {
     my ( $compression, $files_processed, $filelist ) = @_;
-    warn "Need to process " . scalar(@$filelist) . " files, working on $files_processed\n";
+    # warn "Need to process " . scalar(@$filelist) . " files, working on $files_processed\n";
 
     # Don't do more if we've exhausted the file list
     if ( $files_processed >= @$filelist ) {
         system("touch '$output_dir/trf_alldone'");
         return undef;
     }
-    warn $files_processed;
-
- # If file uncompressed, simply read from file. Else open a pipe to a command.
+    
+    # If file uncompressed, simply read from file. Else open a pipe to a command.
     my $openmode = ($compression) ? "-|" : "<";
 
-    say "Processing file: " . $filelist->[$files_processed];
-
-    # warn $openmode;
+    warn "Processing file " . $filelist->[$files_processed] . "\n";
     my $filename
         = ( ($compression) ? $decompress_cmds{$compression} : "" ) . '"'
         . "$input_dir/"
@@ -222,7 +221,7 @@ sub read_fasta {
     # Use to index into filelist
     # warn $filename;
     local $/ = ">";
-    warn "Filename/command = '$filename'\n";
+    # warn "Filename/command = '$filename'\n";
     open my $fasta_fh, $openmode, $filename
         or die "Error opening file " . $filename;
 
@@ -245,7 +244,78 @@ sub read_fasta {
 }
 
 sub read_fastq {
-    #
+    my ( $compression, $files_processed, $filelist ) = @_;
+
+    # Don't do more if we've exhausted the file list
+    if ( $files_processed >= @$filelist ) {
+        system("touch '$output_dir/trf_alldone'");
+        return undef;
+    }
+    
+    # If file uncompressed, simply read from file. Else open a pipe to a command.
+    my $openmode = ($compression) ? "-|" : "<";
+
+    warn "Processing file " . $filelist->[$files_processed] . "\n";
+    my $filename
+        = ( ($compression) ? $decompress_cmds{$compression} : "" ) . '"'
+        . "$input_dir/"
+        . $filelist->[$files_processed] . '"';
+
+    # $files_processed contains how many files processed so far.
+    # Use to index into filelist
+    # warn "Filename/command = '$filename'\n";
+    open my $fastq_fh, $openmode, $filename
+        or die "Error opening file " . $filename;
+
+    my $aux = undef;
+    my $seq_counter = 0;
+
+    return sub {
+        # warn "Seq number: " . $seq_counter++ . "\n";
+        $aux = [undef, 0] unless (defined $aux);
+        return () if ($aux->[1]);
+        if (!defined($aux->[0])) {
+            while (<$fastq_fh>) {
+                chomp;
+                if (substr($_, 0, 1) eq '>' || substr($_, 0, 1) eq '@') {
+                    $aux->[0] = $_;
+                    last;
+                }
+            }
+            if (!defined($aux->[0])) {
+                $aux->[1] = 1;
+                return ();
+            }
+        }
+        # warn "After header: $.\n";
+        my $name = $aux->[0] =~ /^.(\S+)/? $1 : '';
+        my $seq = '';
+        my $c;
+        $aux->[0] = undef;
+        while (<$fastq_fh>) {
+            chomp;
+            $c = substr($_, 0, 1);
+            last if ($c eq '>' || $c eq '@' || $c eq '+');
+            $seq .= $_;
+        }
+        # warn "After seq: $.\n";
+        $aux->[0] = $_;
+        $aux->[1] = 1 if (!defined($aux->[0]));
+        croak "Next line is not qual header: c = $c" if ($c ne '+');
+        # return (">" . $name, $seq) if ($c ne '+');
+        my $qual = '';
+        while (<$fastq_fh>) {
+            chomp;
+            $qual .= $_;
+            if (length($qual) >= length($seq)) {
+                $aux->[0] = undef;
+                last;
+            }
+        }
+        # warn "After qual: $.\n";
+        $aux->[1] = 0;
+        return ( ">" . $name, $seq );
+    };
 }
 
 # Requires samtools
@@ -272,7 +342,7 @@ sub read_bam {
         );
 
     # Don't do more if we've exhausted the file list
-    warn "Regions: " . scalar(@regions) . "\n";
+    # warn "Regions: " . scalar(@regions) . "\n";
 
 # We need to read the regions in the bam file and construct samtools commands
 # These are all saved in an array which are interated through like the FASTA files before.
@@ -280,6 +350,7 @@ sub read_bam {
     for my $r (@regions) {
         my ( $chr, $end, $num_aln, $num_unaln ) = split /\s+/, $r;
         my $unmapped = ( $chr eq $unmapped_template );
+        # Don't save sequence with 0 reads
         next if ( ( $num_aln + $num_unaln ) == 0 );
 
         # $start is always 1
@@ -296,7 +367,7 @@ sub read_bam {
         system("touch '$output_dir/trf_alldone'");
         return undef;
     }
-    warn "$files_processed\n";
+    # warn "$files_processed\n";
     warn "Processing bam chunk using: " . $samcmds[$files_processed] . "\n";
 
     open my $samout, "-|", $samcmds[ $files_processed++ ]
