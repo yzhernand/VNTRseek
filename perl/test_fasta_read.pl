@@ -43,7 +43,7 @@ my $out_counter = 0;
 my %p;
 
 for ( my $i = 0; $i < $max_processes; $i++ ) {
-    $p{ fork_proc( $compression, $out_counter, \@filenames ) } = 1;
+    $p{ fork_proc( $format, $compression, $out_counter, \@filenames ) } = 1;
     $out_counter++;
 }
 
@@ -79,7 +79,7 @@ while ( ( my $pid = wait ) != -1 ) {
             last;
         }
         else {
-            $p{ fork_proc( $compression, $out_counter, \@filenames ) } = 1;
+            $p{ fork_proc( $format, $compression, $out_counter, \@filenames ) } = 1;
             $out_counter++;
         }
     }
@@ -102,17 +102,17 @@ while ( ( my $pid = wait ) != -1 ) {
 # }
 
 sub fork_proc {
-    my ( $compression, $files_processed, $filelist ) = @_;
+    my ( $format, $compression, $files_processed, $filelist ) = @_;
     defined( my $pid = fork() )
         or die "Unable to fork: $!\n";
     if ( $pid == 0 ) {    #Child
 
         my $reader
             = $reader_table{$format}
-            ->( $compression, $out_counter, \@filenames );
+            ->( $compression, $files_processed, $filelist );
         my $output_prefix = "$output_dir/$files_processed";
         exit unless $reader;
-        warn "Running child, out_counter = $out_counter...\n";
+        warn "Running child, files_processed = $files_processed...\n";
         # TODO Error checking if TRF, in the start of the pipe, breaks down
         local $SIG{PIPE} = sub { die "Error in trf+trf2proclu pipe: $?\n" };
         open my $trf_pipe,
@@ -124,10 +124,9 @@ sub fork_proc {
         # $logfile->autoflush;
         my $debug_trs_found = 0;
 
-        while ( my @data = $reader->() ) {
+        while ( my ($header, $body) = $reader->() ) {
             # say $logfile $data[0] . "\n" . $data[1];
-            say $data[0] . "\n" . $data[1];
-            pipe_to_trf( $trf_pipe, @data );
+            pipe_to_trf( $trf_pipe, $header, $body );
         }
 
         # Normally, close() returns false for failure of a pipe. If the only problem
@@ -371,6 +370,7 @@ sub read_bam {
     # warn "$files_processed\n";
     warn "Processing bam chunk using: " . $samcmds[$files_processed] . "\n";
 
+    local $SIG{PIPE} = sub { die "Error in samtools pipe: $?\n" };
     open my $samout, "-|", $samcmds[ $files_processed++ ]
         or die "Error opening samtools pipe: $!\n";
     return sub {
