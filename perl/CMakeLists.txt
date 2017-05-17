@@ -15,7 +15,7 @@ INSTALL(DIRECTORY vntr/
 # Modify vntrseek.pl
 configure_file(vntrseek.pl.in vntrseek.pl @ONLY)
 # Install vntrseek.pl
-install(PROGRAMS vntrseek.pl DESTINATION ${InstallSuffix})
+install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/vntrseek.pl DESTINATION ${InstallSuffix})
 
 # Create symlink to vntrseek.pl in bin
 if(CMAKE_HOST_UNIX)
