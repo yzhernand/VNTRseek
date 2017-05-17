@@ -17,7 +17,7 @@ configure_file(vntrseek.pl.in vntrseek.pl @ONLY)
 # Install vntrseek.pl
 install(PROGRAMS vntrseek.pl DESTINATION ${InstallSuffix})
 
-Create symlink to vntrseek.pl in bin
+# Create symlink to vntrseek.pl in bin
 if(CMAKE_HOST_UNIX)
     INSTALL(CODE "
     EXECUTE_PROCESS(COMMAND ln -sf ${CMAKE_INSTALL_PREFIX}/${InstallSuffix}/vntrseek.pl vntrseek
