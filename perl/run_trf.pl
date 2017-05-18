@@ -225,19 +225,18 @@ warn "Processing complete -- processed $files_processed file(s).\n";
 
 ############################ Procedures ###############################################################
 
-=item I<read_fasta()>
+=item I<fork_proc()>
 
-Given a list of files, return a sub which knows how to open each file and
-where it is in the list of files.
+Takes file format and compression format names, the number of files
+processed so far, and a list of full paths to files in that format.
+Then returns a function which, when called, returns a stream to
+sequences which can be used to run TRF/TRF2PROCLU.
 
-=cut
-
-=item I<make_file_streams()>
-
-Takes file format and compression format names, and a list of full
-paths to files in that format. Then returns a function which, when
-called, returns a stream to sequences which can be used to run
-TRF/TRF2PROCLU.
+Relies on a global, reader_table, which links sequence format names
+to functions which can read those formats. Functions in that table
+must return a sub which returns a list of exactly two values each
+time it is called, and undef when there are no more sequences. The
+two values are a FASTA header and a sequence string, in that order.
 
 =cut
 
@@ -304,6 +303,11 @@ sub fork_proc {
     }
 }
 
+=item I<reverse_complement()>
+
+Takes a DNA sequence string and returns the reverse complement.
+
+=cut
 sub reverse_complement {
     my $dna = shift;
 
@@ -315,9 +319,17 @@ sub reverse_complement {
     return $revcomp;
 }
 
-# Processes input FASTA records to reverse them or remove 454 tags
-# Prints processed output directly to given file handle to TRF
-# process.
+=item I<pipe_to_trf()>
+
+Takes a file handle to a TRF process pipe to TRF2proclu,
+a FASTA header, and a FASTA sequence (plain sequence string)
+as input.
+
+Processes input FASTA records to reverse them or remove 454 tags,
+as dictated by user options. Prints processed output directly to
+given file handle to TRF pipeline.
+
+=cut
 sub pipe_to_trf {
     my ( $trf_fh, $header, $body ) = @_;
 
@@ -343,6 +355,19 @@ sub pipe_to_trf {
     say $trf_fh $body;
 }
 
+=item I<read_fasta()>
+
+FASTA file reader.
+
+Given the file and compression formats, the number of files processed
+so far, and a list of all files, return a sub which knows which file
+it is responsible for and how to open it.
+
+This returned sub itself returns a list comprising a FASTA header and
+sequence each time it is called. When there are no more sequences to
+read, it returns an empty list.
+
+=cut
 sub read_fasta {
     my ( $compression, $files_processed, $filelist ) = @_;
 
@@ -390,6 +415,19 @@ sub read_fasta {
     };
 }
 
+=item I<read_fastq()>
+
+FASTQ file reader.
+
+Given the file and compression formats, the number of files processed
+so far, and a list of all files, return a sub which knows which file
+it is responsible for and how to open it.
+
+This returned sub itself returns a list comprising a FASTA header and
+sequence each time it is called. When there are no more sequences to
+read, it returns an empty list.
+
+=cut
 sub read_fastq {
 
     # Code modified from https://www.biostars.org/p/11599/#11657
@@ -473,7 +511,21 @@ sub read_fastq {
     };
 }
 
-# Requires samtools
+=item I<read_bam()>
+
+BAM file reader.
+
+Given the file and compression formats, the number of files processed
+so far, and a list of all files, return a sub which knows which file
+it is responsible for and how to open it.
+
+This returned sub itself returns a list comprising a FASTA header and
+sequence each time it is called. When there are no more sequences to
+read, it returns an empty list.
+
+Requires samtools as an external dependency.
+
+=cut
 sub read_bam {
     my ( $compression, $files_processed, $filelist ) = @_;
     my $bamfile = "$input_dir/" . $filelist->[0];
@@ -541,3 +593,65 @@ sub read_bam {
         return ( ">" . $header, $seq );
         }
 }
+
+
+=item I<read_FORMAT() stub>
+
+Example file reader.
+
+Given the file and compression formats, the number of files processed
+so far, and a list of all files, return a sub which knows which file
+it is responsible for and how to open it.
+
+This returned sub itself returns a list comprising a FASTA header and
+sequence each time it is called. When there are no more sequences to
+read, it returns an empty list.
+
+This is an example of how to write a sub which reads a given file
+in a certain format and returns a subroutine which works as expected
+by fork_proc().
+
+sub read_FORMAT {
+    my ( $compression, $files_processed, $filelist ) = @_;
+
+    # Here make some decisions. For instance, if we expect to process multiple
+    # files, such as FASTA or FASTQ files and unlike BAM files, then choose
+    # the file to read using $files_processed. Otherwise, logically split
+    # the input and decide which split this call will work on. You may have to
+    # write the next section before this one in the case of multiple files.
+
+    # Write the condition for returning undef and setting the flag for no more
+    # files/splits to process. Perl's fork doesn't let us set variables that
+    # parent procs can see, so do something like:
+
+    if ( $files_processed >= @$filelist ) {
+        system("touch '$output_dir/trf_alldone'");
+        return undef;
+    }
+
+    # Open a file handle to the file or pipe we will read from.
+    # If file might be compressed, use the $compression value and
+    # the decompress_cmds hash to construct the input pipe command.
+    my $input_fh = open...
+
+    # Handle any errors, and die if there is a fatal problem so this file
+    # or split isn't considered further and another process can jump in on
+    # the next item in the list.
+
+    # Return an anonymous subroutine which will use that file handle.
+    return sub {
+        # Read from input file handle
+        my $record = <$input_fh>;
+        # Return empty list if nothing else to read
+        return () unless ($record);
+
+        # Process $record as needed, read more lines, etc (see other functions
+        # for examples).
+
+        # Return a list consisting of the header, prefixed by a ">", and the
+        # sequence string.
+        return(">" . $header, $seq);
+    }
+}
+
+=cut

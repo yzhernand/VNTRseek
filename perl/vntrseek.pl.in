@@ -773,8 +773,7 @@ if ( $STEP == 1 ) {
     system($exstring);
 
     $timestart = time();
-    print STDERR
-        "\n\nExecuting step #$STEP (searching for tandem repeats in reads, producing profiles and sorting)...";
+    warn "\n\nExecuting step #$STEP (searching for tandem repeats in reads, producing profiles and sorting)...\n";
     my $extra_param  = ($strip_454_keytags) ? '-s' : '';
     my $extra_param2 = ($is_paired_reads)   ? '-r' : '';
     system(
