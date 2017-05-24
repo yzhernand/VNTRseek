@@ -2,14 +2,23 @@
 FILE(GLOB perlscripts RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
     "${CMAKE_CURRENT_SOURCE_DIR}/*.pl")
 
+FILE(GLOB perlmods RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/lib/*.pl")
+
 # Install perl scripts.
 INSTALL(PROGRAMS ${perlscripts}
     DESTINATION ${InstallSuffix}
     )
 
+# TODO might make redundant?
 # Install vntr perl modules
 INSTALL(DIRECTORY vntr/
     DESTINATION ${InstallSuffix}/vntr
+    )
+
+# Install perl modules
+INSTALL(FILES
+    DESTINATION ${InstallSuffix}/lib
     )
 
 # Modify vntrseek.pl

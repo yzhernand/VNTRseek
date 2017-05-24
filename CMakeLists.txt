@@ -26,7 +26,6 @@ ENDIF(NOT CMAKE_BUILD_TYPE)
 # Flags for the different builds. So far, we only have a definition for flags
 # in release mode
 SET(CMAKE_C_FLAGS_RELEASE "-O2")
-
 # Dependencies
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
 
