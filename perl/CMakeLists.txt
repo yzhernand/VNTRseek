@@ -17,7 +17,7 @@ INSTALL(DIRECTORY vntr/
     )
 
 # Install perl modules
-INSTALL(FILES
+INSTALL(DIRECTORY lib/
     DESTINATION ${InstallSuffix}/lib
     )
 
