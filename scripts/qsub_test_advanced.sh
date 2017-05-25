@@ -2,7 +2,7 @@
 
 if (($# != 2));
 then
-     echo "Error: Please pass DBSUFIX and NPROCESSORS to this script. Aborting!"
+     echo "Error: Please pass NPROCESSORS and DBSUFIX to this script. Aborting!"
      exit 1
 fi
 
@@ -10,7 +10,10 @@ WORKD="$( dirname "${BASH_SOURCE[0]}" )"
 scriptname=${WORKD}/master_for_qstub_test_advanced.sh
 perlfile=${WORKD}/vntrseek.pl
 
-perl $perlfile 99 --dbsuffix $1 --nprocesses $2   # ask for what step needs to be run next
+nprocs=$1
+dbsuffix="$2"
+
+perl $perlfile 99 --dbsuffix $dbsuffix --nprocesses $nprocs   # ask for what step needs to be run next
 
 runnext=$?          # assuming die will always return 255 here and nothing in the 0-19 range ....
 
