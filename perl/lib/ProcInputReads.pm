@@ -215,12 +215,10 @@ sub pipe_to_trf {
     # warn "Processing header $header";
 
     if ( $reverse_read && $header ne "" ) {
-        say $trf_fh $header . "_" . length($body) . "_RCYES";
-        say $trf_fh reverse_complement($body);
+        say $trf_fh $header . "_" . length($body) . "_RCYES\n" . reverse_complement($body);
     }
 
     # FASTA header
-    say $trf_fh $header;
     if ( $strip_454_TCAG && ( $body !~ s/^TCAG//i ) ) {
         if ($warn_454_TCAG) {
             warn
@@ -231,7 +229,7 @@ sub pipe_to_trf {
                 "Read does not start with keyseq TCAG. Full sequence: $body\n";
         }
     }
-    say $trf_fh $body;
+    say $trf_fh "$header\n$body";
 }
 
 =item I<read_fasta()>
