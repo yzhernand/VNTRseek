@@ -20,6 +20,8 @@ use lib "$FindBin::RealBin/lib";    # must be same as install dir!
 use ProcInputReads qw(fork_proc formats_regexs compressed_formats_regexs);
 
 my $files_processed = 0;    # files processed
+my $files_to_process = 0;   # Either: the actual number of files to process
+                            # OR the number of splits of a BAM file (and others?)
 my %p;                      # associates forked pids with output pipe pids
 my $max_processes = 0;
 
@@ -90,14 +92,14 @@ while ( my ( $sf, $pat_re ) = each %supported_formats_regexs ) {
     }
 }
 
-my $file_count = @filenames;
+$files_to_process = @filenames;
 my $compression_msg
     = ($compression)
     ? "compressed as $compression"
     : "unknown compression (assuming uncompressed)";
-die "0 supported files found in $input_dir. Exiting\n" if $file_count == 0;
+die "0 supported files found in $input_dir. Exiting\n" if $files_to_process == 0;
 warn
-    "$file_count supported files ($input_format format, $compression) found in $input_dir\n";
+    "$files_to_process supported files ($input_format format, $compression) found in $input_dir\n";
 
 # /proc/cpuinfo is found on Linux/cygwin only: use other methods for other platforms
 if ( $max_processes == 0 ) {
@@ -124,11 +126,13 @@ for ( my $i = 0; $i < $max_processes; $i++ ) {
             $input_dir,        $output_dir,   $TRF_PARAM,
             $TRF2PROCLU_PARAM, $reverse_read, $strip_454_TCAG,
             $warn_454_TCAG,    $input_format, $compression,
-            $files_processed,  \@filenames
+            $files_processed,  \$files_to_process, \@filenames
         )
     } = 1;
     $files_processed++;
 }
+
+my $num_files = $files_to_process;
 
 # wait for processes to finish and then fork new ones
 while ( ( my $pid = wait ) != -1 ) {
@@ -153,20 +157,14 @@ while ( ( my $pid = wait ) != -1 ) {
         # one instance has finished processing -- start a new one
         delete $p{$pid};
 
-     # For BAM files (and maybe other formats?) the parent does not know
-     # how many total processes are needed to run the whole file. For these
-     # formats, reader functions need to write out a temporary file signalling
-     # the last processes that needs to run has already begun.
-        if ( -e "$output_dir/trf_alldone" ) {
-            unlink("$output_dir/trf_alldone");
-            last;
-        }
-        else {
+        # Only spawn more processes if there are still more files/splits
+        # to process.
+        if ( $files_processed < $num_files ) {
             $p{ fork_proc(
                     $input_dir,        $output_dir,   $TRF_PARAM,
                     $TRF2PROCLU_PARAM, $reverse_read, $strip_454_TCAG,
                     $warn_454_TCAG,    $input_format, $compression,
-                    $files_processed,  \@filenames
+                    $files_processed,  \$files_to_process, \@filenames
                 )
             } = 1;
             $files_processed++;

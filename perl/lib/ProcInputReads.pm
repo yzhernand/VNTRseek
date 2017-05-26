@@ -114,14 +114,14 @@ sub fork_proc {
     my ($input_dir,        $output_dir,   $trf_param,
         $trf2proclu_param, $reverse_read, $strip_454_TCAG,
         $warn_454_TCAG,    $format,       $compression,
-        $files_processed,  $filelist
+        $files_processed,  $files_to_process, $filelist
     ) = @_;
     defined( my $pid = fork() )
         or die "Unable to fork: $!\n";
     if ( $pid == 0 ) {    #Child
 
         my $reader = $reader_table{$format}->(
-            $input_dir, $output_dir, $compression, $files_processed, $filelist
+            $input_dir, $output_dir, $compression, $files_processed, $files_to_process, $filelist
         );
         my $output_prefix = "$output_dir/$files_processed";
         exit unless $reader;
@@ -237,26 +237,23 @@ sub pipe_to_trf {
 FASTA file reader.
 
 Given the input/output dirs, file and compression formats, the number
-of files processed so far, and a list of all files, return a sub
-which knows which file it is responsible for and how to open it.
+of files processed so far, a reference to a file count, and a list of
+all files, return a sub which knows which file it is responsible for
+and how to open it.
 
 This returned sub itself returns a list comprising a FASTA header and
 sequence each time it is called. When there are no more sequences to
 read, it returns an empty list.
 
+This particular sub does NOT modify the $files_to_process value.
+
 =cut
 
 sub read_fasta {
-    my ( $input_dir, $output_dir, $compression, $files_processed, $filelist )
+    my ( $input_dir, $output_dir, $compression, $files_processed, $files_to_process, $filelist )
         = @_;
 
 # warn "Need to process " . scalar(@$filelist) . " files, working on $files_processed\n";
-
-    # Don't do more if we've exhausted the file list
-    if ( $files_processed >= @$filelist ) {
-        system("touch '$output_dir/trf_alldone'");
-        return undef;
-    }
 
  # If file uncompressed, simply read from file. Else open a pipe to a command.
     my $openmode = ($compression) ? "-|" : "<";
@@ -299,26 +296,23 @@ sub read_fasta {
 FASTQ file reader.
 
 Given the input/output dirs, file and compression formats, the number
-of files processed so far, and a list of all files, return a sub
-which knows which file it is responsible for and how to open it.
+of files processed so far, a reference to a file count, and a list of
+all files, return a sub which knows which file it is responsible for
+and how to open it.
 
 This returned sub itself returns a list comprising a FASTA header and
 sequence each time it is called. When there are no more sequences to
 read, it returns an empty list.
+
+This particular sub does NOT modify the $files_to_process value.
 
 =cut
 
 sub read_fastq {
 
     # Code modified from https://www.biostars.org/p/11599/#11657
-    my ( $input_dir, $output_dir, $compression, $files_processed, $filelist )
+    my ( $input_dir, $output_dir, $compression, $files_processed, $files_to_process, $filelist )
         = @_;
-
-    # Don't do more if we've exhausted the file list
-    if ( $files_processed >= @$filelist ) {
-        system("touch '$output_dir/trf_alldone'");
-        return undef;
-    }
 
  # If file uncompressed, simply read from file. Else open a pipe to a command.
     my $openmode = ($compression) ? "-|" : "<";
@@ -397,19 +391,21 @@ sub read_fastq {
 BAM file reader.
 
 Given the input/output dirs, file and compression formats, the number
-of files processed so far, and a list of all files, return a sub
-which knows which file it is responsible for and how to open it.
+of files processed so far, a reference to a file count, and a list of
+all files, return a sub which knows which file it is responsible for
+and how to open it.
 
 This returned sub itself returns a list comprising a FASTA header and
 sequence each time it is called. When there are no more sequences to
 read, it returns an empty list.
 
-Requires samtools as an external dependency.
+Requires samtools as an external dependency. This sub DOES modify the
+value of $files_to_process.
 
 =cut
 
 sub read_bam {
-    my ( $input_dir, $output_dir, $compression, $files_processed, $filelist )
+    my ( $input_dir, $output_dir, $compression, $files_processed, $files_to_process, $filelist )
         = @_;
     my $bamfile = "$input_dir/" . $filelist->[0];
 
@@ -454,10 +450,8 @@ sub read_bam {
         push @samcmds, $scmd;
     }
 
-    if ( $files_processed >= @samcmds ) {
-        system("touch '$output_dir/trf_alldone'");
-        return undef;
-    }
+    # Save the number of samtools commands we'll need to use
+    $$files_to_process = scalar @samcmds;
 
     # warn "$files_processed\n";
     warn "Processing bam chunk using: " . $samcmds[$files_processed] . "\n";
@@ -482,8 +476,9 @@ sub read_bam {
 Example file reader.
 
 Given the input/output dirs, file and compression formats, the number
-of files processed so far, and a list of all files, return a sub
-which knows which file it is responsible for and how to open it..
+of files processed so far, a reference to a file count, and a list of
+all files, return a sub which knows which file it is responsible for
+and how to open it.
 
 This returned sub itself returns a list comprising a FASTA header and
 sequence each time it is called. When there are no more sequences to
@@ -494,7 +489,7 @@ in a certain format and returns a subroutine which works as expected
 by fork_proc().
 
 sub read_FORMAT {
-    my ( $input_dir, $output_dir, $compression, $files_processed, $filelist )
+    my ( $input_dir, $output_dir, $compression, $files_processed, $files_to_process, $filelist )
         = @_;
 
     # Here make some decisions. For instance, if we expect to process multiple
@@ -503,14 +498,11 @@ sub read_FORMAT {
     # the input and decide which split this call will work on. You may have to
     # write the next section before this one in the case of multiple files.
 
-    # Write the condition for returning undef and setting the flag for no more
-    # files/splits to process. Perl's fork doesn't let us set variables that
-    # parent procs can see, so do something like:
-
-    if ( $files_processed >= @$filelist ) {
-        system("touch '$output_dir/trf_alldone'");
-        return undef;
-    }
+    # In the case of files like BAM files, where there is only one input
+    # file but the file is indexed in regions which can be read directly,
+    # save the number of splits needed into the variable pointed to by
+    # $files_to_process. NOT needed if there are multiple input files,
+    # one for each child process.
 
     # Open a file handle to the file or pipe we will read from.
     # If file might be compressed, use the $compression value and
