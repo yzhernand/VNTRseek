@@ -12,9 +12,6 @@ sub read_file_line {
     return;
 }
 
-# set to 1 if using proclu 1.86 and lower
-my $ADD_REDUNDANT_BACK = 0;
-
 use strict;
 use warnings;
 use Cwd;
@@ -123,7 +120,7 @@ sub SetStatistics {
     #print "$DBNAME,$LOGIN,$PASS,$NAME,$VALUE\n";
     return stats_set( $DBNAME, $LOGIN, $PASS, $HOST, $NAME, $VALUE );
 }
-####################################
+################ main ####################
 
 my $dbh = DBI->connect( "DBI:mysql:$DBNAME;mysql_local_infile=1;host=$HOST",
     "$LOGIN", "$PASS" )
@@ -135,120 +132,7 @@ my $negcount = 0;
 
 $timestart = time();
 
-if ( 0 == $ADD_REDUNDANT_BACK ) {
-
-    system("cp $clusterfile $rotatedfolder/allwithdups.clusters");
-
-    # THIS IS NO LONGER NEEDED AS PROCLU PUTS THEM BACK TOGETHER SINCE 1.87
-}
-else {
-
-# read clusters to see what values we will store (so we don't have to store all)
-    print STDERR "\nreading clusterfile to hash clustered ids..." . "";
-    open FILE, "<$clusterfile" or die $!;
-    while (<FILE>) {
-
-        my @values = split( ',', $_ );
-
-        foreach my $val (@values) {
-
-            my $dir = '\'';
-            if ( $val =~ /\"/ ) { $dir = '"'; }
-            $val =~ s/[\'\"]//g;
-            $val = trim($val);
-
-            $SHASH{"$val"} = $dir;
-
-        }
-    }
-    close(FILE);
-
-    print STDERR "..." . keys(%SHASH) . " entries inserted into hash. \n\n";
-
-    # Reading cluster file to insert redundant repeat ids back into clusters
-    print STDERR
-        "\nCreating new cluster file (allwithdups.clusters) to insert redundant repeat ids back into clusters...\n\n";
-    opendir( DIR, $rotatedfolder );
-    my @redfiles = sort grep( /\.(?:rotindex)$/, readdir(DIR) );
-    closedir(DIR);
-    push( @redfiles, "ref" );
-
-    foreach my $ifile (@redfiles) {
-        print STDERR "\n" . $ifile . "...";
-        if ( $ifile ne "ref" ) {
-            open FILE, "<$rotatedfolder/$ifile" or die $!;
-        }
-        else {
-            open FILE, "<$rotatedreffile" or die $!;
-        }
-
-        my $inscount = 0;
-
-        while (<FILE>) {
-            my @values = split( ' ', $_ );
-            $count = @values;
-            if ( $count > 0 ) {
-                my $ind  = $values[0];
-                my $rdir = '\'';
-                if ( $ind =~ /\"/ ) { $rdir = '"'; }
-
-                $ind =~ s/[\'\"]//g;
-
-                if ( $count >= 2 && ( exists $SHASH{"$ind"} ) ) {
-                    $inscount++;
-                    my $dir = $SHASH{"$ind"};
-                    my $flip = ( $dir eq $rdir ) ? 0 : 1;
-
-                    if ($flip) {
-                        $SHASH{"$ind"} = trim( flipc($_) );
-                    }
-                    else {
-                        $SHASH{"$ind"} = trim($_);
-                    }
-
-                }
-            }    # end of count if cond
-
-        }
-        close(FILE);
-        print STDERR "(inserts: $inscount)";
-    }
-
-    # create new file with extra repeats
-    open FILEO, ">$rotatedfolder/allwithdups.clusters" or die $!;
-    open FILE, "<$clusterfile" or die $!;
-    while (<FILE>) {
-
-        my @values = split( ',', $_ );
-        my $i = 0;
-        foreach my $val (@values) {
-
-            $i++;
-
-            $val = trim($val);
-
-            my $valor = $val;
-
-            $val =~ s/[\'\"]//g;
-
-            if ( exists $SHASH{"$val"} && length( $SHASH{"$val"} ) > 2 ) {
-                $valor = $SHASH{"$val"};
-                $valor =~ s/\s/,/g;
-                $valor = $valor;
-            }
-
-            if ( $i > 1 ) { print FILEO ","; }
-            print FILEO $valor;
-
-        }
-
-        print FILEO "\n";
-
-    }
-    close(FILE);
-    close(FILEO);
-
-}    # end of ADD_REDUNDANT_BACK
+system("cp $clusterfile $rotatedfolder/allwithdups.clusters");
 
 # load the RHASH now with new values added
 # read clusters to see what values we will store (so we don't have to store all)
