@@ -98,7 +98,7 @@ sub compressed_formats_regexs {
 Takes input/output dirs, the TRF and TRF2proclu command calls with
 parameters, flags for reversing reads and 454 tag handling, file
 format and compression format names, the number of files processed
-so far, and a list of full paths to files in that format. Then
+so far, and a list of names of files in that format. Then
 returns a function which, when called, returns a stream to sequences
 which can be used to run TRF/TRF2PROCLU.
 
@@ -111,9 +111,9 @@ two values are a FASTA header and a sequence string, in that order.
 =cut
 
 sub fork_proc {
-    my ($input_dir,        $output_dir,   $trf_param,
-        $trf2proclu_param, $reverse_read, $strip_454_TCAG,
-        $warn_454_TCAG,    $format,       $compression,
+    my ($input_dir,        $output_dir,       $trf_param,
+        $trf2proclu_param, $reverse_read,     $strip_454_TCAG,
+        $warn_454_TCAG,    $format,           $compression,
         $files_processed,  $files_to_process, $filelist
     ) = @_;
     defined( my $pid = fork() )
@@ -121,7 +121,8 @@ sub fork_proc {
     if ( $pid == 0 ) {    #Child
 
         my $reader = $reader_table{$format}->(
-            $input_dir, $output_dir, $compression, $files_processed, $files_to_process, $filelist
+            $input_dir, $compression, $files_processed,
+            $files_to_process, $filelist
         );
         my $output_prefix = "$output_dir/$files_processed";
         exit unless $reader;
@@ -178,6 +179,29 @@ sub fork_proc {
     }
 }
 
+=item I<get_reader()>
+
+Takes input dir, file format and compression format names,
+the number of files processed so far, and a list of names of files
+in that format. Then returns a function which, when called, returns
+a stream to sequences from the read file.
+
+=cut
+
+sub get_reader {
+    my ( $input_dir, $format, $compression, $files_processed,
+        $files_to_process, $filelist )
+        = @_;
+
+    my $reader = $reader_table{$format}->(
+        $input_dir, $compression, $files_processed,
+        $files_to_process, $filelist
+    );
+
+    exit unless $reader;
+    return $reader;
+}
+
 =item I<reverse_complement()>
 
 Takes a DNA sequence string and returns the reverse complement.
@@ -215,7 +239,10 @@ sub pipe_to_trf {
     # warn "Processing header $header";
 
     if ( $reverse_read && $header ne "" ) {
-        say $trf_fh $header . "_" . length($body) . "_RCYES\n" . reverse_complement($body);
+        say $trf_fh $header . "_"
+            . length($body)
+            . "_RCYES\n"
+            . reverse_complement($body);
     }
 
     # FASTA header
@@ -236,7 +263,7 @@ sub pipe_to_trf {
 
 FASTA file reader.
 
-Given the input/output dirs, file and compression formats, the number
+Given the input dir, file and compression formats, the number
 of files processed so far, a reference to a file count, and a list of
 all files, return a sub which knows which file it is responsible for
 and how to open it.
@@ -250,7 +277,8 @@ This particular sub does NOT modify the $files_to_process value.
 =cut
 
 sub read_fasta {
-    my ( $input_dir, $output_dir, $compression, $files_processed, $files_to_process, $filelist )
+    my ( $input_dir, $compression, $files_processed,
+        $files_to_process, $filelist )
         = @_;
 
 # warn "Need to process " . scalar(@$filelist) . " files, working on $files_processed\n";
@@ -295,7 +323,7 @@ sub read_fasta {
 
 FASTQ file reader.
 
-Given the input/output dirs, file and compression formats, the number
+Given the input dir, file and compression formats, the number
 of files processed so far, a reference to a file count, and a list of
 all files, return a sub which knows which file it is responsible for
 and how to open it.
@@ -311,7 +339,8 @@ This particular sub does NOT modify the $files_to_process value.
 sub read_fastq {
 
     # Code modified from https://www.biostars.org/p/11599/#11657
-    my ( $input_dir, $output_dir, $compression, $files_processed, $files_to_process, $filelist )
+    my ( $input_dir, $compression, $files_processed,
+        $files_to_process, $filelist )
         = @_;
 
  # If file uncompressed, simply read from file. Else open a pipe to a command.
@@ -390,7 +419,7 @@ sub read_fastq {
 
 BAM file reader.
 
-Given the input/output dirs, file and compression formats, the number
+Given the input dir, file and compression formats, the number
 of files processed so far, a reference to a file count, and a list of
 all files, return a sub which knows which file it is responsible for
 and how to open it.
@@ -405,7 +434,8 @@ value of $files_to_process.
 =cut
 
 sub read_bam {
-    my ( $input_dir, $output_dir, $compression, $files_processed, $files_to_process, $filelist )
+    my ( $input_dir, $compression, $files_processed,
+        $files_to_process, $filelist )
         = @_;
     my $bamfile = "$input_dir/" . $filelist->[0];
 
@@ -475,7 +505,7 @@ sub read_bam {
 
 Example file reader.
 
-Given the input/output dirs, file and compression formats, the number
+Given the input dir, file and compression formats, the number
 of files processed so far, a reference to a file count, and a list of
 all files, return a sub which knows which file it is responsible for
 and how to open it.
@@ -489,7 +519,7 @@ in a certain format and returns a subroutine which works as expected
 by fork_proc().
 
 sub read_FORMAT {
-    my ( $input_dir, $output_dir, $compression, $files_processed, $files_to_process, $filelist )
+    my ( $input_dir, $compression, $files_processed, $files_to_process, $filelist )
         = @_;
 
     # Here make some decisions. For instance, if we expect to process multiple

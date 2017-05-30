@@ -1,86 +1,29 @@
 #!/usr/bin/perl
 
-my $RECORDS_PER_INFILE_INSERT = 100000;
-
-sub read_file_line {
-    my $fh = shift;
-
-    if ( $fh and my $line = <$fh> ) {
-        chomp $line;
-        return $line;
-    }
-    return;
-}
-
 use strict;
 use warnings;
+use 5.010;
 use Cwd;
 use DBI;
-
+use POSIX qw(strftime);
 use FindBin;
 use File::Basename;
 
 use lib "$FindBin::Bin/vntr";
 require "vutil.pm";
+use lib "$FindBin::RealBin/lib";
+use ProcInputReads qw(fork_proc formats_regexs compressed_formats_regexs);
 
-use vutil ('get_credentials');
-use vutil ('write_mysql');
-use vutil ('stats_set');
+use vutil qw(get_credentials write_mysql stats_set);
 
-my $sec;
-my $min;
-my $hour;
-my $mday;
-my $mon;
-my $year;
-my $wday;
-my $yday;
-my $isdst;
+my $RECORDS_PER_INFILE_INSERT = 100000;
 
 my $timestart;
 
 my $count;
 
-# Perl function to remove whitespace from the start and end of the string
-sub trim($) {
-    my $string = shift;
-    $string =~ s/^\s+//;
-    $string =~ s/\s+$//;
-    return $string;
-}
-
-# Perl function to remove all whitespace
-sub trimall($) {
-    my $string = shift;
-    $string =~ s/\s+//g;
-    return $string;
-}
-
-# Perl flipc function to reverse direction of repeats
-sub flipc($) {
-    my $string = shift;
-
-    $string =~ s/\'/`/g;
-    $string =~ s/"/\'/g;
-    $string =~ s/`/"/g;
-
-    return $string;
-}
-
-sub dummyquals($) {
-    my $dna = shift;
-    my @arr = split( //, $dna );
-    my $len = scalar @arr;
-    for ( my $i = 0; $i < $len; $i++ ) {
-        $arr[$i] = 'a';
-    }
-    return join( "", @arr );
-}
-
-( $sec, $min, $hour, $mday, $mon, $year, $wday, $yday, $isdst )
-    = localtime(time);
-printf STDERR "\n\nstart: %4d-%02d-%02d %02d:%02d:%02d\n\n\n", $year + 1900,
-    $mon + 1, $mday, $hour, $min, $sec;
+################ main ####################
+say STDERR strftime( "\n\nstart: %F %T\n\n", localtime );
 
 my $argc = @ARGV;
 
@@ -105,22 +48,6 @@ my $IS_PAIRED_READS = $ARGV[9];
 my ( $LOGIN, $PASS, $HOST ) = get_credentials($MSDIR);
 
 my $totalReads = 0;
-
-####################################
-sub SetStatistics {
-
-    my $argc = @_;
-    if ( $argc < 2 ) {
-        die "stats_set: expects 2 parameters, passed $argc !\n";
-    }
-
-    my $NAME  = $_[0];
-    my $VALUE = $_[1];
-
-    #print "$DBNAME,$LOGIN,$PASS,$NAME,$VALUE\n";
-    return stats_set( $DBNAME, $LOGIN, $PASS, $HOST, $NAME, $VALUE );
-}
-################ main ####################
 
 my $dbh = DBI->connect( "DBI:mysql:$DBNAME;mysql_local_infile=1;host=$HOST",
     "$LOGIN", "$PASS" )
@@ -281,50 +208,45 @@ foreach my $ifile (@indexfiles) {
                 $pattern = "";
 
                #   if ($3 =~  /\s(\d+)\s(\d+)\s(\d+\.\d)\s(\d+)\s([A-Z]+)/ ) {
-                {
-                    $first   = $3;
-                    $last    = $4;
-                    $copy    = $5;
-                    $pat     = $6;
-                    $pattern = $7;
-                    $i++;
+                $first   = $3;
+                $last    = $4;
+                $copy    = $5;
+                $pat     = $6;
+                $pattern = $7;
+                $i++;
 
-                    $head = trim($head);
+                $head = trim($head);
 
-                    if ( exists $HEADHASH{"$head"} ) {
-                    }
-                    else {
+                unless ( exists $HEADHASH{"$head"} ) {
           #$sth0->execute("$head") or die "Cannot execute: " . $sth->errstr();
-                        $HEADHASH{"$head"} = $processed;
-                    }
+                    $HEADHASH{"$head"} = $processed;
+                }
 
        #print $id." ".$head." ".$first." ".$last." ".$copy." ".$pat." "." \n";
 
-                    my @values = split( ' ', $line2 );
-                    if ( $values[0] != $id ) {
-                        die
-                            "id from index file ($id) does not match id from leb36 file ($values[0])";
-                    }
+                my @values = split( ' ', $line2 );
+                if ( $values[0] != $id ) {
+                    die
+                        "id from index file ($id) does not match id from leb36 file ($values[0])";
+                }
 
-                    my $profile   = $values[5];
-                    my $profilerc = $values[6];
-                    my $proflen   = length($profile) / 2;
+                my $profile   = $values[5];
+                my $profilerc = $values[6];
+                my $proflen   = length($profile) / 2;
 
 #$sth->execute($id,$HEADHASH{"$head"},$first,$last,$copy,$pat,$pattern,$profile,$profilerc,$proflen) or die "Cannot execute: " . $sth->errstr();
 
-                    print $TEMPFILE $id, ",", $HEADHASH{"$head"}, ",",
-                        $first, ",", $last, ",", $pat, ",", $copy, ",",
-                        $pattern, ",", $profile, ",", $profilerc, ",",
-                        $proflen, "\n";
+                print $TEMPFILE $id, ",", $HEADHASH{"$head"}, ",",
+                    $first, ",", $last, ",", $pat, ",", $copy, ",",
+                    $pattern, ",", $profile, ",", $profilerc, ",",
+                    $proflen, "\n";
 
-                    if ( $processed % $RECORDS_PER_INFILE_INSERT == 0 ) {
-                        close($TEMPFILE);
-                        $count = $sth->execute();
-                        $inserted += $count;
-                        open( $TEMPFILE, ">$TEMPDIR/replnk_$DBNAME.txt" )
-                            or die $!;
-                    }
-
+                if ( $processed % $RECORDS_PER_INFILE_INSERT == 0 ) {
+                    close($TEMPFILE);
+                    $count = $sth->execute();
+                    $inserted += $count;
+                    open( $TEMPFILE, ">$TEMPDIR/replnk_$DBNAME.txt" )
+                        or die $!;
                 }
 
             }
@@ -367,32 +289,51 @@ else {
 
 #goto AAA;
 
-# get the fasta/fastq files
+# get the read files
 $totalReads = 0;
 $inserted   = 0;
 $processed  = 0;
 $timestart  = time();
 print STDERR
-    "\nreading gzipped fasta files and storing relevant entries in database..."
+    "\nreading input read files and storing relevant entries in database..."
     . "\n\n";
-opendir( DIR, $fastafolder );
+opendir( my $dirhandle, $fastafolder );
+my @dircontents = readdir($dirhandle);
+closedir($dirhandle);
 
-# the only extensions are .tgz, .tar.gz, and .gz
-#my @tarballs = grep(/\.(?:tgz|gz)$/, readdir(DIR));
-
-my @tarballs;
-@tarballs = sort grep( /^fasta.*\.(?:tgz|gz)$/, readdir(DIR) );
-if ( @tarballs <= 0 ) {
-    rewinddir(DIR);
-    @tarballs = sort grep( /^fastq.*\.(?:tgz|gz)$/, readdir(DIR) );
+if ( $ENV{DEBUG} ) {
+    warn join( ",", @dircontents ) . "\n";
 }
 
-if ( @tarballs <= 0 ) {
-    die "\n\nNo fasta or fastq files found. Aborting!";
+# Get all supported files. See note above on priority of input formats
+my @filenames;
+my ( $input_format, $compression );
+
+# Determine sequence format
+my %supported_formats_regexs = formats_regexs();
+while ( my ( $sf, $pat_re ) = each %supported_formats_regexs ) {
+    if (@filenames = sort
+        grep( /^${pat_re}.*$/, @dircontents )
+        )
+    {
+        $input_format = $sf;
+
+        # Determine compression format
+        my %cmp_formats_regexs = compressed_formats_regexs();
+        while ( my ( $cf, $cf_re ) = each %cmp_formats_regexs ) {
+            if ( $filenames[0] =~ /.*\.(?:${cf_re})/ ) {
+                $compression = $cf;
+                last;
+            }
+        }
+        last;
+    }
 }
 
-closedir(DIR);
-my $tarball_count = @tarballs;
+my $files_to_process = @filenames;
+unless (@filenames > 0) {
+    die "Error: no supported files found in $fastafolder. Exiting...\n";
+}
 
 $sth
     = $dbh->prepare(
@@ -406,212 +347,44 @@ my $HEADER_SUFFIX = "";
 
 open( $TEMPFILE, ">$TEMPDIR/fastareads_$DBNAME.txt" ) or die $!;
 
-FILE:
-foreach (@tarballs) {
-    print STDERR $_ . "";
+# Initialize the first reader so that we know how many files/splits to iterate over.
+# This will overwrite the value for $files_to_process if file is a BAM file.
+my $files_processed = 0;
+my $reader = get_reader($fastafolder, $input_format, $compression, $files_processed, \$files_to_process, \@filenames);
+while ($files_processed < $files_to_process) {
+    print STDERR "Reading file/file split " . $files_processed + 1 . "\n";
 
-    if ( $_ =~ /\.(?:tgz|tar\.gz)$/ ) {
-        open( FASTA_IN, "tar xzfmoO '$fastafolder/$_' |" );
-    }
-    elsif ( $_ =~ /\.gz$/ ) {
-        open( FASTA_IN, "gunzip -c '$fastafolder/$_' |" );
-    }
-    else {
-        warn "File $_ has wrong extension. Skipping this file\n";
-        next FILE;
-    }
+    $reader = get_reader($fastafolder, $input_format, $compression, $files_processed, \$files_to_process, \@filenames);
+    while (my ( $headstr, $dnastr ) = $reader->()) {
+        trim($headstr);
+        trimall($dnastr);
+        my $dnabak = $dnastr;
+        $totalReads++;
+        if ( exists $HEADHASH{"$headstr"} ) {
 
-    # if this is a paired file, add .1 and .2 to all headers
-    if    ( $IS_PAIRED_READS && $_ =~ /s_\d+_1/ ) { $HEADER_SUFFIX = ".1"; }
-    elsif ( $IS_PAIRED_READS && $_ =~ /s_\d+_2/ ) { $HEADER_SUFFIX = ".2"; }
-    else                                          { $HEADER_SUFFIX = ""; }
+            $processed++;
 
-    my $first_line = <FASTA_IN>;
-
-    # fasta
-    if ( $first_line =~ /^>(.*)(?:\n|\r)/ ) {
-
-        #print $first_line;
-        $headstr = $1;
-        $dnastr  = "";
-        while (<FASTA_IN>) {
-
-            #print $_
-            #end of sequence, insert and reset vars
-            if ( $_ =~ /^>(.*)(?:\n|\r)/ ) {
-                $headstr = trim($headstr) . $HEADER_SUFFIX;
-                chomp($dnastr);
-                $dnastr = trimall($dnastr);
-                my $dnabak = $dnastr;
-                $totalReads++;
-                if ( exists $HEADHASH{"$headstr"} ) {
-
-                    $processed++;
-
-                    if ( $strip454 eq "1" && $dnastr !~ s/^TCAG//i ) {
-                        warn "Read does not start with keyseq TCAG : "
-                            . $dnabak . " ("
-                            . $headstr . ")\n";
-                    }
-
-                    print $TEMPFILE $HEADHASH{"$headstr"}, "\t", "$headstr",
-                        "\t", "$dnastr", "\n";
-
-                    if ( $processed % $RECORDS_PER_INFILE_INSERT == 0 ) {
-                        close($TEMPFILE);
-                        $count = $sth->execute();
-                        $inserted += $count;
-                        open( $TEMPFILE, ">$TEMPDIR/fastareads_$DBNAME.txt" )
-                            or die $!;
-                    }
-
-                }
-
-                #print "\nhead: "."`$headstr`";
-                #print "\ndna: ".$dnastr;
-                #last FILE;
-                $headstr = $1;
-                $dnastr  = "";
+            if ( $strip454 eq "1" && $dnastr !~ s/^TCAG//i ) {
+                warn "Read does not start with keyseq TCAG : "
+                    . $dnabak . " ("
+                    . $headstr . ")\n";
             }
-            else {
-                $dnastr .= $_;
+
+            say $TEMPFILE $HEADHASH{"$headstr"}, "\t", "$headstr",
+                "\t", "$dnastr";
+
+            if ( $processed % $RECORDS_PER_INFILE_INSERT == 0 ) {
+                close($TEMPFILE);
+                $count = $sth->execute();
+                $inserted += $count;
+                open( $TEMPFILE, ">$TEMPDIR/fastareads_$DBNAME.txt" )
+                    or die $!;
             }
+
         }
-        close FASTA_IN;
-
-        # fastq
     }
-    elsif ( $first_line =~ /^\@(.*)(?:\n|\r)/ ) {
-
-        my $qmode = 0;
-
-        #print $first_line;
-        $headstr = $1;
-        $dnastr  = "";
-        $qualstr = "";
-        while (<FASTA_IN>) {
-
-            #print $_
-            #end of sequence, insert and reset vars
-            if ( $qmode == 2 && $_ =~ /^\@(.*)(?:\n|\r)/ ) {
-                $qmode   = 0;
-                $headstr = trim($headstr) . $HEADER_SUFFIX;
-                $dnastr  = trimall($dnastr);
-                my $dnabak = $dnastr;
-
-                #$qualstr = trimall($qualstr);
-                $qualstr = ""
-                    ; # need to escape this field properly, currently causing problems
-                $totalReads++;
-                if ( exists $HEADHASH{"$headstr"} ) {
-
-                    my $stripped = 1;
-
-                    $processed++;
-
-                    if ( $strip454 eq "1" && $dnastr !~ s/^TCAG//i ) {
-                        $stripped = 0;
-                        warn "Read does not start with keyseq TCAG : "
-                            . $dnabak . " ("
-                            . $headstr . ")\n";
-                    }
-
-                    if ( $strip454 eq "1" && $stripped ) {
-
-                        print $TEMPFILE $HEADHASH{"$headstr"}, "\t",
-                            "$headstr", "\t", "$dnastr", "\t",
-                            substr( $qualstr, 4 ), "\n";
-
-                    }
-                    else {
-
-                        print $TEMPFILE $HEADHASH{"$headstr"}, "\t",
-                            "$headstr", "\t", "$dnastr", "\t", $qualstr, "\n";
-
-                    }
-
-                    if ( $processed % $RECORDS_PER_INFILE_INSERT == 0 ) {
-                        close($TEMPFILE);
-                        $count = $sth->execute();
-                        $inserted += $count;
-                        open( $TEMPFILE, ">$TEMPDIR/fastareads_$DBNAME.txt" )
-                            or die $!;
-                    }
-
-                    $qmode = 0;
-                }
-
-                $headstr = $1;
-                $dnastr  = "";
-                $qualstr = "";
-
-                # start reading quals
-            }
-            elsif ( $qmode == 0 && $_ =~ /^\+/ ) {
-                $qmode = 1;
-            }
-            elsif ( $qmode != 2 ) {
-                if ( $qmode == 0 ) {
-                    $dnastr .= $_;
-                }
-                else {
-                    $qualstr .= $_;
-                    if ( length($qualstr) >= length($dnastr) ) { $qmode = 2; }
-                }
-            }
-        }
-        close FASTA_IN;
-
-    }
-    else {
-
-        warn "File $_ is not a FASTA file. Skipping this file\n";
-        next FILE;
-
-    }
-
-    # one more sequence is in the buffer, finish it off
-    $headstr = trim($headstr) . $HEADER_SUFFIX;
-    chomp($dnastr);
-    $dnastr = trimall($dnastr);
-    my $dnabak = $dnastr;
-    $totalReads++;
-    if ( exists $HEADHASH{"$headstr"} ) {
-
-        my $stripped = 1;
-
-        if ( $strip454 eq "1" && $dnastr !~ s/^TCAG//i ) {
-            $stripped = 0;
-            warn "Read does not start with keyseq TCAG : "
-                . $dnabak . " ("
-                . $headstr . ")\n";
-        }
-
-        $processed++;
-
-        if ( $first_line =~ /^>(.*)(?:\n|\r)/ ) {
-            print $TEMPFILE $HEADHASH{"$headstr"}, "\t", "$headstr", "\t",
-                "$dnastr", "\n";
-        }
-        elsif ( $first_line =~ /^\@(.*)(?:\n|\r)/ ) {
-
-            #$qualstr = trimall($qualstr);
-            $qualstr = ""
-                ; # need to escape this field properly, currently causing problems
-            if ( $strip454 eq "1" && $stripped ) {
-                print $TEMPFILE $HEADHASH{"$headstr"}, "\t", "$headstr",
-                    "\t", "$dnastr", "\t", substr( $qualstr, 4 ), "\n";
-            }
-            else {
-                print $TEMPFILE $HEADHASH{"$headstr"}, "\t", "$headstr",
-                    "\t", "$dnastr", "\t", $qualstr, "\n";
-            }
-        }
-
-    }
-
-    print STDERR " (processed: $processed)\n";
-
+    $files_processed++;
+    say STDERR " (processed: $processed)";
 }
 
 # cleanup
@@ -620,8 +393,6 @@ $count = $sth->execute();
 $inserted += $count;
 unlink("$TEMPDIR/fastareads_$DBNAME.txt");
 $sth->finish;
-
-AAA:
 
 # reenable indices
 $sth = $dbh->prepare('SET AUTOCOMMIT = 1;')
@@ -676,12 +447,56 @@ else {
         . " entries, while gzipped fasta files only have $inserted matching entries. Aborting!\n\n";
 }
 
-print STDERR "\n\nProcessing complete (insert_reads.pl).\n";
+say STDERR "\n\nProcessing complete (insert_reads.pl).";
 
-( $sec, $min, $hour, $mday, $mon, $year, $wday, $yday, $isdst )
-    = localtime(time);
-printf STDERR "\n\nend: %4d-%02d-%02d %02d:%02d:%02d\n", $year + 1900,
-    $mon + 1, $mday, $hour, $min, $sec;
+say STDERR strftime( "\n\nend: %F %T\n\n", localtime );
 
 1;
 
+############# subroutines ##############
+# Perl function to remove whitespace from the start and end of the string
+sub trim {
+    my $string = shift;
+    $string =~ s/^\s+//;
+    $string =~ s/\s+$//;
+    return $string;
+}
+
+# Perl function to remove all whitespace
+sub trimall {
+    my $string = shift;
+    $string =~ s/\s+//g;
+    return $string;
+}
+
+# Perl flipc function to reverse direction of repeats
+sub flipc {
+    my $string = shift;
+
+    return $string =~ tr/\'"/"\'/r;
+}
+
+sub dummyquals {
+    my $dna = shift;
+    my @arr = split( //, $dna );
+    my $len = scalar @arr;
+    for ( my $i = 0; $i < $len; $i++ ) {
+        $arr[$i] = 'a';
+    }
+    return join( "", @arr );
+}
+
+####################################
+sub SetStatistics {
+
+    my $argc = @_;
+    if ( $argc < 2 ) {
+        die "stats_set: expects 2 parameters, passed $argc !\n";
+    }
+
+    my $NAME  = $_[0];
+    my $VALUE = $_[1];
+
+    #print "$DBNAME,$LOGIN,$PASS,$NAME,$VALUE\n";
+    return stats_set( $DBNAME, $LOGIN, $PASS, $HOST, $NAME, $VALUE );
+}
