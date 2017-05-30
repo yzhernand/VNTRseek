@@ -1144,6 +1144,10 @@ if ( $STEP == 7 ) {
     my $exstring;
     print STDERR
         "\n\nExecuting step #$STEP (inserting REFERENCE flanks into database)...";
+    # TODO Replace this, and the mysql exec later, with a function in vutil which
+    # just takes in a file name and then uses DBI to load the data. Doing this with
+    # a temporary sql file while exposing the password on the command line is
+    # totally unnecessary.
     $exstring
         = "echo \"truncate TABLE $DBNAME.fasta_ref_reps; LOAD DATA LOCAL INFILE '$install_dir/$reference_seq' INTO TABLE $DBNAME.fasta_ref_reps FIELDS TERMINATED BY ',' IGNORE 1 LINES;\" > $TMPDIR/${DBNAME}_2.sql";
     system($exstring);

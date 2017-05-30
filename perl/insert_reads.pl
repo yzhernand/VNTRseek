@@ -12,7 +12,7 @@ use File::Basename;
 use lib "$FindBin::Bin/vntr";
 require "vutil.pm";
 use lib "$FindBin::RealBin/lib";
-use ProcInputReads qw(fork_proc formats_regexs compressed_formats_regexs);
+use ProcInputReads qw(get_reader formats_regexs compressed_formats_regexs);
 
 use vutil qw(get_credentials write_mysql stats_set);
 
@@ -347,17 +347,14 @@ my $HEADER_SUFFIX = "";
 
 open( $TEMPFILE, ">$TEMPDIR/fastareads_$DBNAME.txt" ) or die $!;
 
-# Initialize the first reader so that we know how many files/splits to iterate over.
-# This will overwrite the value for $files_to_process if file is a BAM file.
 my $files_processed = 0;
-my $reader = get_reader($fastafolder, $input_format, $compression, $files_processed, \$files_to_process, \@filenames);
 while ($files_processed < $files_to_process) {
-    print STDERR "Reading file/file split " . $files_processed + 1 . "\n";
+    say STDERR "Reading file/file split ", ($files_processed + 1);
 
-    $reader = get_reader($fastafolder, $input_format, $compression, $files_processed, \$files_to_process, \@filenames);
+    my $reader = get_reader($fastafolder, $input_format, $compression, $files_processed, \$files_to_process, \@filenames);
     while (my ( $headstr, $dnastr ) = $reader->()) {
-        trim($headstr);
-        trimall($dnastr);
+        $headstr = trim($headstr);
+        $dnastr = trimall($dnastr);
         my $dnabak = $dnastr;
         $totalReads++;
         if ( exists $HEADHASH{"$headstr"} ) {
@@ -454,9 +451,21 @@ say STDERR strftime( "\n\nend: %F %T\n\n", localtime );
 1;
 
 ############# subroutines ##############
+sub read_file_line {
+    my $fh = shift;
+
+    if ( $fh and my $line = <$fh> ) {
+        chomp $line;
+        return $line;
+    }
+    return;
+}
+
 # Perl function to remove whitespace from the start and end of the string
 sub trim {
     my $string = shift;
+    # Remove leading ">", if any
+    $string =~ s/^>//;
     $string =~ s/^\s+//;
     $string =~ s/\s+$//;
     return $string;
@@ -473,7 +482,7 @@ sub trimall {
 sub flipc {
     my $string = shift;
 
-    return $string =~ tr/\'"/"\'/r;
+    (my $ret_str = $string) =~ tr/\'"/"\'/;
 }
 
 sub dummyquals {

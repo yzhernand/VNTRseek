@@ -25,7 +25,7 @@ use Carp;
 
 use Exporter qw(import);
 
-our @EXPORT_OK = qw(fork_proc formats_regexs compressed_formats_regexs);
+our @EXPORT_OK = qw(fork_proc get_reader formats_regexs compressed_formats_regexs);
 
 # List all supported file extensions and input formats here. Order of
 # input formats is in priority order: first format if found is used.
