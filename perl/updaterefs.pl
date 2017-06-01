@@ -40,7 +40,7 @@ my $MIN_SUPPORT_REQUIRED = $ARGV[9];
 my $VERSION              = $ARGV[10];
 my $TEMPDIR              = $ARGV[11];
 
-my $BASENAME = $DBNAME =~ s/VNTRPIPE_//r;
+(my $BASENAME = $DBNAME) =~ s/VNTRPIPE_//;
 
 # set these mysql credentials in vs.cnf (in installation directory)
 my ( $LOGIN, $PASS, $HOST ) = get_credentials($MSDIR);

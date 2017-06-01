@@ -151,9 +151,6 @@ $sth
     "LOAD DATA LOCAL INFILE '$TEMPDIR/replnk_$DBNAME.txt' INTO TABLE replnk FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';"
     ) or die "Couldn't prepare statement: " . $dbh->errstr;
 
-my $TEMPFILE;
-open( $TEMPFILE, ">$TEMPDIR/replnk_$DBNAME.txt" ) or die $!;
-
 $timestart = time();
 print STDERR
     "\nreading index file and storing relevant entries in database..."
@@ -175,6 +172,7 @@ my $pat;
 my $pattern;
 my $fh1;
 my $fh2;
+my @replnk_rows;
 
 foreach my $ifile (@indexfiles) {
 
@@ -218,6 +216,7 @@ foreach my $ifile (@indexfiles) {
                 $head = trim($head);
 
                 unless ( exists $HEADHASH{"$head"} ) {
+
           #$sth0->execute("$head") or die "Cannot execute: " . $sth->errstr();
                     $HEADHASH{"$head"} = $processed;
                 }
@@ -236,17 +235,23 @@ foreach my $ifile (@indexfiles) {
 
 #$sth->execute($id,$HEADHASH{"$head"},$first,$last,$copy,$pat,$pattern,$profile,$profilerc,$proflen) or die "Cannot execute: " . $sth->errstr();
 
-                print $TEMPFILE $id, ",", $HEADHASH{"$head"}, ",",
-                    $first, ",", $last, ",", $pat, ",", $copy, ",",
-                    $pattern, ",", $profile, ",", $profilerc, ",",
-                    $proflen, "\n";
+                push @replnk_rows,
+                    join( ",",
+                    $id,      $HEADHASH{"$head"}, $first,
+                    $last,    $pat,               $copy,
+                    $pattern, $profile,           $profilerc,
+                    $proflen );
 
                 if ( $processed % $RECORDS_PER_INFILE_INSERT == 0 ) {
-                    close($TEMPFILE);
-                    $count = $sth->execute();
-                    $inserted += $count;
-                    open( $TEMPFILE, ">$TEMPDIR/replnk_$DBNAME.txt" )
+                    open( my $TEMPFILE, ">", "$TEMPDIR/replnk_$DBNAME.txt" )
                         or die $!;
+                    for my $row (@replnk_rows) {
+                        say $TEMPFILE $row;
+                    }
+                    close($TEMPFILE);
+                    $count       = $sth->execute();
+                    $inserted += $count;
+                    @replnk_rows = ();
                 }
 
             }
@@ -268,11 +273,19 @@ foreach my $ifile (@indexfiles) {
 
 }
 
-close($TEMPFILE);
-$count = $sth->execute();
-$inserted += $count;
-unlink("$TEMPDIR/replnk_$DBNAME.txt");
+# Remaining rows
+if (@replnk_rows) {
+    open( my $TEMPFILE, ">", "$TEMPDIR/replnk_$DBNAME.txt" ) or die $!;
+    for my $row (@replnk_rows) {
+        say $TEMPFILE $row;
+    }
+    close($TEMPFILE);
+    $count       = $sth->execute();
+    $inserted += $count;
+    @replnk_rows = ();
+}
 $sth->finish;
+unlink("$TEMPDIR/replnk_$DBNAME.txt");
 
 if ( $inserted == keys(%RHASH) ) {
     print STDERR "\n\n..."
@@ -331,7 +344,7 @@ while ( my ( $sf, $pat_re ) = each %supported_formats_regexs ) {
 }
 
 my $files_to_process = @filenames;
-unless (@filenames > 0) {
+unless ( @filenames > 0 ) {
     die "Error: no supported files found in $fastafolder. Exiting...\n";
 }
 
@@ -344,17 +357,17 @@ my $headstr       = "";
 my $dnastr        = "";
 my $qualstr       = "";
 my $HEADER_SUFFIX = "";
-
-open( $TEMPFILE, ">$TEMPDIR/fastareads_$DBNAME.txt" ) or die $!;
+my @fasta_reads_rows;
 
 my $files_processed = 0;
-while ($files_processed < $files_to_process) {
-    say STDERR "Reading file/file split ", ($files_processed + 1);
+while ( $files_processed < $files_to_process ) {
+    say STDERR "Reading file/file split ", ( $files_processed + 1 );
 
-    my $reader = get_reader($fastafolder, $input_format, $compression, $files_processed, \$files_to_process, \@filenames);
-    while (my ( $headstr, $dnastr ) = $reader->()) {
+    my $reader = get_reader( $fastafolder, $input_format, $compression,
+        $files_processed, \$files_to_process, \@filenames );
+    while ( my ( $headstr, $dnastr ) = $reader->() ) {
         $headstr = trim($headstr);
-        $dnastr = trimall($dnastr);
+        $dnastr  = trimall($dnastr);
         my $dnabak = $dnastr;
         $totalReads++;
         if ( exists $HEADHASH{"$headstr"} ) {
@@ -367,15 +380,19 @@ while ($files_processed < $files_to_process) {
                     . $headstr . ")\n";
             }
 
-            say $TEMPFILE $HEADHASH{"$headstr"}, "\t", "$headstr",
-                "\t", "$dnastr";
+            push @fasta_reads_rows,
+                join( "\t", $HEADHASH{"$headstr"}, "$headstr", "$dnastr" );
 
             if ( $processed % $RECORDS_PER_INFILE_INSERT == 0 ) {
-                close($TEMPFILE);
-                $count = $sth->execute();
-                $inserted += $count;
-                open( $TEMPFILE, ">$TEMPDIR/fastareads_$DBNAME.txt" )
+                open( my $TEMPFILE, ">", "$TEMPDIR/fastareads_$DBNAME.txt" )
                     or die $!;
+                for my $row (@fasta_reads_rows) {
+                    say $TEMPFILE $row;
+                }
+                close($TEMPFILE);
+                $count            = $sth->execute();
+                $inserted += $count;
+                @fasta_reads_rows = ();
             }
 
         }
@@ -385,11 +402,18 @@ while ($files_processed < $files_to_process) {
 }
 
 # cleanup
-close($TEMPFILE);
-$count = $sth->execute();
-$inserted += $count;
-unlink("$TEMPDIR/fastareads_$DBNAME.txt");
+if (@fasta_reads_rows) {
+    open( my $TEMPFILE, ">", "$TEMPDIR/fastareads_$DBNAME.txt" ) or die $!;
+    for my $row (@fasta_reads_rows) {
+        say $TEMPFILE $row;
+    }
+    close($TEMPFILE);
+    $count            = $sth->execute();
+    $inserted += $count;
+    @fasta_reads_rows = ();
+}
 $sth->finish;
+unlink("$TEMPDIR/fastareads_$DBNAME.txt");
 
 # reenable indices
 $sth = $dbh->prepare('SET AUTOCOMMIT = 1;')
@@ -464,6 +488,7 @@ sub read_file_line {
 # Perl function to remove whitespace from the start and end of the string
 sub trim {
     my $string = shift;
+
     # Remove leading ">", if any
     $string =~ s/^>//;
     $string =~ s/^\s+//;
@@ -482,7 +507,7 @@ sub trimall {
 sub flipc {
     my $string = shift;
 
-    (my $ret_str = $string) =~ tr/\'"/"\'/;
+    ( my $ret_str = $string ) =~ tr/\'"/"\'/;
 }
 
 sub dummyquals {
