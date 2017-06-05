@@ -25,7 +25,8 @@ my $argc = @ARGV;
 if ( $argc < 3 ) { die "Usage: map_dup.pl dbname msdir tempdir\n"; }
 
 my $curdir            = getcwd;
-my $maxRepeatsPerRead = -1;
+# TODO Better default or calculate in advance
+my $maxRepeatsPerRead = 2;
 
 my $DBNAME  = $ARGV[0];
 my $MSDIR   = $ARGV[1];
@@ -94,6 +95,7 @@ $readsWithMultTRsMappedMultRefs_sth->execute()
 my $numReadsWithMultTRsMappedMultRefs = $readsWithMultTRsMappedMultRefs_sth->rows;
 my $i                            = 0;
 while ( $i < $numReadsWithMultTRsMappedMultRefs ) {
+    # TODO Use read length to calculate $maxRepeatsPerRead
     my @data = $readsWithMultTRsMappedMultRefs_sth->fetchrow_array();
     $i++;
 
