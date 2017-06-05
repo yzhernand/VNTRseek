@@ -45,7 +45,7 @@ FUNCTION(GLIBC_REQ_VER VER)
 
     IF(GLIBC_VERSION VERSION_LESS ${VER} OR GLIBC_VERSION VERSION_EQUAL ${VER})
         MESSAGE(STATUS "Downloading legacy build of TRF...")
-        SET(TRFDLName "trf${TRFVer}.legacy${ARCH}")
+        SET(TRFDLName "trf${TRFVer}.legacy${ARCH}" PARENT_SCOPE)
     ENDIF()
 ENDFUNCTION(GLIBC_REQ_VER)
 
