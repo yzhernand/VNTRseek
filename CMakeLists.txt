@@ -39,25 +39,20 @@ ELSEIF (ARCH STREQUAL "i386")
     MESSAGE(FATAL_ERROR "32-bit architecture is not supported. Installation cannot continue.")
 ENDIF()
 
-include(FindPkgConfig)
-pkg_check_modules (GLIB2   glib-2.0)
+## Check for required installed programs and versions
+SET(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules" ${CMAKE_MODULE_PATH})
+SET(TRFDLName "trf${TRFVer}.${ARCH}")
 SET(GLIB2_LEGACY_VERSION "2.14")
-IF (GLIB2_VERSION VERSION_LESS ${GLIB2_LEGACY_VERSION} OR GLIB2_VERSION VERSION_EQUAL ${GLIB2_LEGACY_VERSION})
-    SET(TRFDLName "trf${TRFVer}.legacy${ARCH}")
-ELSE()
-    SET(TRFDLName "trf${TRFVer}.${ARCH}")
-endif()
+INCLUDE("FindDeps.cmake")
+GCC_REQ_VER(4.1.2)
+GLIBC_REQ_VER(2.14)
+MYSQL_REQ_VER(5.0.95)
+PERL_REQ_VER(5.8.8)
+
 MESSAGE(STATUS "Your processor is ${CMAKE_SYSTEM_PROCESSOR} and you are running ${CMAKE_SYSTEM_NAME}. This means we'll download ${TRFDLName}")
 # May need to change if other platforms are supported
 #SET(TRFBin "${TRFDLName}.exe")
 SET(TRFBin "trf${TRFVer}-ngs.linux.exe")
-
-## Check for required installed programs and versions
-SET(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules" ${CMAKE_MODULE_PATH})
-INCLUDE("FindDeps.cmake")
-GCC_REQ_VER(4.1.2)
-MYSQL_REQ_VER(5.0.95)
-PERL_REQ_VER(5.8.8)
 
 ## Check for required Perl modules
 FIND_PACKAGE(PerlModules COMPONENTS DBI DBD::mysql)
