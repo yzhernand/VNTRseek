@@ -2464,11 +2464,11 @@ print_latex($dbh, $ReadTRsSupport);
 
 print_distr($dbh);
 
-AAA:
-
+# Print VCF for VNTRs with N support
 print_vcf($dbh);
 
-print_vcf2($dbh);
+# All with support
+print_vcf($dbh, 1);
 
 # set old db settings
 $sth = $dbh->prepare('SET AUTOCOMMIT = 1;')
