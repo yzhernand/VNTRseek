@@ -49,7 +49,7 @@ my ( $LOGIN, $PASS, $HOST ) = get_credentials($MSDIR);
 
 my $totalReads = 0;
 
-my $dbh = DBI->connect( "DBI:mysql:$DBNAME;mysql_local_infile=1;host=$HOST",
+my $dbh = DBI->connect( "DBI:mysql:$DBNAME;mysql_local_infile=1;mysql_server_prepare=1;host=$HOST",
     "$LOGIN", "$PASS" )
     || die "Could not connect to database: $DBI::errstr";
 my %RHASH    = ();
