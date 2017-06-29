@@ -22,7 +22,7 @@ package ProcInputReads;
 use strict;
 use warnings;
 use Carp;
-
+use feature 'say';
 use Exporter qw(import);
 
 our @EXPORT_OK = qw(fork_proc get_reader formats_regexs compressed_formats_regexs);
