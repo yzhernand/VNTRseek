@@ -41,7 +41,7 @@ use Getopt::Long qw(GetOptionsFromArray);
 use List::Util qw(min max);
 
 # VNTRSEEK Version
-my $VERSION = "@VNTRVer@";
+my $VERSION = '@VNTRVer@';
 
 # this is where the pipeline is installed
 my $install_dir = "$FindBin::RealBin";
@@ -82,7 +82,7 @@ my $strip_454_keytags = -1;    # whether or not to strip leadint 'TCAG'
 my $is_paired_reads   = -1;    # 0 = no paired reads, 1 = paired reads
 
 # TRF options
-my $TRF_EXECUTABLE = "@TRFBin@";
+my $TRF_EXECUTABLE = '@TRFBin@';
 my $TRF_EXE        = "./$TRF_EXECUTABLE";
 
 my $MATCH    = 2;

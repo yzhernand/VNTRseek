@@ -238,7 +238,6 @@ sub pipe_to_trf {
 
     # warn "Processing header $header";
 
-    # FASTA header
     if ( $strip_454_TCAG && ( $body !~ s/^TCAG//i ) ) {
         if ($warn_454_TCAG) {
             warn
@@ -249,7 +248,8 @@ sub pipe_to_trf {
                 "Read does not start with keyseq TCAG. Full sequence: $body\n";
         }
     }
-    
+
+    # NOTE: Must print reverse complement AFTER the forward read
     say $trf_fh "$header\n$body";
 
     if ( $reverse_read && $header ne "" ) {
