@@ -138,13 +138,15 @@ sub fork_proc {
         # open my $logfile, ">", "$output_prefix.log"
         #     or die "Error opening file $output_prefix.log: $!\n";
         # $logfile->autoflush;
-        my $debug_trs_found = 0;
+        # my $debug_reads_processed = 0;
 
         while ( my ( $header, $body ) = $reader->() ) {
 
             # say $logfile $data[0] . "\n" . $data[1];
             pipe_to_trf( $reverse_read, $strip_454_TCAG, $warn_454_TCAG,
                 $trf_pipe, $header, $body );
+                # $trf_pipe, $header, $body, $debug_reads_processed );
+            # $debug_reads_processed++;
         }
 
   # Normally, close() returns false for failure of a pipe. If the only problem
@@ -234,6 +236,7 @@ given file handle to TRF pipeline.
 sub pipe_to_trf {
     my ( $reverse_read, $strip_454_TCAG, $warn_454_TCAG, $trf_fh, $header,
         $body )
+        # $body, $reads_processed )
         = @_;
 
     # warn "Processing header $header";
@@ -253,6 +256,7 @@ sub pipe_to_trf {
     say $trf_fh "$header\n$body";
 
     if ( $reverse_read && $header ne "" ) {
+    # if ( ($reads_processed > 1) && $reverse_read && $header ne "" ) {
         say $trf_fh $header . "_"
             . length($body)
             . "_RCYES\n"
