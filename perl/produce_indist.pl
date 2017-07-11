@@ -28,6 +28,7 @@ my $install_dir = $FindBin::Bin;
 my $redund_executable = "$install_dir/redund.exe";
 
 # my $proclu_executable = "$install_dir/psearch.exe";
+# Need a particular build of psearch (for now)
 my $proclu_executable = "$install_dir/psearch_reftoref.exe";
 
 #=<<Run renumber on the input filtered.leb36 file>>
@@ -109,8 +110,8 @@ for my $fl (@flens) {
     open my $mapping, "<", "$tmpdir_name/full.leb36.map";
     my %num_links_per_tr;
     while ( my $line = <$mapping> ) {
-        $line =~ /-(\d+)(['"])=>(\d+):.*/;
-        if ( ( exists( $trlist{$1} ) ) && ( $1 != $3 ) ) {
+        $line =~ /(-\d+)(['"])=>(\d+):.*/;
+        if ( ( exists( $trlist{$1} ) ) && ( -$1 != $3 ) ) {
             warn "$1 mapped to TR other than itself at flank length $fl: $3";
 
             # Check if seen as indist for this param set. Only
