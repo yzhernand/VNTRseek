@@ -5,7 +5,21 @@
 # where 'full.leb36' is the full path to the unfiltered or larger
 # reference set and 'filtered.leb36' is the full path to the filtered
 # or smaller reference set.
+# 
+# For determining indistinguishables, this script automates the process
+# described in (TODO: cite), where multiple runs of profile clustering
+# are performed with varying flank lengths (specifically 10, 20, and 50).
+# Indistinguishables at each flank length are determined simply by
+# checking if the filtered reference TR mapped to any other TR in the
+# full, unfiltered set. The union of indistinguishables at all flank
+# lengths is taken and written out to a file.
 #
+# This script allows configurable flank lengths (given as a comma
+# separated list as an argument), and also collects data such as the
+# number of TRs to which a TR was mapped. The latter is never used
+# to make any determination, but may be necessary should the method be
+# modified.
+# 
 
 use strict;
 use warnings;
