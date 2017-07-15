@@ -22,7 +22,7 @@ SQL
 trap handle_error ERR
 
 SCRIPTD="$( dirname "${BASH_SOURCE[0]}" )"
-WORKD="${SCRIPTD}/vntrseek1.08"
+WORKD="${SCRIPTD}"
 scriptname="${SCRIPTD}/master_for_qsub_test_advanced_useDB.sh"
 # perlfile=${WORKD}/vntrseek.pl
 MYSQLLOGIN="$(grep LOGIN "${WORKD}"/vs.cnf | cut -f2 -d'=')"

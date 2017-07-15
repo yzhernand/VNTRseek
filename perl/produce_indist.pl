@@ -5,7 +5,7 @@
 # where 'full.leb36' is the full path to the unfiltered or larger
 # reference set and 'filtered.leb36' is the full path to the filtered
 # or smaller reference set.
-# 
+#
 # For determining indistinguishables, this script automates the process
 # described in (TODO: cite), where multiple runs of profile clustering
 # are performed with varying flank lengths (specifically 10, 20, and 50).
@@ -19,7 +19,7 @@
 # number of TRs to which a TR was mapped. The latter is never used
 # to make any determination, but may be necessary should the method be
 # modified.
-# 
+#
 
 use strict;
 use warnings;
@@ -126,7 +126,10 @@ for my $fl (@flens) {
     while ( my $line = <$mapping> ) {
         $line =~ /(-\d+)(['"])=>(\d+):.*/;
         if ( ( exists( $trlist{$1} ) ) && ( -$1 != $3 ) ) {
-            warn "$1 mapped to TR other than itself at flank length $fl: $3";
+            if ( $ENV{DEBUG} ) {
+                warn
+                    "$1 mapped to TR other than itself at flank length $fl: $3";
+            }
 
             # Check if seen as indist for this param set. Only
             # increment global counter if we haven't seen a mapping

@@ -43,7 +43,7 @@ my %supported_formats;
 # place in the values list.
 my %reader_table;
 @reader_table{@supported_format_names}
-    = ( \&read_fasta, \&read_fastq, \&read_bam );
+    = ( \&read_fastaq, \&read_fastaq, \&read_bam );
 
 # Similarly for compression formats, add a new one to the list, then
 # add the regex and command needed to extract in the correct position
@@ -417,6 +417,66 @@ sub read_fastq {
         # warn "After qual: $.\n";
         $aux->[1] = 0;
         return ( ">" . $name, $seq );
+    };
+}
+
+=item I<read_fastaq()>
+
+FASTA/Q file reader. Requires seqtk.
+
+Given the input dir, file and compression formats, the number
+of files processed so far, a reference to a file count, and a list of
+all files, return a sub which knows which file it is responsible for
+and how to open it.
+
+This returned sub itself returns a list comprising a FASTA header and
+sequence each time it is called. When there are no more sequences to
+read, it returns an empty list.
+
+This particular sub does NOT modify the $files_to_process value.
+
+=cut
+
+sub read_fastaq {
+    my ( $input_dir, $compression, $files_processed,
+        $files_to_process, $filelist )
+        = @_;
+
+# warn "Need to process " . scalar(@$filelist) . " files, working on $files_processed\n";
+
+    # Since we are using seqtk, use pipe open mode
+    my $openmode = "-|";
+
+    warn "Processing file " . $filelist->[$files_processed] . "\n";
+    my $filename
+        = ( ($compression) ? $decompress_cmds{$compression} : "" ) . '"'
+        . "$input_dir/"
+        . $filelist->[$files_processed] . '"'
+        . "| seqtk seq -a -S";
+
+    # $files_processed contains how many files processed so far.
+    # Use to index into filelist
+    # warn $filename;
+    local $/ = ">";
+
+    # warn "Filename/command = '$filename'\n";
+    open my $fasta_fh, $openmode, $filename
+        or die "Error opening file " . $filename;
+
+   # Consume first empty record because of the way $/ splits the FASTA format.
+    <$fasta_fh>;
+    return sub {
+        local $/ = ">";
+        my $fasta_rec = <$fasta_fh>;
+        return () unless ($fasta_rec);
+        my ( $header, $seq ) = split( /\n+/, $fasta_rec );
+        chomp $header;
+        chomp $seq;
+        # warn "header: '$header'";
+        # my $seq = join( "", @seqlines );
+
+        # warn "seq: '$seq'";
+        return ( ">". $header, $seq );
     };
 }
 
