@@ -1148,6 +1148,7 @@ if ( $STEP == 7 ) {
     # just takes in a file name and then uses DBI to load the data. Doing this with
     # a temporary sql file while exposing the password on the command line is
     # totally unnecessary.
+    # TODO Change so that reference seq file does not need to be in install dir
     $exstring
         = "echo \"truncate TABLE $DBNAME.fasta_ref_reps; LOAD DATA LOCAL INFILE '$install_dir/$reference_seq' INTO TABLE $DBNAME.fasta_ref_reps FIELDS TERMINATED BY ',' IGNORE 1 LINES;\" > $TMPDIR/${DBNAME}_2.sql";
     system($exstring);
@@ -1312,6 +1313,7 @@ if ( $STEP == 11 ) {
         warn "\nWarning: Failed to create output result directory!\n";
     }
 
+    # TODO Change this so that the new produce_indist script is used. Will require new param
     if ($reference_indist_produce) {
         print STDERR "\n\n(generating indist file)...";
 
@@ -1321,6 +1323,7 @@ if ( $STEP == 11 ) {
         }
 
         # copy reference file to result dir
+        # TODO change so that referece file does not need to be in install dir
         system("cp ${install_dir}/$reference_file .");
         if ( $? == -1 ) {
             SetError( $STEP, "command failed: $!", -1 );
