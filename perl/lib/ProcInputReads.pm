@@ -25,7 +25,8 @@ use Carp;
 use feature 'say';
 use Exporter qw(import);
 
-our @EXPORT_OK = qw(fork_proc get_reader formats_regexs compressed_formats_regexs);
+our @EXPORT_OK
+    = qw(fork_proc get_reader formats_regexs compressed_formats_regexs);
 
 # List all supported file extensions and input formats here. Order of
 # input formats is in priority order: first format if found is used.
@@ -124,8 +125,9 @@ sub fork_proc {
             $input_dir, $compression, $files_processed,
             $files_to_process, $filelist
         );
-        my $output_prefix = "$output_dir/$files_processed";
         exit unless $reader;
+
+        my $output_prefix = "$output_dir/$files_processed";
         warn "Running child, files_processed = $files_processed...\n";
 
         # TODO Error checking if TRF, in the start of the pipe, breaks down
@@ -145,7 +147,8 @@ sub fork_proc {
             # say $logfile $data[0] . "\n" . $data[1];
             pipe_to_trf( $reverse_read, $strip_454_TCAG, $warn_454_TCAG,
                 $trf_pipe, $header, $body );
-                # $trf_pipe, $header, $body, $debug_reads_processed );
+
+            # $trf_pipe, $header, $body, $debug_reads_processed );
             # $debug_reads_processed++;
         }
 
@@ -236,6 +239,7 @@ given file handle to TRF pipeline.
 sub pipe_to_trf {
     my ( $reverse_read, $strip_454_TCAG, $warn_454_TCAG, $trf_fh, $header,
         $body )
+
         # $body, $reads_processed )
         = @_;
 
@@ -256,7 +260,8 @@ sub pipe_to_trf {
     say $trf_fh "$header\n$body";
 
     if ( $reverse_read && $header ne "" ) {
-    # if ( ($reads_processed > 1) && $reverse_read && $header ne "" ) {
+
+        # if ( ($reads_processed > 1) && $reverse_read && $header ne "" ) {
         say $trf_fh $header . "_"
             . length($body)
             . "_RCYES\n"
@@ -442,6 +447,10 @@ sub read_fastaq {
         $files_to_process, $filelist )
         = @_;
 
+    unless ( $files_processed < $$files_to_process ) {
+        return undef;
+    }
+
 # warn "Need to process " . scalar(@$filelist) . " files, working on $files_processed\n";
 
     # Since we are using seqtk, use pipe open mode
@@ -472,11 +481,12 @@ sub read_fastaq {
         my ( $header, $seq ) = split( /\n+/, $fasta_rec );
         chomp $header;
         chomp $seq;
+
         # warn "header: '$header'";
         # my $seq = join( "", @seqlines );
 
         # warn "seq: '$seq'";
-        return ( ">". $header, $seq );
+        return ( ">" . $header, $seq );
     };
 }
 
@@ -547,6 +557,11 @@ sub read_bam {
 
     # Save the number of samtools commands we'll need to use
     $$files_to_process = scalar @samcmds;
+
+  # Return undef if the index "$files_processed" exceeds the number of regions
+    unless ( $files_processed < @samcmds ) {
+        return undef;
+    }
 
     # warn "$files_processed\n";
     warn "Processing bam chunk using: " . $samcmds[$files_processed] . "\n";
