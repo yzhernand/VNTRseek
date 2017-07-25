@@ -36,9 +36,34 @@ use lib "$FindBin::Bin/vntr";
 require "vutil.pm";
 use vutil qw(get_credentials stats_get stats_set);
 
-# Step one, retrieve from the database the list of all reads mapping to a reftr
-#TODO Test speed of DISTINCT (and syntax)
-my $all_reads_mapped_query = q{SELECT DISTINCT map.refid AS reftrid, SUBSTRING_INDEX(fasta_reads.head, "_", -1) AS origintrid FROM map INNER JOIN rank ON rank.refid=map.refid AND rank.readid=map.readid INNER JOIN rankflank ON rankflank.refid=map.refid AND rankflank.readid=map.readid INNER JOIN replnk ON replnk.rid=map.readid INNER JOIN fasta_reads on fasta_reads.sid=replnk.sid INNER JOIN fasta_ref_reps ON map.refid=fasta_ref_reps.rid WHERE map.bbb = 1 ORDER BY reftrid,origintrid};
+# Get input files
+die "Usage: $0 <dbsuffix> <reference.seq> <reference.leb36> <reference.indist>"
+	unless (@ARGV == 4);
+my ($dbsuffix, $reftrset, $refleb, $refindist) = @ARGV;
+my $MSDIR = $ENV{HOME} . "/${dbsuffix}.";
+
+# Connect to DB
+my ( $login, $pass, $host ) = get_credentials($MSDIR);
+my $dbh = DBI->connect( "DBI:mysql:VNTRPIPE_$dbsuffix;mysql_local_infile=1;host=$host",
+    "$login", "$pass" )
+    || die "Could not connect to database: $DBI::errstr";
+# Retrieve from the database the list of all reads mapping to a reftr
+# my $all_reads_mapped_query = q{SELECT DISTINCT map.refid AS reftrid, SUBSTRING_INDEX(fasta_reads.head, "_", -1) AS origintrid
+# 	FROM map INNER JOIN replnk ON replnk.rid=map.readid
+# 		INNER JOIN fasta_reads on fasta_reads.sid=replnk.sid
+# 	WHERE map.bbb = 1 ORDER BY reftrid,origintrid};
+
+# Retrieve from the database the list of all reads mapping to a reftr called as a VNTR with at least one spanning read
+my $vntr_reads_mapped_query = q{SELECT DISTINCT map.refid AS reftrid, SUBSTRING_INDEX(fasta_reads.head, "_", -1) AS origintrid
+	FROM map INNER JOIN replnk ON replnk.rid=map.readid
+		INNER JOIN fasta_reads on fasta_reads.sid=replnk.sid
+		INNER JOIN fasta_ref_reps ON map.refid = fasta_ref_reps.rid
+	WHERE map.bbb = 1 AND support_vntr_span1 > 0 ORDER BY reftrid,origintrid;};
+my $get_vntr_mapped_reads_sth = $dbh->prepare($vntr_reads_mapped_query);
+$get_vntr_mapped_reads_sth->execute
+	or die "Error executing query for all mapped reads: " . $get_vntr_mapped_reads_sth->errstr();
+
+
 my $span1_vntrs_query = q{SELECT rid FROM fasta_ref_reps WHERE support_vntr_span1 > 0 ORDER BY rid};
 
 # TODO Replace this in perl
