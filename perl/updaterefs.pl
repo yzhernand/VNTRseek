@@ -25,13 +25,13 @@ if ( $argc < 12 ) {
         "Usage: updaterefs.pl read_profiles_folder read_profiles_folder_clean dbname msdir file_representative latexfile REFS_TOTAL REFS_REDUND HTTPSERVER MIN_SUPPORT_REQUIRED VERSION TEMPDIR\n";
 }
 
-my $curdir  = getcwd;
-my $readpf  = $ARGV[0];
-my $rpfc    = $ARGV[1];
-my $DBNAME  = $ARGV[2];
-my $MSDIR   = $ARGV[3];
-my $filerep = $ARGV[4];
-my $latex   = $ARGV[5];
+my $curdir        = getcwd;
+my $readpf        = $ARGV[0];
+my $rpfc          = $ARGV[1];
+my $DBNAME        = $ARGV[2];
+my $MSDIR         = $ARGV[3];
+my $filerep       = $ARGV[4];
+my $result_prefix = $ARGV[5];
 
 my $REFS_TOTAL           = $ARGV[6];
 my $REFS_REDUND          = $ARGV[7];
@@ -40,7 +40,7 @@ my $MIN_SUPPORT_REQUIRED = $ARGV[9];
 my $VERSION              = $ARGV[10];
 my $TEMPDIR              = $ARGV[11];
 
-(my $BASENAME = $DBNAME) =~ s/VNTRPIPE_//;
+( my $BASENAME = $DBNAME ) =~ s/VNTRPIPE_//;
 
 # set these mysql credentials in vs.cnf (in installation directory)
 my ( $LOGIN, $PASS, $HOST ) = get_credentials($MSDIR);
@@ -158,7 +158,7 @@ sub print_vcf {
 
     # $update_spanN_sth->finish;
     my $filename
-        = "${DBNAME}."
+        = "${result_prefix}."
         . ( ($allwithsupport) ? "allwithsupport." : "" )
         . "span${MIN_SUPPORT_REQUIRED}" . ".vcf";
     open my $vcffile, ">", $filename
@@ -422,7 +422,7 @@ sub print_distr {
     $num = 0;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
     $num = $sth->rows;
-    my $i   = 0;
+    my $i = 0;
     while ( $i < $num ) {
         my @data = $sth->fetchrow_array();
         if ( $data[0] < $LARGEST_PSIZE ) {
@@ -884,6 +884,7 @@ sub print_distr {
     $num = $sth->rows;
     $i   = 0;
     my %SpanninDist;
+
     while ( $i < $num ) {
         my @data = $sth->fetchrow_array();
         $SpanninDist{ $data[1] }++;
@@ -1388,7 +1389,7 @@ sub print_distr {
 
 ###################
 sub print_latex {
-    my ($dbh, $ReadTRsSupport) = @_;
+    my ( $dbh, $ReadTRsSupport ) = @_;
 
     my $sum_has_support  = 0;
     my $sum_span1        = 0;
@@ -1612,7 +1613,7 @@ sub print_latex {
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
     $num = $sth->rows;
     if ($num) {
-        my @data   = $sth->fetchrow_array();
+        my @data = $sth->fetchrow_array();
         $mapped = $data[0];
     }
     $sth->finish();
@@ -1633,7 +1634,7 @@ sub print_latex {
     $num = $sth->rows;
     my $rankflank;
     if ($num) {
-        my @data      = $sth->fetchrow_array();
+        my @data = $sth->fetchrow_array();
         $rankflank = $data[0];
     }
     $sth->finish();
@@ -1659,7 +1660,7 @@ sub print_latex {
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
     $num = $sth->rows;
     if ($num) {
-        my @data            = $sth->fetchrow_array();
+        my @data = $sth->fetchrow_array();
         $VNTRasSingleton = $data[0];
     }
     $sth->finish();
@@ -1671,7 +1672,7 @@ sub print_latex {
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
     $num = $sth->rows;
     if ($num) {
-        my @data                  = $sth->fetchrow_array();
+        my @data = $sth->fetchrow_array();
         $VNTRasDistinguishable = $data[0];
     }
     $sth->finish();
@@ -1685,7 +1686,7 @@ sub print_latex {
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
     $num = $sth->rows;
     if ($num) {
-        my @data                    = $sth->fetchrow_array();
+        my @data = $sth->fetchrow_array();
         $VNTRasIndistinguishable = $data[0];
     }
     $sth->finish();
@@ -2088,17 +2089,16 @@ sub calc_entropy {
     for ( my $e = 2; $e >= 0; $e-- ) {
         for ( my $f = 0; $f <= $e; $f++ ) {
             if ( $diversity[$f] < $diversity[ $f + 1 ] ) {
-                my $temp                = $diversity[ $f + 1 ];
+                my $temp = $diversity[ $f + 1 ];
                 $diversity[ $f + 1 ] = $diversity[$f];
-                $diversity[$f]       = $temp;
+                $diversity[$f] = $temp;
             }
         }
     }
 
     my $entropy = (
         (     ( $diversity[0] == 0 ) ? 0
-            : ( $diversity[0] * ( log( $diversity[0] ) / 
-                log(2) ) )
+            : ( $diversity[0] * ( log( $diversity[0] ) / log(2) ) )
         ) + (
             ( $diversity[1] == 0 ) ? 0
             : ( $diversity[1] * ( log( $diversity[1] ) / log(2) ) )
@@ -2146,12 +2146,12 @@ my $dbh = DBI->connect( "DBI:mysql:$DBNAME;mysql_local_infile=1;host=$HOST",
 
 SetStatistics( "N_MIN_SUPPORT", $MIN_SUPPORT_REQUIRED );
 
-open( STDFILE, ">", "${latex}.span${MIN_SUPPORT_REQUIRED}.tex" )
+open( STDFILE, ">", "${result_prefix}.span${MIN_SUPPORT_REQUIRED}.tex" )
     or die
-    "\nCan't open for writing ${latex}.span${MIN_SUPPORT_REQUIRED}.tex\n\n";
-open( DISTRFILE, ">", "${latex}.span${MIN_SUPPORT_REQUIRED}.txt" )
+    "\nCan't open for writing ${result_prefix}.span${MIN_SUPPORT_REQUIRED}.tex\n\n";
+open( DISTRFILE, ">", "${result_prefix}.span${MIN_SUPPORT_REQUIRED}.txt" )
     or die
-    "\nCan't open for reading ${latex}.span${MIN_SUPPORT_REQUIRED}.txt\n\n";
+    "\nCan't open for reading ${result_prefix}.span${MIN_SUPPORT_REQUIRED}.txt\n\n";
 
 my $sth1
     = $dbh->prepare(
@@ -2460,7 +2460,7 @@ $sth2
 $sth2->execute() or die "Cannot execute: " . $sth2->errstr();
 $sth2->finish;
 
-print_latex($dbh, $ReadTRsSupport);
+print_latex( $dbh, $ReadTRsSupport );
 
 print_distr($dbh);
 
@@ -2468,7 +2468,7 @@ print_distr($dbh);
 print_vcf($dbh);
 
 # All with support
-print_vcf($dbh, 1);
+print_vcf( $dbh, 1 );
 
 # set old db settings
 $sth = $dbh->prepare('SET AUTOCOMMIT = 1;')
