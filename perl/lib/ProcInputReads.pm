@@ -457,11 +457,16 @@ sub read_fastaq {
     my $openmode = "-|";
 
     warn "Processing file " . $filelist->[$files_processed] . "\n";
-    my $filename
-        = ( ($compression) ? $decompress_cmds{$compression} : "" ) . '"'
+    my $filename = '"'
         . "$input_dir/"
-        . $filelist->[$files_processed] . '"'
-        . "| seqtk seq -a -S";
+        . $filelist->[$files_processed] . '"';
+
+    if ($compression) {
+        $filename = $decompress_cmds{$compression} . $filename . "| seqtk seq -a -S"
+    }
+    else {
+        $filename = "seqtk seq -a -S " . $filename;
+    }
 
     # $files_processed contains how many files processed so far.
     # Use to index into filelist

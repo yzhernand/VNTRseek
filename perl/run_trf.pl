@@ -96,10 +96,10 @@ $files_to_process = @filenames;
 my $compression_msg
     = ($compression)
     ? "compressed as $compression"
-    : "unknown compression (assuming uncompressed)";
+    : "assuming uncompressed";
 die "0 supported files found in $input_dir. Exiting\n" if $files_to_process == 0;
 warn
-    "$files_to_process supported files ($input_format format, $compression) found in $input_dir\n";
+    "$files_to_process supported files ($input_format format, $compression_msg) found in $input_dir\n";
 
 # /proc/cpuinfo is found on Linux/cygwin only: use other methods for other platforms
 if ( $max_processes == 0 ) {
