@@ -131,7 +131,8 @@ while ( $i < $numReadsWithMultTRsMappedMultRefs ) {
         }
 
         # 1st entry can only be deleted due to NOT being on same chromosome and close together as 2nd entry (or more than $maxRepeatsPerRead entries exist)
-        if ($j == $maxRepeatsPerRead
+        # TODO Make this compare all adjacent pairs (not just TRs 1 and 2 in the read) for longer reads.
+        if ($j == 2
             && (  !( $data2[5] eq $oldrefhead && $RefDiff <= $readlen )
                 || ( $numTRsInRead > $maxRepeatsPerRead ) )
             )
