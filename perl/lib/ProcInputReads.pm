@@ -543,6 +543,9 @@ sub read_bam {
 # We need to read the regions in the bam file and construct samtools commands
 # These are all saved in an array which are interated through like the FASTA files before.
 # Then we catch the output of these through a file handle, and process into FASTA.
+# TODO Modify this to label reads by which mate of a pair each read is, if this is a paired-end run. (We expect unique reads)
+# TODO Change how we segment these: should we divide the sequences into fixed read portions? Divide each chromosome into even parts? Etc..
+# TODO Maybe also modify this so that only the longes/best(?) alignments for each read (we expect unique reads)
     for my $r (@regions) {
         my ( $chr, $end, $num_aln, $num_unaln ) = split /\s+/, $r;
         my $unmapped = ( $chr eq $unmapped_template );
