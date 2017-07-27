@@ -30,16 +30,16 @@ use FindBin;
 use Cwd;
 use DBI;
 # use File::Copy;
-# use File::Basename;
+use File::Basename;
 # use File::Temp qw/ tempfile tempdir /;
 use lib "$FindBin::Bin/vntr";
 require "vutil.pm";
-use vutil qw(get_credentials stats_get stats_set);
+use vutil qw(get_credentials get_config);
 
 # Get input files
-die "Usage: $0 <dbsuffix> <reference.seq> <reference.leb36> <reference.indist>"
-	unless (@ARGV == 4);
-my ($dbsuffix, $reftrset, $refleb, $refindist) = @ARGV;
+die "Usage: $0 <dbsuffix> [new reference set name]"
+	unless (@ARGV == 1);
+my ($dbsuffix, $refsetname) = @ARGV;
 my $MSDIR = $ENV{HOME} . "/${dbsuffix}.";
 
 # Connect to DB
@@ -62,9 +62,45 @@ my $vntr_reads_mapped_query = q{SELECT DISTINCT map.refid AS reftrid, SUBSTRING_
 my $get_vntr_mapped_reads_sth = $dbh->prepare($vntr_reads_mapped_query);
 $get_vntr_mapped_reads_sth->execute
 	or die "Error executing query for all mapped reads: " . $get_vntr_mapped_reads_sth->errstr();
+my ($vntr, $mapped_to, %discard);
+$get_vntr_mapped_reads_sth->bind_columns(\($vntr, $mapped_to));
 
+# Iterate through this list and remove all VNTRs and other mapped loci
+while ($get_vntr_mapped_reads_sth->fetch) {
+	$discard{$vntr} = 1;
+	$discard{$mapped_to} = 1;
+}
 
-my $span1_vntrs_query = q{SELECT rid FROM fasta_ref_reps WHERE support_vntr_span1 > 0 ORDER BY rid};
+for my $d (sort keys %discard) {
+	say $d;
+}
+
+my @ref_files = (get_config($MSDIR))[5..7];
+for my $r (@ref_files) {
+	my @lines;
+	my ($name, $path, $suffix) = fileparse( $r, ".leb36", ".seq", ".indist" );
+	# If not an absolute path, assume file is in install dir.
+	# TODO maybe file IS in pwd!
+	$path = "$FindBin::Bin" if ($path eq "./");
+	open my $ref_in_fh, "<", "$path/$name.$suffix";
+	while (my $line = <$ref_in_fh>) {
+		my ($trid) = split /[,\s]/, $line;
+		# If this is the .seq header, we keep that.
+		if ($trid eq "Repeatid") {
+			push @lines, $line;
+			next;
+		}
+
+		push @lines, $line unless (exists $discard{abs($trid)});
+	}
+	close $ref_in_fh;
+
+	open my $ref_out_fh, ">", ( ($refsetname) ? $refsetname : @lines ) . ".$suffix";
+	print $ref_out_fh, @lines;
+	close $ref_out_fh;
+}
+
+# my $span1_vntrs_query = q{SELECT rid FROM fasta_ref_reps WHERE support_vntr_span1 > 0 ORDER BY rid};
 
 # TODO Replace this in perl
 # awk '{if(ARGIND==1){vntrs[$1]=1}else if((ARGIND==2)&&(-$1 in vntrs)){print $0}}' vntrs_VNTRPIPE_228486_HG38_sw100_set.span1.txt 228486_sw100_set_all_reads_mapped.txt > 228486_sw100_set_vntr_reads_mapped.txt

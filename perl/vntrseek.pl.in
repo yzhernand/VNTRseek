@@ -1752,12 +1752,12 @@ if ( $STEP == 19 ) {
     # cleanup
     print STDERR "Cleanup...\n";
 
-    #$exstring = "rm -rf $read_profiles_folder_clean/best";
-    #system($exstring);
-    #$exstring = "rm -rf $read_profiles_folder_clean/edges";
-    #system($exstring);
-    #$exstring = "rm -rf $read_profiles_folder_clean/out";
-    #system($exstring);
+    $exstring = q(find "./$read_profiles_folder_clean/best" -type f -delete);
+    system($exstring);
+    $exstring = q(find "./$read_profiles_folder_clean/edges" -type f -delete);
+    system($exstring);
+    $exstring = q(find "./$read_profiles_folder_clean/out" -type f -delete);
+    system($exstring);
 
     SetStatistics( "TIME_REPORTS", time() - $timestart );
     SetDatetime("DATE_REPORTS");
