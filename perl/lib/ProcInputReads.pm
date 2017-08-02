@@ -115,20 +115,20 @@ sub fork_proc {
     my ($input_dir,        $output_dir,       $trf_param,
         $trf2proclu_param, $reverse_read,     $strip_454_TCAG,
         $warn_454_TCAG,    $format,           $compression,
-        $files_processed,  $files_to_process, $filelist
+        $current_file,  $files_to_process, $filelist
     ) = @_;
     defined( my $pid = fork() )
         or die "Unable to fork: $!\n";
     if ( $pid == 0 ) {    #Child
 
         my $reader = $reader_table{$format}->(
-            $input_dir, $compression, $files_processed,
+            $input_dir, $compression, $current_file,
             $files_to_process, $filelist
         );
         exit unless $reader;
 
-        my $output_prefix = "$output_dir/$files_processed";
-        warn "Running child, files_processed = $files_processed...\n";
+        my $output_prefix = "$output_dir/$current_file";
+        warn "Running child, current_file = $current_file...\n";
 
         # TODO Error checking if TRF, in the start of the pipe, breaks down
         local $SIG{PIPE} = sub { die "Error in trf+trf2proclu pipe: $?\n" };
@@ -175,6 +175,11 @@ sub fork_proc {
         }
 
         # Check exit error
+        # Here, check if log output file is empty. If so, delete the output for this fork
+        if (-z "$output_prefix.log" || !(-e "$output_prefix.index")) {
+            warn "Process $current_file did not find any VNTRs. Removing leb36 file...\n";
+            unlink("$output_prefix.leb36")
+        }
 
         exit;
     }
@@ -194,12 +199,12 @@ a stream to sequences from the read file.
 =cut
 
 sub get_reader {
-    my ( $input_dir, $format, $compression, $files_processed,
+    my ( $input_dir, $format, $compression, $current_file,
         $files_to_process, $filelist )
         = @_;
 
     my $reader = $reader_table{$format}->(
-        $input_dir, $compression, $files_processed,
+        $input_dir, $compression, $current_file,
         $files_to_process, $filelist
     );
 
@@ -287,22 +292,22 @@ This particular sub does NOT modify the $files_to_process value.
 =cut
 
 sub read_fasta {
-    my ( $input_dir, $compression, $files_processed,
+    my ( $input_dir, $compression, $current_file,
         $files_to_process, $filelist )
         = @_;
 
-# warn "Need to process " . scalar(@$filelist) . " files, working on $files_processed\n";
+# warn "Need to process " . scalar(@$filelist) . " files, working on $current_file\n";
 
  # If file uncompressed, simply read from file. Else open a pipe to a command.
     my $openmode = ($compression) ? "-|" : "<";
 
-    warn "Processing file " . $filelist->[$files_processed] . "\n";
+    warn "Processing file " . $filelist->[$current_file] . "\n";
     my $filename
         = ( ($compression) ? $decompress_cmds{$compression} : "" ) . '"'
         . "$input_dir/"
-        . $filelist->[$files_processed] . '"';
+        . $filelist->[$current_file] . '"';
 
-    # $files_processed contains how many files processed so far.
+    # $current_file contains how many files processed so far.
     # Use to index into filelist
     # warn $filename;
     local $/ = ">";
@@ -349,20 +354,20 @@ This particular sub does NOT modify the $files_to_process value.
 sub read_fastq {
 
     # Code modified from https://www.biostars.org/p/11599/#11657
-    my ( $input_dir, $compression, $files_processed,
+    my ( $input_dir, $compression, $current_file,
         $files_to_process, $filelist )
         = @_;
 
  # If file uncompressed, simply read from file. Else open a pipe to a command.
     my $openmode = ($compression) ? "-|" : "<";
 
-    warn "Processing file " . $filelist->[$files_processed] . "\n";
+    warn "Processing file " . $filelist->[$current_file] . "\n";
     my $filename
         = ( ($compression) ? $decompress_cmds{$compression} : "" ) . '"'
         . "$input_dir/"
-        . $filelist->[$files_processed] . '"';
+        . $filelist->[$current_file] . '"';
 
-    # $files_processed contains how many files processed so far.
+    # $current_file contains how many files processed so far.
     # Use to index into filelist
     # warn "Filename/command = '$filename'\n";
     open my $fastq_fh, $openmode, $filename
@@ -443,23 +448,23 @@ This particular sub does NOT modify the $files_to_process value.
 =cut
 
 sub read_fastaq {
-    my ( $input_dir, $compression, $files_processed,
+    my ( $input_dir, $compression, $current_file,
         $files_to_process, $filelist )
         = @_;
 
-    unless ( $files_processed < $$files_to_process ) {
+    unless ( $current_file < $$files_to_process ) {
         return undef;
     }
 
-# warn "Need to process " . scalar(@$filelist) . " files, working on $files_processed\n";
+# warn "Need to process " . scalar(@$filelist) . " files, working on $current_file\n";
 
     # Since we are using seqtk, use pipe open mode
     my $openmode = "-|";
 
-    warn "Processing file " . $filelist->[$files_processed] . "\n";
+    warn "Processing file " . $filelist->[$current_file] . "\n";
     my $filename = '"'
         . "$input_dir/"
-        . $filelist->[$files_processed] . '"';
+        . $filelist->[$current_file] . '"';
 
     if ($compression) {
         $filename = $decompress_cmds{$compression} . $filename . "| seqtk seq -a -S"
@@ -468,7 +473,7 @@ sub read_fastaq {
         $filename = "seqtk seq -a -S " . $filename;
     }
 
-    # $files_processed contains how many files processed so far.
+    # $current_file contains how many files processed so far.
     # Use to index into filelist
     # warn $filename;
     local $/ = ">";
@@ -514,7 +519,7 @@ value of $files_to_process.
 =cut
 
 sub read_bam {
-    my ( $input_dir, $compression, $files_processed,
+    my ( $input_dir, $compression, $current_file,
         $files_to_process, $filelist )
         = @_;
     my $bamfile = "$input_dir/" . $filelist->[0];
@@ -566,16 +571,16 @@ sub read_bam {
     # Save the number of samtools commands we'll need to use
     $$files_to_process = scalar @samcmds;
 
-  # Return undef if the index "$files_processed" exceeds the number of regions
-    unless ( $files_processed < @samcmds ) {
+  # Return undef if the index "$current_file" exceeds the number of regions
+    unless ( $current_file < @samcmds ) {
         return undef;
     }
 
-    # warn "$files_processed\n";
-    warn "Processing bam chunk using: " . $samcmds[$files_processed] . "\n";
+    # warn "$current_file\n";
+    warn "Processing bam chunk using: " . $samcmds[$current_file] . "\n";
 
     local $SIG{PIPE} = sub { die "Error in samtools pipe: $?\n" };
-    open my $samout, "-|", $samcmds[ $files_processed++ ]
+    open my $samout, "-|", $samcmds[ $current_file++ ]
         or die "Error opening samtools pipe: $!\n";
     return sub {
         my $bam_rec = <$samout>;
@@ -607,12 +612,12 @@ in a certain format and returns a subroutine which works as expected
 by fork_proc().
 
 sub read_FORMAT {
-    my ( $input_dir, $compression, $files_processed, $files_to_process, $filelist )
+    my ( $input_dir, $compression, $current_file, $files_to_process, $filelist )
         = @_;
 
     # Here make some decisions. For instance, if we expect to process multiple
     # files, such as FASTA or FASTQ files and unlike BAM files, then choose
-    # the file to read using $files_processed. Otherwise, logically split
+    # the file to read using $current_file. Otherwise, logically split
     # the input and decide which split this call will work on. You may have to
     # write the next section before this one in the case of multiple files.
 
