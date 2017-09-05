@@ -472,14 +472,14 @@ int main(int argc, char *argv[])
                     dst = templ_flank_ptr->left;
                     for (i = start - 2; i >= 0; i--) {
                         *dst = src3[i];
-                        *dst++;
+                        dst++;
                     }
                     *dst = 0;
 
                     dst = templ_flank_ptr->right;
                     for (i = end; i < length; i++) {
                         *dst = src3[i];
-                        *dst++;
+                        dst++;
                     }
                     *dst = 0;
 

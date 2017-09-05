@@ -205,6 +205,9 @@ if ( "" eq $DBSUFFIX ) {
 }
 
 # where config file will go
+# Convert any input for DBSUFFIX to lower case.
+$DBSUFFIX=lc($DBSUFFIX);
+# This path needs to be able to pick any case difference, for backwards compatibility
 my $MSDIR = $ENV{HOME} . "/${DBSUFFIX}.";
 
 # set variables from vs.cnf
@@ -1752,11 +1755,11 @@ if ( $STEP == 19 ) {
     # cleanup
     print STDERR "Cleanup...\n";
 
-    $exstring = q(find "./$read_profiles_folder_clean/best" -type f -delete);
+    $exstring = q(find "${read_profiles_folder_clean}/best" -type f -delete);
     system($exstring);
-    $exstring = q(find "./$read_profiles_folder_clean/edges" -type f -delete);
+    $exstring = q(find "${read_profiles_folder_clean}/edges" -type f -delete);
     system($exstring);
-    $exstring = q(find "./$read_profiles_folder_clean/out" -type f -delete);
+    $exstring = q(find "${read_profiles_folder_clean}/out" -type f -delete);
     system($exstring);
 
     SetStatistics( "TIME_REPORTS", time() - $timestart );

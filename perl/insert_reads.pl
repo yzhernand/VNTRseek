@@ -359,6 +359,7 @@ my $qualstr       = "";
 my $HEADER_SUFFIX = "";
 my @fasta_reads_rows;
 
+# TODO Can be made more efficient for BAM files?
 my $files_processed = 0;
 while ( $files_processed < $files_to_process ) {
     say STDERR "Reading file/file split ", ( $files_processed + 1 );
