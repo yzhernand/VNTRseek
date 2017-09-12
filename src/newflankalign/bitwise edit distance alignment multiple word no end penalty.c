@@ -106,7 +106,7 @@ int Edit_Distance_multiple_word_NoEndPenaltySeq1(char *stringN, char *stringM, i
 	else nWords=1;  //does not call Edit_Distance_single_word
     junkBits = wordSize -1 + (nWords -1)*wordSize - N;
 	junkBitsMask = 0xFFFFFFFFFFFFFFFF >> junkBits;
-    printf("\n>>>%s",convertToBitString64(junkBitsMask));
+    // printf("\n>>>%s",convertToBitString64(junkBitsMask));
 	
 	//length of strings for edit distance is n and m
 	//number of wordSize-bit words is nWords
@@ -326,28 +326,28 @@ int Edit_Distance_multiple_word_NoEndPenaltySeq1(char *stringN, char *stringM, i
 
 	//***end of identical code to Edit_Distance_multiple_word
 	
-    printf("\n\nFinal:");
-    printf("\nP_D:         ");
-    for(j=0;j<NWords;j++){
-        if (j==NWords-1) printf("\n%s ",convertToBitString64(P_D[j]&junkBitsMask));
-        else printf("\n%s ",convertToBitString64(P_D[j]));
-    }
-    printf("\n");
-    for (i=0; i<wordSize-junkBits; i++) {
-        printf(" ");
-    }
-    printf("^");
+    // printf("\n\nFinal:");
+    // printf("\nP_D:         ");
+    // for(j=0;j<NWords;j++){
+    //     if (j==NWords-1) printf("\n%s ",convertToBitString64(P_D[j]&junkBitsMask));
+    //     else printf("\n%s ",convertToBitString64(P_D[j]));
+    // }
+    // printf("\n");
+    // for (i=0; i<wordSize-junkBits; i++) {
+    //     printf(" ");
+    // }
+    // printf("^");
 
-    printf("\nP_I = ~P_S_or_P_D:  ");
-    for(j=0;j<NWords;j++){
-        if (j==NWords-1) printf("\n%s ",convertToBitString64(~P_S_or_P_D[j]&junkBitsMask));
-        else printf("\n%s ",convertToBitString64(~P_S_or_P_D[j]));
-    }
-    printf("\n");
-    for (i=0; i<wordSize-junkBits; i++) {
-        printf(" ");
-    }
-    printf("^");
+    // printf("\nP_I = ~P_S_or_P_D:  ");
+    // for(j=0;j<NWords;j++){
+    //     if (j==NWords-1) printf("\n%s ",convertToBitString64(~P_S_or_P_D[j]&junkBitsMask));
+    //     else printf("\n%s ",convertToBitString64(~P_S_or_P_D[j]));
+    // }
+    // printf("\n");
+    // for (i=0; i<wordSize-junkBits; i++) {
+    //     printf(" ");
+    // }
+    // printf("^");
     
 	//find best edit distance score in final row
 	mask=0x0000000000000001;
