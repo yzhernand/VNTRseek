@@ -32,7 +32,7 @@ use DBI;
 # use File::Copy;
 use File::Basename;
 # use File::Temp qw/ tempfile tempdir /;
-use lib "$FindBin::Bin/vntr";
+use lib "$FindBin::RealBin/lib";
 require "vutil.pm";
 use vutil qw(get_credentials get_config);
 

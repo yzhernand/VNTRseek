@@ -393,13 +393,13 @@ int Edit_Distance_multiple_word_NoEndPenaltySeq1(char *stringN, char *stringM, i
 	
 	//debug
 	
-    printf("\n");
-    for (i=0; i<bestFinalColumn-1; i++) {
-        printf(" ");
-    }
-    printf("^%d, %d",bestFinalColumn,NWords*wordSize-junkBits);
-    printf("\nGlobal Score: %d",Score);
-	printf("\nBest Final Row Score is %d",bestFinalRowScore);
+    // printf("\n");
+    // for (i=0; i<bestFinalColumn-1; i++) {
+    //     printf(" ");
+    // }
+ //    printf("^%d, %d",bestFinalColumn,NWords*wordSize-junkBits);
+ //    printf("\nGlobal Score: %d",Score);
+	// printf("\nBest Final Row Score is %d",bestFinalRowScore);
 	 
 	
 	freeMultipleWords;

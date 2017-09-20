@@ -10,12 +10,6 @@ INSTALL(PROGRAMS ${perlscripts}
     DESTINATION ${InstallSuffix}
     )
 
-# TODO might make redundant?
-# Install vntr perl modules
-INSTALL(DIRECTORY vntr/
-    DESTINATION ${InstallSuffix}/vntr
-    )
-
 # Install perl modules
 INSTALL(DIRECTORY lib/
     DESTINATION ${InstallSuffix}/lib

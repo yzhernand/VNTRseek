@@ -10,7 +10,7 @@ use Getopt::Std;
 use FindBin;
 use File::Basename;
 
-use lib "$FindBin::Bin/vntr"; 
+use lib "$FindBin::RealBin/lib"; 
 require "vutil.pm";
 
 use vutil ('get_credentials');

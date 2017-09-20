@@ -9,9 +9,8 @@ use POSIX qw(strftime);
 use FindBin;
 use File::Basename;
 
-use lib "$FindBin::Bin/vntr";
-require "vutil.pm";
 use lib "$FindBin::RealBin/lib";
+require "vutil.pm";
 use ProcInputReads qw(get_reader formats_regexs compressed_formats_regexs);
 
 use vutil qw(get_credentials write_mysql stats_set);

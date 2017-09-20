@@ -13,7 +13,7 @@ use POSIX qw(strftime);
 use FindBin;
 use File::Basename;
 
-use lib "$FindBin::Bin/vntr";
+use lib "$FindBin::RealBin/lib";
 require "vutil.pm";
 
 use vutil qw(get_credentials write_mysql stats_set);

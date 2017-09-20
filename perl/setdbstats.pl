@@ -16,7 +16,7 @@ use File::Basename;
 
 use List::Util qw[min max];
 
-use lib "$FindBin::Bin/vntr"; # must be same as install dir!
+use lib "$FindBin::RealBin/lib"; # must be same as install dir!
 
 require "vutil.pm";
 

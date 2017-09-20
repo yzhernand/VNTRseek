@@ -457,16 +457,31 @@ int main(int argc, char *argv[])
 
                     templ_flank_ptr = (FLANK *)smalloc(sizeof(FLANK));
 
-                    start = atoi(src1); end = atoi(src2); length = strlen(src3);
+                    start = strtol(src1, NULL, 10);
+                    if ((errno == ERANGE) || (errno != 0 && start == 0)) {
+                        perror("strtol");
+                        exit(EXIT_FAILURE);
+                    }
 
-                    //printf("start: %d end: %d length: %d\n\n",start, end, length);
+                    end = strtol(src2, NULL, 10);
+                    if ((errno == ERANGE) || (errno != 0 && end == 0)) {
+                        perror("strtol");
+                        exit(EXIT_FAILURE);
+                    }
+
+                    length = strlen(src3);
+
+                    // fprintf(stderr, "start: %d end: %d length: %d\n\n",start, end, length);
                     //exit(1);
 
-                    templ_flank_ptr->left = (char *)calloc(start + 2, sizeof(char));
-                    templ_flank_ptr->right = (char *)calloc(length - end + 2, sizeof(char));
+                    templ_flank_ptr->left = calloc(start + 2, sizeof(*templ_flank_ptr->left));
+                    templ_flank_ptr->right = calloc((length - end) + 2, sizeof(*templ_flank_ptr->right));
 
-                    if (!templ_flank_ptr->left || !templ_flank_ptr->right)
-                        doCriticalErrorAndQuit("\n\nFlankAlign - memory error 2. Aborting!\n\n");
+                    if (!templ_flank_ptr->left)
+                        doCriticalErrorAndQuit("\n\nFlankAlign - memory error 2 in left flank. Aborting!\n\n");
+
+                    if (!templ_flank_ptr->right)
+                        doCriticalErrorAndQuit("\n\nFlankAlign - memory error 2 in right flank. rid: %d, start: %d end: %d length: %d, start+2: %d, length-end+2: %d. Aborting!\n\n", rid, start, end, length, start+2, length-end+2);
 
 
                     dst = templ_flank_ptr->left;

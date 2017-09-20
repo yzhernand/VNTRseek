@@ -46,25 +46,17 @@ my $VERSION = '@VNTRVer@';
 # this is where the pipeline is installed
 my $install_dir = "$FindBin::RealBin";
 
-use lib "$FindBin::RealBin/vntr";    # must be same as install dir!
+use lib "$FindBin::RealBin/lib";    # must be same as install dir!
 
 require "vutil.pm";
 
-use vutil ('read_global_config_file');
-use vutil ('get_config');
-use vutil ('get_config_vars');
-use vutil ('get_credentials');
-use vutil ('set_config');
-use vutil ('set_config_vars');
-use vutil ('set_credentials');
-use vutil ('write_mysql');
-use vutil ('stats_set');
-use vutil ('stats_get');
-use vutil ('set_datetime');
-use vutil ('print_config');
+use vutil qw(read_global_config_file get_config get_config_vars get_credentials set_config set_config_vars set_credentials write_mysql stats_set stats_get set_datetime print_config create_blank_file);
 
 # minimum number of mapped reads to consider reference for vntr
 my $MIN_SUPPORT_REQUIRED = -1;
+
+# New: PCR duplicates removal flag. If specified, look for and remove PCR duplicates
+my $PCRDUP="";
 
 # DB/Web options
 my $DBSUFFIX = ""
@@ -140,6 +132,7 @@ my $HELPSTRING
     . "\t--MIN_FLANK_REQUIRED          minimum required flank on both sides for a read TR to be considered (default 10)\n"
     . "\t--MAX_FLANK_CONSIDERED        maximum flank length used in flank alignments, set to big number to use full flank (default 50)\n"
     . "\t--MIN_SUPPORT_REQUIRED        minimum number of mapped reads which agree on copy number to call an allele (default 2)\n"
+    . "\t--PCRDUP                      if this flag is given, PCR duplicates will be scanned for and removed. (default: PCR duplicates are not removed)"
     . "\t--DBSUFFIX                    suffix for database name\n"
     . "\t--SERVER                      server name, used for html generating links\n"
     . "\t--STRIP_454_KEYTAGS           for 454 platform, strip leading 'TCAG', 0/1 (default 0)\n"
@@ -170,6 +163,7 @@ GetOptionsFromArray(
     "MIN_FLANK_REQUIRED=i"       => \$MIN_FLANK_REQUIRED,
     "MAX_FLANK_CONSIDERED=i"     => \$MAX_FLANK_CONSIDERED,
     "MIN_SUPPORT_REQUIRED=i"     => \$MIN_SUPPORT_REQUIRED,
+    "PCRDUP"                     => \$PCRDUP,
     "DBSUFFIX=s"                 => \$DBSUFFIX,
     "SERVER=s"                   => \$SERVER,
     "STRIP_454_KEYTAGS=i"        => \$strip_454_keytags,
@@ -206,7 +200,8 @@ if ( "" eq $DBSUFFIX ) {
 
 # where config file will go
 # Convert any input for DBSUFFIX to lower case.
-$DBSUFFIX=lc($DBSUFFIX);
+$DBSUFFIX = lc($DBSUFFIX);
+
 # This path needs to be able to pick any case difference, for backwards compatibility
 my $MSDIR = $ENV{HOME} . "/${DBSUFFIX}.";
 
@@ -776,7 +771,8 @@ if ( $STEP == 1 ) {
     system($exstring);
 
     $timestart = time();
-    warn "\n\nExecuting step #$STEP (searching for tandem repeats in reads, producing profiles and sorting)...\n";
+    warn
+        "\n\nExecuting step #$STEP (searching for tandem repeats in reads, producing profiles and sorting)...\n";
     my $extra_param  = ($strip_454_keytags) ? '-s' : '';
     my $extra_param2 = ($is_paired_reads)   ? '-r' : '';
     system(
@@ -1147,11 +1143,12 @@ if ( $STEP == 7 ) {
     my $exstring;
     print STDERR
         "\n\nExecuting step #$STEP (inserting REFERENCE flanks into database)...";
-    # TODO Replace this, and the mysql exec later, with a function in vutil which
-    # just takes in a file name and then uses DBI to load the data. Doing this with
-    # a temporary sql file while exposing the password on the command line is
-    # totally unnecessary.
-    # TODO Change so that reference seq file does not need to be in install dir
+
+# TODO Replace this, and the mysql exec later, with a function in vutil which
+# just takes in a file name and then uses DBI to load the data. Doing this with
+# a temporary sql file while exposing the password on the command line is
+# totally unnecessary.
+# TODO Change so that reference seq file does not need to be in install dir
     $exstring
         = "echo \"truncate TABLE $DBNAME.fasta_ref_reps; LOAD DATA LOCAL INFILE '$install_dir/$reference_seq' INTO TABLE $DBNAME.fasta_ref_reps FIELDS TERMINATED BY ',' IGNORE 1 LINES;\" > $TMPDIR/${DBNAME}_2.sql";
     system($exstring);
@@ -1316,7 +1313,7 @@ if ( $STEP == 11 ) {
         warn "\nWarning: Failed to create output result directory!\n";
     }
 
-    # TODO Change this so that the new produce_indist script is used. Will require new param
+# TODO Change this so that the new produce_indist script is used. Will require new param
     if ($reference_indist_produce) {
         print STDERR "\n\n(generating indist file)...";
 
@@ -1551,25 +1548,35 @@ if ( $STEP == 14 ) {
 if ( $STEP == 15 ) {
 
     $timestart = time();
-    print STDERR "\n\nExecuting step #$STEP (calculating PCR duplicates) ...";
+    if ($PCRDUP) {
+        print STDERR
+            "\n\nExecuting step #$STEP (calculating PCR duplicates) ...";
 
-    my $exstring = "./pcr_dup.pl";
-    my @exargs   = (
-        "$read_profiles_folder_clean/best",
-        "$read_profiles_folder_clean", "$DBNAME", "$MSDIR", "$NPROCESSES",
-        "$TMPDIR"
-    );
-    system( $exstring, @exargs );
-    if ( $? == -1 ) {
-        SetError( $STEP, "command failed: $!", -1 );
-        die "command failed: $!\n";
+        my $exstring = "./pcr_dup.pl";
+        my @exargs   = (
+            "$read_profiles_folder_clean/best",
+            "$read_profiles_folder_clean", "$DBNAME", "$MSDIR", "$NPROCESSES",
+            "$TMPDIR"
+        );
+        system( $exstring, @exargs );
+        if ( $? == -1 ) {
+            SetError( $STEP, "command failed: $!", -1 );
+            die "command failed: $!\n";
+        }
+        else {
+            my $rc = ( $? >> 8 );
+            if ( 0 != $rc ) {
+                SetError( $STEP, "calculating PCR duplicates failed", $rc );
+                die "command exited with value $rc";
+            }
+        }
     }
     else {
-        my $rc = ( $? >> 8 );
-        if ( 0 != $rc ) {
-            SetError( $STEP, "calculating PCR duplicates failed", $rc );
-            die "command exited with value $rc";
-        }
+        print STDERR "\n\nSkipping step #$STEP (calculating PCR duplicates), please specify option --pcrdup to enable this step ...";
+        # Files from this step must exist
+        create_blank_file("$read_profiles_folder_clean/result/$DBNAME.pcr_dup.txt");
+        create_blank_file("$read_profiles_folder_clean/result/$DBNAME.ties.txt");
+        create_blank_file("$read_profiles_folder_clean/result/$DBNAME.ties_entries.txt");
     }
 
     SetStatistics( "TIME_PCR_DUP", time() - $timestart );
