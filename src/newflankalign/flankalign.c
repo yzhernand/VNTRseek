@@ -478,7 +478,7 @@ int main(int argc, char *argv[])
                     templ_flank_ptr->right = calloc((length - end) + 2, sizeof(*templ_flank_ptr->right));
 
                     if (!templ_flank_ptr->left)
-                        doCriticalErrorAndQuit("\n\nFlankAlign - memory error 2 in left flank. Aborting!\n\n");
+                        doCriticalErrorAndQuit("\n\nFlankAlign - memory error 2 in left flank. rid: %d, start: %d end: %d length: %d, start+2: %d, length-end+2: %d. Aborting!\n\n", rid, start, end, length, start+2, length-end+2);
 
                     if (!templ_flank_ptr->right)
                         doCriticalErrorAndQuit("\n\nFlankAlign - memory error 2 in right flank. rid: %d, start: %d end: %d length: %d, start+2: %d, length-end+2: %d. Aborting!\n\n", rid, start, end, length, start+2, length-end+2);
