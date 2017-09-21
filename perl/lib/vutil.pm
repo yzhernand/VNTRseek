@@ -1,12 +1,13 @@
 use strict;
 use Cwd;
 use DBI;
+use Carp;
 
 use FindBin;
 
 package vutil;
 use base 'Exporter';
-our @EXPORT_OK = ('read_global_config_file','get_config','get_config_vars','get_credentials','set_config','set_config_vars','set_credentials','write_mysql','stats_set','stats_get','set_datetime','print_config', 'trim');
+our @EXPORT_OK = qw(read_global_config_file get_config get_config_vars get_credentials set_config set_config_vars set_credentials write_mysql stats_set stats_get set_datetime print_config trim create_blank_file);
 
 # vutil.pm
 # author: Yevgeniy Gelfand
@@ -24,6 +25,12 @@ sub trim($)
         $string =~ s/^\s+//;
         $string =~ s/\s+$//;
         return $string;
+}
+
+sub create_blank_file {
+  my $filename = shift or croak("Error: filename is a required argument\n");
+  open my $blank_file, ">", $filename or croak("Error creating blank file $filename: $!");
+  close $blank_file or croak("Error closing blank file $filename: $!");
 }
 
 ################################################################
