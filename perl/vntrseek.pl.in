@@ -57,7 +57,8 @@ use vutil
 my $MIN_SUPPORT_REQUIRED = -1;
 
 # New: Ignore PCR duplicates. If true, PCR duplicates will NOT be removed. Default is false.
-my $IGNOREPCRDUP = 0;
+# my $IGNOREPCRDUP = 0;
+my $IGNOREPCRDUP = 1;
 
 # DB/Web options
 my $DBSUFFIX = ""
@@ -249,7 +250,7 @@ GetOptions(
     "MIN_FLANK_REQUIRED=i"       => \$MIN_FLANK_REQUIRED,
     "MAX_FLANK_CONSIDERED=i"     => \$MAX_FLANK_CONSIDERED,
     "MIN_SUPPORT_REQUIRED=i"     => \$MIN_SUPPORT_REQUIRED,
-    "IGNOREPCRDUP"                     => \$IGNOREPCRDUP,
+    "IGNOREPCRDUP"               => \$IGNOREPCRDUP,
     "DBSUFFIX=s"                 => \$DBSUFFIX,
     "SERVER=s"                   => \$SERVER,
     "STRIP_454_KEYTAGS=i"        => \$strip_454_keytags,
@@ -1556,7 +1557,7 @@ if ( $STEP == 15 ) {
     my @exargs   = (
         "$read_profiles_folder_clean/best",
         "$read_profiles_folder_clean", "$DBNAME", "$MSDIR", "$NPROCESSES",
-        "$TMPDIR"
+        "$TMPDIR", "$IGNOREPCRDUP"
     );
     system( $exstring, @exargs );
     if ( $? == -1 ) {
