@@ -45,7 +45,7 @@ my $argc = @ARGV;
 
 if ( $argc < 6 ) {
     die
-        "Usage: pcr_dup.pl indexfolder profcleanfolder dbname msdir cpucount tempdir\n";
+        "Usage: pcr_dup.pl indexfolder profcleanfolder dbname msdir cpucount tempdir ignorepcrdups\n";
 }
 
 my $curdir = getcwd;
@@ -56,6 +56,7 @@ my $DBNAME       = $ARGV[2];
 my $MSDIR        = $ARGV[3];
 my $cpucount     = $ARGV[4];
 my $TEMPDIR      = $ARGV[5];
+my $IGNOREPCRDUP = $ARGV[6];
 
 # set these mysql credentials in vs.cnf (in installation directory)
 my ( $LOGIN, $PASS, $HOST ) = get_credentials($MSDIR);
@@ -494,7 +495,7 @@ sub fork_pcrdup {
             #print STDERR "\t" . $_ . "\n";
 
             my $exstring
-                = "./pcr_dup.exe $indexfolder/${_} $indexfolder/${_}.pcr_dup 0 2 > /dev/null";
+                = "./pcr_dup.exe $indexfolder/${_} $indexfolder/${_}.pcr_dup 0 2 $IGNOREPCRDUP > /dev/null";
             system($exstring);
 
         }

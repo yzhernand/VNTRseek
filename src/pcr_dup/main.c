@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 #include "LinkedList.h"
 #include "bitwise LCS single word.h"
 #include "bitwise LCS multiple word.h"
@@ -197,7 +198,7 @@ int main (int argc, const char * argv[]) {
 	int stringlength;
 	struct linkedList **trStartList;
 	struct read *readItemDataA, *readItemDataB;
-	int endVariance, numDifferences;
+	int endVariance, numDifferences, ignorePCRDups;
 	struct linkedListItem *currentItemPtr;
 	int withinEndVariance;
 	int trEndDelta, trStartDelta, readEndDelta;
@@ -235,6 +236,7 @@ int main (int argc, const char * argv[]) {
 		printf("\n  NumDifferences is the number of differences allowed between two read sequences to declare them duplicates");
 		printf("\n     Note, NumDifferences includes the end variance");
 		printf("\n     Note.  Right now, the program uses MAXDIFFFORPCRDUPLICATE instead of the input parameter.");
+		printf("\n  IgnorePCRDups is a boolean value which if true (non-0) causes no PCR duplicates to be found. Default is 0 (find PCR duplicates).");
 		printf("\n");
 		printf("\nThis program finds PCR duplicates in reads that have already been processed and found to contain TRs");
 		printf("\nThe reads are grouped by starting and ending location of the TRs so all-pairs comparison is not required");
@@ -244,8 +246,21 @@ int main (int argc, const char * argv[]) {
 		exit(-1);
 	}
 	
-	endVariance = atoi(argv[3]);
-	numDifferences = atoi(argv[4]);
+	endVariance = strtol(argv[3], NULL, 10);
+	if ((errno == ERANGE) || (errno != 0 && endVariance == 0)) {
+		perror("strtol");
+		exit(EXIT_FAILURE);
+	}
+	numDifferences = strtol(argv[4], NULL, 10);
+	if ((errno == ERANGE) || (errno != 0 && numDifferences == 0)) {
+		perror("strtol");
+		exit(EXIT_FAILURE);
+	}
+	ignorePCRDups = strtol(argv[5], NULL, 10);
+	if ((errno == ERANGE) || (errno != 0 && ignorePCRDups == 0)) {
+		perror("strtol");
+		exit(EXIT_FAILURE);
+	}
 	
 	//allocate structure for "read" data
 	trStartList = (struct linkedList **) calloc(MAXREADLENGTH+1,sizeof(struct linkedList *));
@@ -476,7 +491,7 @@ int main (int argc, const char * argv[]) {
 												   readItemDataB->fastaHeader1,readItemDataB->TRstart,readItemDataB->TRend,readItemDataB->length);
 										}
 										shortestReadLengthInPair = (readItemDataA->length <= readItemDataB->length)?readItemDataA->length:readItemDataB->length;
-										if(lcsScore >= shortestReadLengthInPair-MAXDIFFFORPCRDUPLICATE)
+										if(!ignorePCRDups && (lcsScore >= shortestReadLengthInPair-MAXDIFFFORPCRDUPLICATE))
 										{
 											highLCSScoreCount++;
 											/* gelfand, aug 11, changed to be like before to have readit and not fastaheader */
