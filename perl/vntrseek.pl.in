@@ -1755,11 +1755,11 @@ if ( $STEP == 19 ) {
     # cleanup
     print STDERR "Cleanup...\n";
 
-    $exstring = q(find "${read_profiles_folder_clean}/best" -type f -delete);
+    $exstring = qq(find "${read_profiles_folder_clean}/best" -type f -delete);
     system($exstring);
-    $exstring = q(find "${read_profiles_folder_clean}/edges" -type f -delete);
+    $exstring = qq(find "${read_profiles_folder_clean}/edges" -type f -delete);
     system($exstring);
-    $exstring = q(find "${read_profiles_folder_clean}/out" -type f -delete);
+    $exstring = qq(find "${read_profiles_folder_clean}/out" -type f -delete);
     system($exstring);
 
     SetStatistics( "TIME_REPORTS", time() - $timestart );
