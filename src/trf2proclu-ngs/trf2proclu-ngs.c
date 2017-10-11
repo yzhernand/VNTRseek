@@ -642,27 +642,25 @@ int main(int argc, char **argv)
             repPtr->pattern = strdup(rep.pattern);
 
 
-            /* in rc reads, walk back though the list and see if this repeat is already reported (forward read repeats will be the ones immediately before), if yes then skip */
-            if (rcyes) {
-                int found = 0, complen;
-                REP_STRUCT *tempPtr;
+            
+            int found = 0, complen;
+            REP_STRUCT *tempPtr;
 
-                for (tnode = repList->tail; tnode != NULL; tnode = tnode->prev) {
-                    tempPtr = (REP_STRUCT *)(tnode->item);
-                    complen = strlen(tempPtr->header);
-                    complen = min(complen, headerlen);
+            for (tnode = repList->tail; tnode != NULL; tnode = tnode->prev) {
+                tempPtr = (REP_STRUCT *)(tnode->item);
+                complen = strlen(tempPtr->header);
+                complen = min(complen, headerlen);
 
-                    if (0 != memcmp(repPtr->header, tempPtr->header, complen)) { break; }
+                if (0 != memcmp(repPtr->header, tempPtr->header, complen)) { break; }
 
-                    if (repPtr->firstindex == tempPtr->firstindex && repPtr->lastindex == tempPtr->lastindex && repPtr->patsize == tempPtr->patsize) { found = 1; break; }
-                }
+                if (repPtr->firstindex == tempPtr->firstindex && repPtr->lastindex == tempPtr->lastindex && repPtr->patsize == tempPtr->patsize) { found = 1; break; }
+            }
 
-                if (found) {
-                    free(rep.subsequence);
-                    free(rep.pattern);
-                    free(rep.profile);
-                    continue;
-                }
+            if (found) {
+                free(rep.subsequence);
+                free(rep.pattern);
+                free(rep.profile);
+                continue;
             }
 
 
