@@ -119,7 +119,7 @@ void linkedListPrintItemData(struct linkedList *linkedList)
 void linkedListBubbleSort(struct linkedList *linkedList) //need to sort on field in ItemData
 {
 	int numItems;
-	int counter,second,outerloopcounter,change;
+	int second,outerloopcounter,change;
 	struct read *readItemDataA, *readItemDataB;
 	struct linkedListItem *pointsToB, *pointsToA;
 	
@@ -131,7 +131,7 @@ void linkedListBubbleSort(struct linkedList *linkedList) //need to sort on field
 	}
 	printf(" numItems: %d",numItems);
 	
-	if (counter>=2) {
+	if (numItems>=2) {
 		change = 1;
 		outerloopcounter = 0;
 		while(change){
@@ -198,7 +198,7 @@ int main (int argc, const char * argv[]) {
 	int stringlength;
 	struct linkedList **trStartList;
 	struct read *readItemDataA, *readItemDataB;
-	int endVariance, numDifferences, ignorePCRDups;
+	int endVariance, numDifferences, keepPCRDups;
 	struct linkedListItem *currentItemPtr;
 	int withinEndVariance;
 	int trEndDelta, trStartDelta, readEndDelta;
@@ -224,7 +224,7 @@ int main (int argc, const char * argv[]) {
 	
 	printf("\n%ld %ld",sizeof(char *), sizeof(long long int));
 	
-	if(argc!=5)
+	if(argc!=6)
 	{
 		printf("\n\nPlease use: %s ReadFile OutFile EndVariance NumDifferences", argv[0]);
 		printf("\n\nWhere:");
@@ -236,7 +236,7 @@ int main (int argc, const char * argv[]) {
 		printf("\n  NumDifferences is the number of differences allowed between two read sequences to declare them duplicates");
 		printf("\n     Note, NumDifferences includes the end variance");
 		printf("\n     Note.  Right now, the program uses MAXDIFFFORPCRDUPLICATE instead of the input parameter.");
-		printf("\n  IgnorePCRDups is a boolean value which if true (non-0) causes no PCR duplicates to be found. Default is 0 (find PCR duplicates).");
+		printf("\n  KeepPCRDups is a boolean value which if true (non-0) results in PCR duplicates being kept rather than removed.");
 		printf("\n");
 		printf("\nThis program finds PCR duplicates in reads that have already been processed and found to contain TRs");
 		printf("\nThe reads are grouped by starting and ending location of the TRs so all-pairs comparison is not required");
@@ -256,8 +256,8 @@ int main (int argc, const char * argv[]) {
 		perror("strtol");
 		exit(EXIT_FAILURE);
 	}
-	ignorePCRDups = strtol(argv[5], NULL, 10);
-	if ((errno == ERANGE) || (errno != 0 && ignorePCRDups == 0)) {
+	keepPCRDups = strtol(argv[5], NULL, 10);
+	if ((errno == ERANGE) || (errno != 0 && keepPCRDups == 0)) {
 		perror("strtol");
 		exit(EXIT_FAILURE);
 	}
@@ -491,7 +491,7 @@ int main (int argc, const char * argv[]) {
 												   readItemDataB->fastaHeader1,readItemDataB->TRstart,readItemDataB->TRend,readItemDataB->length);
 										}
 										shortestReadLengthInPair = (readItemDataA->length <= readItemDataB->length)?readItemDataA->length:readItemDataB->length;
-										if(!ignorePCRDups && (lcsScore >= shortestReadLengthInPair-MAXDIFFFORPCRDUPLICATE))
+										if((keepPCRDups == 0) && (lcsScore >= shortestReadLengthInPair-MAXDIFFFORPCRDUPLICATE))
 										{
 											highLCSScoreCount++;
 											/* gelfand, aug 11, changed to be like before to have readit and not fastaheader */

@@ -70,10 +70,21 @@ ADD_SUBDIRECTORY(scripts)
 ADD_SUBDIRECTORY(postinst)
 
 # Install config and other files
-INSTALL(FILES "vs.cnf"
-    DESTINATION ${InstallSuffix}
-    PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ
-    )
+INSTALL(CODE "
+    if (EXISTS \"${CMAKE_INSTALL_PREFIX}/${InstallSuffix}/vs.cnf\")
+        MESSAGE(STATUS \"vs.cnf file exists. Will install new version as 'vs.cnf.new'\")
+        file(INSTALL \"${CMAKE_SOURCE_DIR}/vs.cnf\"
+            DESTINATION ${CMAKE_INSTALL_PREFIX}/${InstallSuffix}
+            RENAME \"vs.cnf.new\"
+            PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ
+        )
+    else()
+        file(INSTALL \"${CMAKE_SOURCE_DIR}/vs.cnf\"
+            DESTINATION ${CMAKE_INSTALL_PREFIX}/${InstallSuffix}
+            PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ
+        )
+    endif(EXISTS \"${CMAKE_INSTALL_PREFIX}/${InstallSuffix}/vs.cnf\")
+")
 SET(MISC_FILES
     HISTORY
     COPYING CLUSTER

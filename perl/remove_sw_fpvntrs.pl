@@ -84,7 +84,8 @@ for my $d (sort keys %discard) {
 # }
 ### End testing
 
-my @ref_files = (get_config($MSDIR))[5..7];
+my %run_conf = get_config($MSDIR . "vs.cnf");
+my @ref_files = @run_conf{qw(REFRENCE_FILE REFERENCE_SEQ REFERENCE_INDIST)};
 my $tr_count;
 for my $r (@ref_files) {
     $tr_count = write_ref_file($r);

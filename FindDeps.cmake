@@ -71,3 +71,12 @@ FUNCTION(MYSQL_REQ_VER VER)
         ENDIF()
     ENDIF()
 ENDFUNCTION(MYSQL_REQ_VER)
+
+# Check for seqtk
+
+
+# Check for samtools
+
+
+# Check for bedtools
+

@@ -128,7 +128,7 @@ sub fork_proc {
         exit unless $reader;
 
         my $output_prefix = "$output_dir/$current_file";
-        warn "Running child, current_file = $current_file...\n";
+        warn "Running child, current_file = $current_file ($filelist->[$current_file])...\n";
 
         # TODO Error checking if TRF, in the start of the pipe, breaks down
         local $SIG{PIPE} = sub { die "Error in trf+trf2proclu pipe: $?\n" };
