@@ -156,13 +156,13 @@ my $MSDIR = $ENV{HOME} . "/". $opts{'DBSUFFIX'} . ".";
 my $config_file = $MSDIR . "vs.cnf";
 
 # set variables from vs.cnf
-my %conf_vars = get_config_new($config_file);
+my %conf_vars = get_config($config_file);
 for my $k (keys %conf_vars) {
     $opts{$k} = $conf_vars{$k}
         if (!exists $opts{$k});
 }
 
-set_config_new(%opts);
+set_config(%opts);
 
 # (   $SERVER, $TMPDIR, $html_dir, $opts{FASTA_DIR}, $output_root,
 #     $reference_file, $reference_seq, $reference_indist

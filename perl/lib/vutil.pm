@@ -89,10 +89,10 @@ sub get_config {
   unless ($VSREAD) {
     # Must read global file first. Sets up the defaults.
     warn "Could not read global config\n"
-      unless read_config_file_new("$installdir/vs.cnf");
+      unless read_config_file("$installdir/vs.cnf");
     my $config_loc = shift;
     warn "Could not read run config (harmless if this is a new run)\n"
-      unless read_config_file_new($config_loc);
+      unless read_config_file($config_loc);
     # Set VSREAD;
     $VSREAD = 1;
   }
@@ -570,7 +570,7 @@ TEST
 }
 
 ################################################################
-sub write_config_new {
+sub write_config {
   carp("Error: function requires two arguments: string of path and dbsuffix concatenated, reference to hash of options")
     unless @_ == 2;
   my $startdir = shift;
