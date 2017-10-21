@@ -149,7 +149,7 @@ if ( ! exists $opts{"DBSUFFIX"} ) {
 
 # where config file will go
 # Convert any input for DBSUFFIX to lower case.
-$opts{"DBSUFFIX"} = lc($opts{"DBSUFFIX"});
+# $opts{"DBSUFFIX"} = lc($opts{"DBSUFFIX"});
 
 # This path needs to be able to pick any case difference, for backwards compatibility
 my $MSDIR = $ENV{HOME} . "/". $opts{'DBSUFFIX'} . ".";
