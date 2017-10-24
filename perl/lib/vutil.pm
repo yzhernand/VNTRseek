@@ -250,6 +250,67 @@ sub stats_get {
  return $VALUE;
 }
 
+
+################################################################
+
+sub get_dbh {
+  unless (@_ == 3) {
+    carp "get_dbh requires 3 parameters: database backend name, database name, and the config file location.";
+    return undef;
+  }
+
+  my ($DBNAME, $config_loc) = @_;
+  read_config_file($config_loc)
+    unless ($VSREAD);
+
+  my $dbh;
+  if ($VSCNF_FILE{BACKEND} eq "sqlite") {
+    my $dbloc = $VSCNF_FILE{OUTPUT_ROOT} . "/vntr_" . $VSCNF_FILE{DBSUFFIX} . "/vs.db";
+    $dbh = DBI->connect("DBI:SQLite:dbname=$dbloc", undef, undef, {
+      AutoCommit => 1,
+      RaiseError => 1,
+      sqlite_see_if_its_a_number => 1,
+    })
+    or croak "Could not connect to database: $DBI::errstr";
+  }
+  else {
+    $dbh = DBI->connect( "DBI:mysql:$DBNAME;mysql_local_infile=1;host=$VSCNF_FILE{HOST}",
+    "$VSCNF_FILE{LOGIN}", "$VSCNF_FILE{PASS}" )
+      or croak "Could not connect to database: $DBI::errstr";
+  }
+
+  return $dbh;
+}
+
+################################################################
+
+sub write_sqlite {
+  unless (@_ == 2) {
+    carp "write_sqlite requires 2 parameters: database suffix and the run output directory.";
+    return undef;
+  }
+
+  my ($DBNAME, $output_dir) = @_;
+  my $installdir = "$FindBin::RealBin";
+  open my $schema_fh, "<", "$installdir/sqlite_schema.sql"
+    or croak "Error opening SQLite schema file '$installdir/sqlite_schema.sql': $?";
+  my $sqlite_schema;
+  while (<$schema_fh>) {
+    # chomp;
+    $sqlite_schema .= $_;
+  }
+  close $schema_fh;
+
+  my $dbh = DBI->connect("DBI:SQLite:dbname=$output_dir/vs.db", undef, undef, {
+    AutoCommit => 1,
+    RaiseError => 1,
+    sqlite_see_if_its_a_number => 1,
+  })
+    or die "Could not connect to database: $DBI::errstr";
+  my $deploy_sth = $dbh->prepare($sqlite_schema);
+  $deploy_sth->execute;
+}
+
 ################################################################
 
 sub write_mysql {
