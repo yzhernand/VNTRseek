@@ -1110,7 +1110,8 @@ if ( $STEP == 7 ) {
         );
         my $placeholders = join(",", ("?") x 11);
         my $query = "INSERT INTO fasta_ref_reps ($cols) VALUES ($placeholders)";
-        my $insert_sth = $dbh->prepare($query); 
+        my $insert_sth = $dbh->prepare($query);
+        $dbh->{AutoCommit} = 0;
         open my $refset, "<", "$install_dir/$opts{REFERENCE_SEQ}";
         # Skip header
         <$refset>;
@@ -1122,6 +1123,7 @@ if ( $STEP == 7 ) {
             $insert_sth->execute(@fields, 0);
         }
         $dbh->commit();
+        $dbh->{AutoCommit} = 1;
         $dbh->disconnect();
     }
     elsif ($opts{BACKEND} eq "mysql") {
@@ -1396,7 +1398,7 @@ if ( $STEP == 12 ) {
     print STDERR
         "\n\nExecuting step #$STEP (inserting map and rankflank information into database.)";
     my $exstring
-        = "./run_rankflankmap.pl $read_profiles_folder_clean/allwithdups.clusters $read_profiles_folder_clean/out $opts{TMPDIR} $DBNAME $MSDIR";
+        = "./run_rankflankmap.pl $read_profiles_folder_clean/allwithdups.clusters $read_profiles_folder_clean/out $opts{TMPDIR} $opts{DBSUFFIX} $MSDIR";
     system($exstring);
     if ( $? == -1 ) {
         SetError( $STEP, "command failed: $!", -1 );
@@ -1429,7 +1431,7 @@ if ( $STEP == 13 ) {
     my $exstring = "./run_edges.pl";
     my @exargs   = (
         "$opts{REFERENCE_FILE}",    "$edges_folder",
-        "$DBNAME",            "$MSDIR",
+        "$opts{DBSUFFIX}",            "$MSDIR",
         "$MINPROFSCORE",      "$opts{NPROCESSES}",
         "$PROCLU_EXECUTABLE", "$opts{TMPDIR}"
     );

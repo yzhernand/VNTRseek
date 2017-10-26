@@ -218,7 +218,6 @@ sub set_statistics {
   $sth->execute($VALUE)             # Execute the query
     or croak "Couldn't execute statement: " . $sth->errstr;
 
-  $dbh->commit();
   $dbh->disconnect();
 }
 
@@ -294,7 +293,7 @@ sub get_dbh {
       warn "Using SQLite db at: $dbfile\n";
     }
     $dbh = DBI->connect("DBI:SQLite:dbname=$dbfile", undef, undef, {
-      AutoCommit => 0,
+      AutoCommit => 1,
       RaiseError => 1,
       sqlite_see_if_its_a_number => 1,
     })

@@ -45,7 +45,6 @@ sub set_indist {
     my ($dbh, $refid) = @_;
     my $sth = $dbh->prepare('UPDATE fasta_ref_reps SET is_singleton=0,is_indist=1 WHERE rid=?');
     $sth->execute($refid) or die $sth->errstr;
-    $dbh->commit;
 }
 
 ######################################################
