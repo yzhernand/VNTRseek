@@ -13,7 +13,7 @@ use File::Basename;
 use lib "$FindBin::RealBin/lib"; 
 require "vutil.pm";
 
-use vutil ('get_credentials');
+use vutil qw(get_config get_dbh get_trunc_query);
 
 sub trim($)
 {
@@ -23,109 +23,48 @@ sub trim($)
         return $string;
 }
 
-sub my_connect {
-	my ($DBNAME, $LOGIN, $PASS, $HOST) = @_;
-	my $dbh = DBI->connect("DBI:mysql:$DBNAME;host=$HOST", "$LOGIN", "$PASS") || die $DBI::errstr;
-	return $dbh;
-}
-sub my_disconnect {
-	my $dbh = shift;
-	$dbh->disconnect();
-}
-sub create_tables {
-	my $dbh = shift;
-	my $sth;
-
-	$sth = $dbh->prepare("DROP TABLE IF EXISTS flank_connection");
-	$sth->execute() or die $sth->errstr;
-	$sth->finish;
-
-        $sth = $dbh->prepare("DROP TABLE IF EXISTS flank_params");
-	$sth->execute() or die $sth->errstr;
-	$sth->finish;
-
-	$sth = $dbh->prepare("
-CREATE TABLE flank_params (
-`paramsetid` INT(11) NOT NULL PRIMARY KEY AUTO_INCREMENT,
-`flength` INT(11) NOT NULL,
-`ferrors` INT(11) NOT NULL
-) ENGINE=INNODB;
-") or die $dbh->errstr;
-        $sth->execute() or die $sth->errstr;
-        $sth->finish;
-
-	$sth = $dbh->prepare("
-CREATE TABLE flank_connection (
-`refid` INT(11) NOT NULL,
-`clusterid` INT(11) NOT NULL,
-`fcomponentsize` INT(11) NOT NULL,
-`fcomponentid` INT(11) NOT NULL,
-`paramsetid` INT(11) NOT NULL,
-PRIMARY KEY (refid, paramsetid),
-FOREIGN KEY (paramsetid) REFERENCES flank_params (paramsetid)
-) ENGINE=INNODB;
-") or die $dbh->errstr;
-	$sth->execute() or die $sth->errstr;
-	$sth->finish;
-
-
-  # set default 
-  $sth = $dbh->prepare("UPDATE fasta_ref_reps SET is_dist=0,is_singleton=1,is_indist=0;") 
-                or die "Couldn't prepare statement: " . $dbh->errstr;
-  $sth->execute() or die "Cannot execute: " . $sth->errstr();;
-  $sth->finish;
-
-}
-
 sub enter_new_paramset {
-	my ($dbh, $flength, $ferrors) = @_;
+	my ($dbh, $backend, $flength, $ferrors) = @_;
 	my $sth = $dbh->prepare('INSERT INTO flank_params (ferrors, flength) VALUES (?, ?)');
 	$sth->execute($flength, $ferrors) or die $sth->errstr;
-	$sth->finish;
-	$sth = $dbh->prepare('SELECT LAST_INSERT_ID()');
+	$dbh->commit;
+	if ($backend eq "mysql") {
+		$sth = $dbh->prepare('SELECT LAST_INSERT_ID()');
+	}
+	elsif ($backend eq "sqlite") {
+		$sth = $dbh->prepare('SELECT last_insert_rowid()');
+	}
 	$sth->execute() or die $sth->errstr;
 	my @ret = $sth->fetchrow_array();
 	my $ret = $ret[0];
 	$sth->finish;
 	return $ret;
 }
-#sub enter_new_ref {
-#        my ($dbh, $refid, $clusterid, $fcomponentsize, $fcomponentid, $paramset) = @_;
-#        my $sth = $dbh->prepare('INSERT IGNORE INTO flank_connection (refid, clusterid, fcomponentsize, fcomponentid, paramsetid) VALUES (?, ?, ?, ?, ?)');
-#        $sth->execute($refid, $clusterid, $fcomponentsize, $fcomponentid, $paramset) or die $sth->errstr;
-#        $sth->finish;
-#}
-#sub set_sing {
-#        my ($dbh, $refid) = @_;
-#        my $sth = $dbh->prepare('UPDATE fasta_ref_reps SET is_singleton=1 WHERE rid=?;');
-#        $sth->execute($refid) or die $sth->errstr;
-#        $sth->finish;
-#}
+
 sub set_indist {
-        my ($dbh, $refid) = @_;
-        my $sth = $dbh->prepare('UPDATE fasta_ref_reps SET is_singleton=0,is_indist=1 WHERE rid=?;');
-        $sth->execute($refid) or die $sth->errstr;
-        $sth->finish;
+    my ($dbh, $refid) = @_;
+    my $sth = $dbh->prepare('UPDATE fasta_ref_reps SET is_singleton=0,is_indist=1 WHERE rid=?');
+    $sth->execute($refid) or die $sth->errstr;
+    $dbh->commit;
 }
 
 ######################################################
 
 my %opts;
 getopts('rk:t:d:u:', \%opts);
-if (!scalar(@ARGV) || 
-	!defined($opts{'k'}) || 
+if (!defined($opts{'k'}) || 
 	!defined($opts{'t'}) || 
 	!defined($opts{'d'}) || 
 	!defined($opts{'u'})) 
 {
         die "Usage:
-        perl $0 [-r] -k <num> -t <num> -d <str> -u <str>  <dir>
+        perl $0 [-r] -k <num> -t <num> -d <str> -u <str>
 
 REQUIRED PARAMETERS
 	-k <num>	 max_errors parameter used to generate flank comparison
 	-t <num>	 trim_to parameter used to generate flank comparison
 
-	-d <string>      Database name
+	-d <string>      Database suffix
 	-u <string>      Folder where master file is located
 
 OPTIONS
@@ -134,19 +73,24 @@ OPTIONS
 }
 
 # set these mysql credentials in vs.cnf (in installation directory)
-my ($LOGIN,$PASS,$HOST) = get_credentials($opts{'u'});
+my %run_conf = get_config( $opts{u} . "vs.cnf" );
+my ( $LOGIN, $PASS, $HOST, $indistfile ) = @run_conf{qw(LOGIN PASS HOST REFERENCE_INDIST)};
 
-my $dbh = my_connect($opts{'d'}, $LOGIN, $PASS, $HOST);
-if ($opts{'r'}) {
-	print STDERR "Dropping old tables and creating new ones\n";
-	create_tables($dbh);
+my $dbh = get_dbh($opts{d}, $opts{u} . "vs.cnf");
+if ($opts{r}) {
+	warn "Clearing old tables\n";
+	$dbh->do( get_trunc_query( $run_conf{BACKEND}, "flank_params" ) )
+		or die "Couldn't do statement: " . $dbh->errstr;
+	$dbh->do( get_trunc_query( $run_conf{BACKEND}, "flank_connection" ) )
+		or die "Couldn't do statement: " . $dbh->errstr;
+	# Assumes fasta_ref_reps is populated, sets values for ALL rows.
+	warn "Resetting singleton/indist flags\n";
+	$dbh->do("UPDATE fasta_ref_reps SET is_dist=0,is_singleton=1,is_indist=0;") 
+        or die "Couldn't do statement: " . $dbh->errstr;
 }
-my $paramsetid = enter_new_paramset($dbh, $opts{'k'}, $opts{'t'});
+my $paramsetid = enter_new_paramset($dbh, $run_conf{BACKEND},  $opts{'k'}, $opts{'t'});
 
-my $refclusfile = $ARGV[0];
-
-
-open FILE, "<$refclusfile" or die $!;
+open FILE, "<$indistfile" or die $!;
 my $count = 0;
 while (<FILE>) {
 
@@ -155,7 +99,9 @@ while (<FILE>) {
  my @values = split(' ', $_);
  my $repcount = @values - 1;
 
- print STDERR $count . ". " . @values;
+ if ($ENV{DEBUG}) {
+ 	warn $count . ". " . @values . "\n";
+ }
 
  my $i=0;
  foreach my $val (@values) {
@@ -168,13 +114,7 @@ while (<FILE>) {
 	set_indist($dbh, -$val); 
    }
  }
-
- print STDERR "\n";
-
 }
 close(FILE);
 
-
-
-
-my_disconnect($dbh);
+$dbh->disconnect();

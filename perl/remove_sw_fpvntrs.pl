@@ -34,27 +34,38 @@ use File::Basename;
 # use File::Temp qw/ tempfile tempdir /;
 use lib "$FindBin::RealBin/lib";
 require "vutil.pm";
-use vutil qw(get_credentials get_config);
+use vutil qw(get_credentials get_config );
 
 # Get input files
-die "Usage: $0 <dbsuffix> [new reference set name]"
-    unless (@ARGV && (@ARGV <= 2));
-my ($dbsuffix, $refset_suffix) = @ARGV;
+die "Usage: $0 <dbsuffix> <db backend> [new reference set name]"
+    unless (@ARGV && (@ARGV <= 3));
+my ($dbsuffix, $backend, $refset_suffix) = @ARGV;
 my $MSDIR = $ENV{HOME} . "/${dbsuffix}.";
+my $config_loc = $MSDIR . "vs.cnf";
 
 # Connect to DB
-my ( $login, $pass, $host ) = get_credentials($MSDIR);
-my $dbh = DBI->connect( "DBI:mysql:VNTRPIPE_$dbsuffix;mysql_local_infile=1;host=$host",
-    "$login", "$pass" )
-    || die "Could not connect to database: $DBI::errstr";
+my %run_conf = get_config($MSDIR . "vs.cnf");
+my ( $login, $pass, $host ) = @run_conf{qw(LOGIN PASS HOST)};
+my $dbh = get_dbh($dbsuffix, $config_loc)
+    or die "Could not connect to database: $DBI::errstr";
 # Retrieve from the database the list of all reads mapping to a reftr
 # my $all_reads_mapped_query = q{SELECT DISTINCT map.refid AS reftrid, SUBSTRING_INDEX(fasta_reads.head, "_", -1) AS origintrid
 #   FROM map INNER JOIN replnk ON replnk.rid=map.readid
 #       INNER JOIN fasta_reads on fasta_reads.sid=replnk.sid
 #   WHERE map.bbb = 1 ORDER BY reftrid,origintrid};
 
+if ($backend eq "sqlite") {
+    # Works close enough to the MySQL function for our purposes.
+    $dbh->sqlite_create_function('SUBSTRING_INDEX', 3, sub {
+        my ($field, $delim, $idx) = @_;
+        my @a = split /$delim/, $field;
+        return $a[$idx];
+        });
+}
+
 # Retrieve from the database the list of all reads mapping to a reftr called as a VNTR with at least one spanning read
-my $vntr_reads_mapped_query = q{SELECT DISTINCT map.refid AS reftrid, SUBSTRING_INDEX(fasta_reads.head, "_", -1) AS origintrid
+my $vntr_reads_mapped_query = qq{
+    SELECT DISTINCT map.refid AS reftrid, SUBSTRING_INDEX(fasta_reads.head, "_", -1) AS origintrid
     FROM map INNER JOIN replnk ON replnk.rid=map.readid
         INNER JOIN fasta_reads on fasta_reads.sid=replnk.sid
         INNER JOIN fasta_ref_reps ON map.refid = fasta_ref_reps.rid
@@ -84,7 +95,6 @@ for my $d (sort keys %discard) {
 # }
 ### End testing
 
-my %run_conf = get_config($MSDIR . "vs.cnf");
 my @ref_files = @run_conf{qw(REFRENCE_FILE REFERENCE_SEQ REFERENCE_INDIST)};
 my $tr_count;
 for my $r (@ref_files) {

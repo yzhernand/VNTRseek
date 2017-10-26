@@ -13,7 +13,7 @@ use lib "$FindBin::RealBin/lib";
 require "vutil.pm";
 use ProcInputReads qw(get_reader formats_regexs compressed_formats_regexs);
 
-use vutil qw(get_credentials write_mysql stats_set);
+use vutil qw(get_config get_dbh set_statistics get_trunc_query);
 
 my $RECORDS_PER_INFILE_INSERT = 100000;
 
@@ -38,19 +38,21 @@ my $fastafolder     = $ARGV[2];
 my $rotatedfolder   = $ARGV[3];
 my $rotatedreffile  = $ARGV[4];
 my $strip454        = $ARGV[5];
-my $DBNAME          = $ARGV[6];
+my $DBSUFFIX        = $ARGV[6];
 my $MSDIR           = $ARGV[7];
 my $TEMPDIR         = $ARGV[8];
 my $IS_PAIRED_READS = $ARGV[9];
 
 # set these mysql credentials in vs.cnf (in installation directory)
-my ( $LOGIN, $PASS, $HOST ) = get_credentials($MSDIR);
+my %run_conf = get_config( $MSDIR . "vs.cnf" );
+my ( $LOGIN, $PASS, $HOST ) = @run_conf{qw(LOGIN PASS HOST)};
 
 my $totalReads = 0;
 
-my $dbh = DBI->connect( "DBI:mysql:$DBNAME;mysql_local_infile=1;mysql_server_prepare=1;host=$HOST",
-    "$LOGIN", "$PASS" )
-    || die "Could not connect to database: $DBI::errstr";
+# TODO for all files needing this function, maybe run get_config first
+# to eliminate need for second arg
+my $dbh = get_dbh( $DBSUFFIX, $MSDIR . "vs.cnf" )
+    or die "Could not connect to database: $DBI::errstr";
 my %RHASH    = ();
 my %SHASH    = ();
 my %HEADHASH = ();
@@ -101,54 +103,51 @@ print STDERR
 
 # clear  tables
 print STDERR "\ntruncating database tables\n\n";
-my $sth = $dbh->prepare('TRUNCATE TABLE replnk;')
-    or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute or die "Cannot execute: " . $sth->errstr();
-$sth->finish;
+my ( $trunc_query, $sth );
+$trunc_query = get_trunc_query( $run_conf{BACKEND}, "replnk" );
+$sth = $dbh->do($trunc_query)
+    or die "Couldn't do statement: " . $dbh->errstr;
+$trunc_query = get_trunc_query( $run_conf{BACKEND}, "fasta_reads" );
+$sth = $dbh->do($trunc_query)
+    or die "Couldn't do statement: " . $dbh->errstr;
 
-$sth = $dbh->prepare('ALTER TABLE replnk DISABLE KEYS;')
-    or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute or die "Cannot execute: " . $sth->errstr();
-$sth->finish;
+if ( $run_conf{BACKEND} eq "mysql" ) {
+    $sth = $dbh->do('ALTER TABLE replnk DISABLE KEYS;')
+        or die "Couldn't do statement: " . $dbh->errstr;
 
-$sth = $dbh->prepare('TRUNCATE TABLE fasta_reads;')
-    or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute or die "Cannot execute: " . $sth->errstr();
-$sth->finish;
+    $sth = $dbh->do('ALTER TABLE fasta_reads DISABLE KEYS;')
+        or die "Couldn't do statement: " . $dbh->errstr;
 
-$sth = $dbh->prepare('ALTER TABLE fasta_reads DISABLE KEYS;')
-    or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute or die "Cannot execute: " . $sth->errstr();
-$sth->finish;
+    $sth = $dbh->do('SET AUTOCOMMIT = 0;')
+        or die "Couldn't do statement: " . $dbh->errstr;
 
-$sth = $dbh->prepare('SET AUTOCOMMIT = 0;')
-    or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute()    # Execute the query
-    or die "Couldn't execute statement: " . $sth->errstr;
-$sth->finish;
+    $sth = $dbh->do('SET FOREIGN_KEY_CHECKS = 0;')
+        or die "Couldn't do statement: " . $dbh->errstr;
 
-$sth = $dbh->prepare('SET FOREIGN_KEY_CHECKS = 0;')
-    or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute()    # Execute the query
-    or die "Couldn't execute statement: " . $sth->errstr;
-$sth->finish;
+    $sth = $dbh->do('SET UNIQUE_CHECKS = 0;')
+        or die "Couldn't do statement: " . $dbh->errstr;
 
-$sth = $dbh->prepare('SET UNIQUE_CHECKS = 0;')
-    or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute()    # Execute the query
-    or die "Couldn't execute statement: " . $sth->errstr;
-$sth->finish;
-
-# now only insert the sequences that we saw in clusters
-#my $sth0 = $dbh->prepare('INSERT INTO fasta_reads (head) VALUES (?)')
-#                or die "Couldn't prepare statement: " . $dbh->errstr;
+    # now only insert the sequences that we saw in clusters
+    #my $sth0 = $dbh->prepare('INSERT INTO fasta_reads (head) VALUES (?)')
+    #                or die "Couldn't prepare statement: " . $dbh->errstr;
 
 #$sth = $dbh->prepare('INSERT INTO replnk(rid,sid,first,last,copynum,patsize,pattern,profile,profilerc,profsize) VALUES (?,?,?,?,?,?,?,?,?,?)')
 #                or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth
-    = $dbh->prepare(
-    "LOAD DATA LOCAL INFILE '$TEMPDIR/replnk_$DBNAME.txt' INTO TABLE replnk FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';"
-    ) or die "Couldn't prepare statement: " . $dbh->errstr;
+    $sth
+        = $dbh->prepare(
+        "LOAD DATA LOCAL INFILE '$TEMPDIR/replnk_$DBSUFFIX.txt' INTO TABLE replnk FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';"
+        ) or die "Couldn't prepare statement: " . $dbh->errstr;
+}
+elsif ( $run_conf{BACKEND} eq "sqlite" ) {
+    $dbh->do("PRAGMA foreign_keys = OFF");
+    $dbh->{AutoCommit} = 0;
+
+    # Insert all ref TRs from replnk file
+    $sth
+        = $dbh->prepare(
+        qq{INSERT INTO replnk(rid,sid,first,last,copynum,patsize,pattern,profile,profilerc,profsize) VALUES (?,?,?,?,?,?,?,?,?,?)}
+        );
+}
 
 $timestart = time();
 print STDERR
@@ -234,30 +233,38 @@ foreach my $ifile (@indexfiles) {
 
 #$sth->execute($id,$HEADHASH{"$head"},$first,$last,$copy,$pat,$pattern,$profile,$profilerc,$proflen) or die "Cannot execute: " . $sth->errstr();
 
-                push @replnk_rows,
-                    join( ",",
-                    $id,      $HEADHASH{"$head"}, $first,
-                    $last,    $pat,               $copy,
-                    $pattern, $profile,           $profilerc,
-                    $proflen );
+                if ( $run_conf{BACKEND} eq "mysql" ) {
+                    push @replnk_rows,
+                        join( ",",
+                        $id,      $HEADHASH{"$head"}, $first,
+                        $last,    $pat,               $copy,
+                        $pattern, $profile,           $profilerc,
+                        $proflen );
 
-                if ( $processed % $RECORDS_PER_INFILE_INSERT == 0 ) {
-                    open( my $TEMPFILE, ">", "$TEMPDIR/replnk_$DBNAME.txt" )
-                        or die $!;
-                    for my $row (@replnk_rows) {
-                        say $TEMPFILE $row;
+                    if ( $processed % $RECORDS_PER_INFILE_INSERT == 0 )
+                    {
+                        open( my $TEMPFILE, ">", "$TEMPDIR/replnk_$DBSUFFIX.txt" )
+                            or die $!;
+                        for my $row (@replnk_rows) {
+                            say $TEMPFILE $row;
+                        }
+                        close($TEMPFILE);
+                        $count = $sth->execute();
+                        $inserted += $count;
+                        @replnk_rows = ();
                     }
-                    close($TEMPFILE);
-                    $count       = $sth->execute();
-                    $inserted += $count;
-                    @replnk_rows = ();
+                }
+                elsif ( $run_conf{BACKEND} eq "sqlite" ) {
+                    $sth->execute(
+                        $id,      $HEADHASH{"$head"}, $first,
+                        $last,    $pat,               $copy,
+                        $pattern, $profile,           $profilerc,
+                        $proflen
+                    );
+                    $inserted++;
                 }
 
             }
-            else {
-                #print "skip..";
-            }
-
             #if ($i>10) { last; }
         }
 
@@ -273,18 +280,20 @@ foreach my $ifile (@indexfiles) {
 }
 
 # Remaining rows
-if (@replnk_rows) {
-    open( my $TEMPFILE, ">", "$TEMPDIR/replnk_$DBNAME.txt" ) or die $!;
+if ( ( $run_conf{BACKEND} eq "mysql" ) && @replnk_rows ) {
+    open( my $TEMPFILE, ">", "$TEMPDIR/replnk_$DBSUFFIX.txt" ) or die $!;
     for my $row (@replnk_rows) {
         say $TEMPFILE $row;
     }
     close($TEMPFILE);
-    $count       = $sth->execute();
+    $count = $sth->execute();
     $inserted += $count;
     @replnk_rows = ();
 }
-$sth->finish;
-unlink("$TEMPDIR/replnk_$DBNAME.txt");
+
+# $sth->finish;
+$dbh->commit;
+unlink("$TEMPDIR/replnk_$DBSUFFIX.txt");
 
 if ( $inserted == keys(%RHASH) ) {
     print STDERR "\n\n..."
@@ -347,10 +356,16 @@ unless ( @filenames > 0 ) {
     die "Error: no supported files found in $fastafolder. Exiting...\n";
 }
 
-$sth
-    = $dbh->prepare(
-    "LOAD DATA LOCAL INFILE '$TEMPDIR/fastareads_$DBNAME.txt' INTO TABLE fasta_reads FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\n';"
-    ) or die "Couldn't prepare statement: " . $dbh->errstr;
+if ( $run_conf{BACKEND} eq "mysql" ) {
+    $sth
+        = $dbh->prepare(
+        "LOAD DATA LOCAL INFILE '$TEMPDIR/fastareads_$DBSUFFIX.txt' INTO TABLE fasta_reads FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\n';"
+        ) or die "Couldn't prepare statement: " . $dbh->errstr;
+}
+elsif ( $run_conf{BACKEND} eq "sqlite" ) {
+    $sth = $dbh->prepare( qq{INSERT INTO fasta_reads (sid, head, dna) VALUES(?, ?, ?)} )
+        or die "Couldn't prepare statement: " . $dbh->errstr;
+}
 
 my $headstr       = "";
 my $dnastr        = "";
@@ -380,19 +395,27 @@ while ( $files_processed < $files_to_process ) {
                     . $headstr . ")\n";
             }
 
-            push @fasta_reads_rows,
-                join( "\t", $HEADHASH{"$headstr"}, "$headstr", "$dnastr" );
 
-            if ( $processed % $RECORDS_PER_INFILE_INSERT == 0 ) {
-                open( my $TEMPFILE, ">", "$TEMPDIR/fastareads_$DBNAME.txt" )
-                    or die $!;
-                for my $row (@fasta_reads_rows) {
-                    say $TEMPFILE $row;
+            if ( $run_conf{BACKEND} eq "mysql" ) {
+                push @fasta_reads_rows,
+                    join( "\t", $HEADHASH{"$headstr"}, "$headstr", "$dnastr" );
+
+                if ( $processed % $RECORDS_PER_INFILE_INSERT == 0 )
+                {
+                    open( my $TEMPFILE, ">", "$TEMPDIR/fastareads_$DBSUFFIX.txt" )
+                        or die $!;
+                    for my $row (@fasta_reads_rows) {
+                        say $TEMPFILE $row;
+                    }
+                    close($TEMPFILE);
+                    $count = $sth->execute();
+                    $inserted += $count;
+                    @fasta_reads_rows = ();
                 }
-                close($TEMPFILE);
-                $count            = $sth->execute();
-                $inserted += $count;
-                @fasta_reads_rows = ();
+            }
+            elsif ( $run_conf{BACKEND} eq "sqlite" ) {
+                $sth->execute( $HEADHASH{"$headstr"}, "$headstr", "$dnastr" );
+                $inserted++;
             }
 
         }
@@ -402,52 +425,46 @@ while ( $files_processed < $files_to_process ) {
 }
 
 # cleanup
-if (@fasta_reads_rows) {
-    open( my $TEMPFILE, ">", "$TEMPDIR/fastareads_$DBNAME.txt" ) or die $!;
+if ( ( $run_conf{BACKEND} eq "mysql" ) && @fasta_reads_rows ) {
+    open( my $TEMPFILE, ">", "$TEMPDIR/fastareads_$DBSUFFIX.txt" ) or die $!;
     for my $row (@fasta_reads_rows) {
         say $TEMPFILE $row;
     }
     close($TEMPFILE);
-    $count            = $sth->execute();
+    $count = $sth->execute();
     $inserted += $count;
     @fasta_reads_rows = ();
 }
-$sth->finish;
-unlink("$TEMPDIR/fastareads_$DBNAME.txt");
+# $sth->finish;
+$dbh->commit;
+unlink("$TEMPDIR/fastareads_$DBSUFFIX.txt");
 
 # reenable indices
-$sth = $dbh->prepare('SET AUTOCOMMIT = 1;')
-    or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute()    # Execute the query
-    or die "Couldn't execute statement: " . $sth->errstr;
-$sth->finish;
+if ($run_conf{BACKEND} eq "mysql") {
+    $sth = $dbh->do('SET AUTOCOMMIT = 1;')
+        or die "Couldn't do statement: " . $dbh->errstr;
 
-$sth = $dbh->prepare('SET FOREIGN_KEY_CHECKS = 1;')
-    or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute()    # Execute the query
-    or die "Couldn't execute statement: " . $sth->errstr;
-$sth->finish;
+    $sth = $dbh->do('SET FOREIGN_KEY_CHECKS = 1;')
+        or die "Couldn't do statement: " . $dbh->errstr;
 
-$sth = $dbh->prepare('SET UNIQUE_CHECKS = 1;')
-    or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute()    # Execute the query
-    or die "Couldn't execute statement: " . $sth->errstr;
-$sth->finish;
+    $sth = $dbh->do('SET UNIQUE_CHECKS = 1;')
+        or die "Couldn't do statement: " . $dbh->errstr;
 
-$sth = $dbh->prepare('ALTER TABLE fasta_reads ENABLE KEYS;')
-    or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute or die "Cannot execute: " . $sth->errstr();
-$sth->finish;
+    $sth = $dbh->do('ALTER TABLE fasta_reads ENABLE KEYS;')
+        or die "Couldn't do statement: " . $dbh->errstr;
 
-$sth = $dbh->prepare('ALTER TABLE replnk ENABLE KEYS;')
-    or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute or die "Cannot execute: " . $sth->errstr();
-$sth->finish;
+    $sth = $dbh->do('ALTER TABLE replnk ENABLE KEYS;')
+        or die "Couldn't do statement: " . $dbh->errstr;
+}
+elsif ($run_conf{BACKEND} eq "sqlite") {
+    $dbh->{AutoCommit} = 1;
+    $dbh->do("PRAGMA foreign_keys = ON");
+}
 
 # disconnect
 $dbh->disconnect();
 
-SetStatistics( "NUMBER_READS", $totalReads );
+set_statistics( $DBSUFFIX, "NUMBER_READS", $totalReads );
 
 # check
 if ( $inserted == keys(%HEADHASH) ) {
@@ -518,19 +535,4 @@ sub dummyquals {
         $arr[$i] = 'a';
     }
     return join( "", @arr );
-}
-
-####################################
-sub SetStatistics {
-
-    my $argc = @_;
-    if ( $argc < 2 ) {
-        die "stats_set: expects 2 parameters, passed $argc !\n";
-    }
-
-    my $NAME  = $_[0];
-    my $VALUE = $_[1];
-
-    #print "$DBNAME,$LOGIN,$PASS,$NAME,$VALUE\n";
-    return stats_set( $DBNAME, $LOGIN, $PASS, $HOST, $NAME, $VALUE );
 }

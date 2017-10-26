@@ -89,6 +89,7 @@ SET(MISC_FILES
     HISTORY
     COPYING CLUSTER
     README RUNNING
+    sqlite_schema.sql
     )
 INSTALL(FILES ${MISC_FILES}
     DESTINATION ${InstallSuffix}

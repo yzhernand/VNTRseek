@@ -118,6 +118,7 @@ if ( $max_processes == 0 ) {
     }
 }
 
+$max_processes = ($files_to_process < $max_processes) ? $files_to_process : $max_processes;
 warn "Will use $max_processes processes\n";
 
 # fork as many new processes as there are CPUs

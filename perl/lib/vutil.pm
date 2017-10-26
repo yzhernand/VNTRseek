@@ -8,7 +8,7 @@ use Config::Simple;
 use FindBin;
 
 use base 'Exporter';
-our @EXPORT_OK = qw(read_config_file get_config get_credentials set_config set_credentials write_mysql stats_set stats_get set_datetime print_config trim create_blank_file);
+our @EXPORT_OK = qw(read_config_file get_config get_credentials set_config set_credentials get_dbh write_mysql write_sqlite stats_set set_statistics stats_get set_datetime print_config trim create_blank_file get_trunc_query);
 
 # vutil.pm
 # author: Yevgeniy Gelfand
@@ -51,7 +51,7 @@ sub read_config_file_configsimple {
 sub read_config_file {
 
  # Get file location
- unless (@_) { die "read_global_config_file: expects 1 parameters.\n"; }
+ unless (@_) { die "read_config_file: expects 1 parameters.\n"; }
  my $file_loc = shift;
  
  # read global config
@@ -183,8 +183,7 @@ sub stats_set {
  my $NAME = $_[4];
  my $VALUE = $_[5];
 
- my $dbh = DBI->connect("DBI:mysql:$DBNAME;host=$HOST", "$LOGIN", "$PASS"
-                   ) || die "Could not connect to database: $DBI::errstr"; 
+ my $dbh = get_dbh($DBNAME, $ENV{HOME} . "/". $VSCNF_FILE{DBSUFFIX} . ".vs.cnf");
 
  my $sth = $dbh->prepare("UPDATE stats SET $NAME=?")
                 or die "Couldn't prepare statement: " . $dbh->errstr;
@@ -196,6 +195,31 @@ sub stats_set {
  $dbh->disconnect();
 
  return 0;
+}
+
+####################################
+sub set_statistics {
+
+  my $argc = @_;
+  if ( $argc < 3 ) {
+      die "stats_set: expects 3 parameters, passed $argc !\n";
+  }
+
+  my ($DBSUFFIX, $NAME, $VALUE)  = @_;
+  my $dbh = get_dbh($DBSUFFIX, $ENV{HOME} . "/". $DBSUFFIX . ".vs.cnf");
+
+  if ($ENV{DEBUG}) {
+    warn "Setting stat: $NAME to $VALUE\n";
+  }
+
+  my $sth = $dbh->prepare("UPDATE stats SET $NAME=?")
+    or croak "Couldn't prepare statement: " . $dbh->errstr;
+
+  $sth->execute($VALUE)             # Execute the query
+    or croak "Couldn't execute statement: " . $sth->errstr;
+
+  $dbh->commit();
+  $dbh->disconnect();
 }
 
 ################################################################
@@ -254,27 +278,30 @@ sub stats_get {
 ################################################################
 
 sub get_dbh {
-  unless (@_ == 3) {
-    carp "get_dbh requires 3 parameters: database backend name, database name, and the config file location.";
+  unless (@_ == 2) {
+    carp "get_dbh requires 2 parameters: database suffix and the config file location.";
     return undef;
   }
 
-  my ($DBNAME, $config_loc) = @_;
+  my ($dbsuffix, $config_loc) = @_;
   read_config_file($config_loc)
     unless ($VSREAD);
 
   my $dbh;
   if ($VSCNF_FILE{BACKEND} eq "sqlite") {
-    my $dbloc = $VSCNF_FILE{OUTPUT_ROOT} . "/vntr_" . $VSCNF_FILE{DBSUFFIX} . "/vs.db";
-    $dbh = DBI->connect("DBI:SQLite:dbname=$dbloc", undef, undef, {
-      AutoCommit => 1,
+    my $dbfile = "$VSCNF_FILE{OUTPUT_ROOT}/vntr_$dbsuffix/$dbsuffix.db";
+    if ($ENV{DEBUG}) {
+      warn "Using SQLite db at: $dbfile\n";
+    }
+    $dbh = DBI->connect("DBI:SQLite:dbname=$dbfile", undef, undef, {
+      AutoCommit => 0,
       RaiseError => 1,
       sqlite_see_if_its_a_number => 1,
     })
     or croak "Could not connect to database: $DBI::errstr";
   }
   else {
-    $dbh = DBI->connect( "DBI:mysql:$DBNAME;mysql_local_infile=1;host=$VSCNF_FILE{HOST}",
+    $dbh = DBI->connect( "DBI:mysql:VNTRPIPE_$dbsuffix;mysql_local_infile=1;host=$VSCNF_FILE{HOST}",
     "$VSCNF_FILE{LOGIN}", "$VSCNF_FILE{PASS}" )
       or croak "Could not connect to database: $DBI::errstr";
   }
@@ -282,33 +309,51 @@ sub get_dbh {
   return $dbh;
 }
 
+####################################
+sub get_trunc_query {
+    die "Error: need table name for truncate query\n"
+        unless @_ == 2;
+    my ($backend, $table) = @_;
+    my $trunc_query;
+    if ( $backend eq "sqlite" ) {
+        $trunc_query = qq{DELETE FROM $table};
+    }
+    elsif ( $backend eq "mysql" ) {
+        $trunc_query = qq{TRUNCATE TABLE $table};
+    }
+
+    return $trunc_query;
+}
+
 ################################################################
 
 sub write_sqlite {
-  unless (@_ == 2) {
-    carp "write_sqlite requires 2 parameters: database suffix and the run output directory.";
+  unless (@_ == 3) {
+    carp "write_sqlite requires 3 parameters: database suffix, the run output directory, and the path to the run configuration file.";
     return undef;
   }
 
-  my ($DBNAME, $output_dir) = @_;
+  my ($dbsuffix, $output_dir, $config_loc) = @_;
   my $installdir = "$FindBin::RealBin";
-  open my $schema_fh, "<", "$installdir/sqlite_schema.sql"
-    or croak "Error opening SQLite schema file '$installdir/sqlite_schema.sql': $?";
-  my $sqlite_schema;
-  while (<$schema_fh>) {
-    # chomp;
-    $sqlite_schema .= $_;
-  }
-  close $schema_fh;
+  my $exestring = "sqlite3 $output_dir/vntr_$dbsuffix/$dbsuffix.db < $installdir/sqlite_schema.sql";
+  warn "Executing: $exestring\n";
+  system($exestring);
+  # read_config_file($config_loc)
+  #   unless ($VSREAD);
+  # open my $schema_fh, "<", "$installdir/sqlite_schema.sql"
+  #   or croak "Error opening SQLite schema file '$installdir/sqlite_schema.sql': $?";
+  # my $sqlite_schema;
+  # while (<$schema_fh>) {
+  #   # chomp;
+  #   $sqlite_schema .= $_;
+  # }
+  # close $schema_fh;
 
-  my $dbh = DBI->connect("DBI:SQLite:dbname=$output_dir/vs.db", undef, undef, {
-    AutoCommit => 1,
-    RaiseError => 1,
-    sqlite_see_if_its_a_number => 1,
-  })
-    or die "Could not connect to database: $DBI::errstr";
-  my $deploy_sth = $dbh->prepare($sqlite_schema);
-  $deploy_sth->execute;
+  # my $dbh = get_dbh($dbsuffix, $config_loc)
+  #   or croak "Could not connect to database: $DBI::errstr";
+  # $dbh->do($sqlite_schema)
+  #   or croak "Error creating tables in database: $DBI::errstr";
+  # $dbh->commit;
 }
 
 ################################################################
@@ -631,121 +676,6 @@ TEST
 }
 
 ################################################################
-sub write_config {
-  carp("Error: function requires two arguments: string of path and dbsuffix concatenated, reference to hash of options")
-    unless @_ == 2;
-  my $startdir = shift;
-  my %opts = %{ shift() };
-  %VSCNF_FILE = %opts;
-
-  # look in the directory the script was started in
- if (open(MFREAD,">${startdir}vs.cnf")) {
-  print MFREAD <<CNF;
-# COPY THIS FILE TO A DIFFERENT LOCATION AND SET ALL VARIABLES. 
-# DO NOT FORGET TO CHMOD THIS FILE TO PREVENT OTHER PEOPLE ON 
-# THE SYSTEM FROM LEARNING YOUR MYSQL CREDENTIALS.
-
-# mysql credentials
-LOGIN=$VSCNF_FILE{"LOGIN"}
-PASS=$VSCNF_FILE{"PASS"}
-HOST=$VSCNF_FILE{"HOST"}
-
-# set this to the number of processors on your system 
-# (or less if sharing the system with others or RAM is limited)
-# eg, 8
-NPROCESSES=$VSCNF_FILE{"NPROCESSES"}
-
-# minimum required flank on both sides for a read TR to be considered
-# eg, 10
-MIN_FLANK_REQUIRED=$VSCNF_FILE{"MIN_FLANK_REQUIRED"}
-
-# maximum flank length used in flank alignments
-# set to big number to use all
-# if read flanks are long with a lot of errors, 
-# it might be useful to set this to something like 50
-# max number of errors per flank is currently set to 8 (can be changed in main script only)
-# eg, 1000
-MAX_FLANK_CONSIDERED=$VSCNF_FILE{"MAX_FLANK_CONSIDERED"}
-
-# minimum number of mapped reads which agree on copy number to call an allele
-# eg, 2
-MIN_SUPPORT_REQUIRED=$VSCNF_FILE{"MIN_SUPPORT_REQUIRED"}
-
-# Whether or not to keep reads detected as PCR duplicates. A nonzero (true) value
-# means that detected PCR duplicates will not be removed. Default is 0.
-KEEPPCRDUPS=$VSCNF_FILE{"KEEPPCRDUPS"}
-
-# server name, used for html generating links
-# eg, orca.bu.edu
-SERVER=$VSCNF_FILE{"SERVER"}
-
-# for 454 platform, strip leading 'TCAG' 
-# eg, 1 - yes
-# eg, 0 - no (use no for all other platforms)
-STRIP_454_KEYTAGS=$VSCNF_FILE{"STRIP_454_KEYTAGS"}
-
-# data is paired reads
-# eg, 0 = no 
-# eg, 1 - yes
-IS_PAIRED_READS=$VSCNF_FILE{"IS_PAIRED_READS"}
-
-# html directory (must be writable and executable!)
-# eg, /var/www/html/vntrview
-HTML_DIR=$VSCNF_FILE{"HTML_DIR"}
-
-# input data directory 
-# (plain or gzipped fasta/fastq files)
-# eg, /input
-FASTA_DIR=$VSCNF_FILE{"FASTA_DIR"}
-
-# output directory (must be writable and executable!)
-# eg, /output
-OUTPUT_ROOT=$VSCNF_FILE{"OUTPUT_ROOT"}
-
-# temp (scratch) directory (must be executable!)
-# eg, /tmp
-TMPDIR=$VSCNF_FILE{"TMPDIR"}
-
-# names for the reference files 
-
-# (leb36 file, sequence plus flank data file, indistinguishable references file) 
-# files must be in install directory
-
-# eg, reference.leb36
-REFERENCE_FILE=$VSCNF_FILE{"REFERENCE_FILE"} 
-
-# eg, reference.seq
-REFERENCE_SEQ=$VSCNF_FILE{"REFERENCE_SEQ"} 
-
-# this file can be generated bu setting reference_indist_produce to 1
-# eg, reference.indist 
-REFERENCE_INDIST=$VSCNF_FILE{"REFERENCE_INDIST"}
-
-# generate a file of indistinguishable references, 
-# necessary only if a file is not already available for the reference set
-# eg, 1- generate
-# eg, 0 - don't generate
-REFERENCE_INDIST_PRODUCE=$VSCNF_FILE{"REFERENCE_INDIST_PRODUCE"}
-
-# total number of reference TRs prior to filtering
-# this is a fixed number to be printed in the latex file
-# set to 0 if it is not applicable
-# eg, 1188939 - human
-REFS_TOTAL=$VSCNF_FILE{"REFS_TOTAL"} 
-
-CNF
-
-    close(MFREAD);
-
-chmod 0600, "${startdir}vs.cnf";
-
- } else {
-
-   die "print_config: can't open '${startdir}vs.cnf' for writing!\n";
- }
-}
-
-################################################################
 
 sub print_config {
 
@@ -783,6 +713,9 @@ print MFREAD <<CNF;
 # COPY THIS FILE TO A DIFFERENT LOCATION AND SET ALL VARIABLES. 
 # DO NOT FORGET TO CHMOD THIS FILE TO PREVENT OTHER PEOPLE ON 
 # THE SYSTEM FROM LEARNING YOUR MYSQL CREDENTIALS.
+
+# Database backend
+BACKEND=$VSCNF_FILE{"BACKEND"}
 
 # mysql credentials
 LOGIN=$VSCNF_FILE{"LOGIN"}

@@ -18,38 +18,23 @@ use List::Util qw[min max];
 
 use lib "$FindBin::RealBin/lib"; # must be same as install dir!
 
-require "vutil.pm";
-
-use vutil ('get_credentials');
-use vutil ('write_mysql');
-use vutil ('stats_set');
+use vutil qw( get_config set_statistics );
 
 
 my $argc = @ARGV;
-if ($argc<6) { die "Usage: setdbstats.pl reference_file reads_profiles_folder reference_folder reads_profile_folder_clean dbname msdir\n"; }
+if ($argc<6) { die "Usage: setdbstats.pl reference_file reads_profiles_folder reference_folder reads_profile_folder_clean dbsuffix msdir\n"; }
 
 my $reffile = $ARGV[0];
 my $readpf = $ARGV[1];
 my $reffolder = $ARGV[2];
 my $rpfc = $ARGV[3];
-my $DBNAME = $ARGV[4];
+my $DBSUFFIX = $ARGV[4];
 my $MSDIR = $ARGV[5];
 
 # set these mysql credentials in vs.cnf (in installation directory)
-my ($LOGIN,$PASS,$HOST) = get_credentials($MSDIR);
+my %run_conf = get_config($MSDIR . "vs.cnf");
+my ( $LOGIN, $PASS, $HOST ) = @run_conf{qw(LOGIN PASS HOST)};
 
-####################################
-sub SetStatistics {
-
-  my $argc = @_;
-  if ($argc <2) { die "stats_set: expects 2 parameters, passed $argc !\n"; }
-
-  my $NAME = $_[0];
-  my $VALUE = $_[1];
-
-  #print "$DBNAME,$LOGIN,$PASS,$NAME,$VALUE\n";
-  return stats_set($DBNAME,$LOGIN,$PASS,$HOST,$NAME,$VALUE);
-}
 ####################################
 
 my $rc;
@@ -59,28 +44,28 @@ my $input;
 open($input, "-|", "wc -l $reffile | tail -1");
 $rc = <$input>;
 if ($rc =~ /(\d+)/) {
-  SetStatistics('NUMBER_REF_TRS',$rc);
+  set_statistics($DBSUFFIX, 'NUMBER_REF_TRS', $rc);
 }
 close($input);
 
 open($input, "-|", "wc -l $readpf/*.indexhist | tail -1");
 $rc = <$input>;
 if ($rc =~ /(\d+)/) {
-  SetStatistics('NUMBER_TRS_IN_READS',$rc);
+  set_statistics($DBSUFFIX, 'NUMBER_TRS_IN_READS', $rc);
 }
 close($input);
 
 open($input, "-|", "wc -l $reffolder/reference.leb36.rotindex | tail -1");
 $rc = <$input>;
 if ($rc =~ /(\d+)/) {
-  SetStatistics('NUMBER_REFS_TRS_AFTER_REDUND',$rc);
+  set_statistics($DBSUFFIX, 'NUMBER_REFS_TRS_AFTER_REDUND', $rc);
 }
 close($input);
 
 open($input, "-|", "wc -l $rpfc/*.rotindex | tail -1");
 $rc = <$input>;
 if ($rc =~ /(\d+)/) {
-  SetStatistics('NUMBER_TRS_IN_READS_AFTER_REDUND',$rc);
+  set_statistics($DBSUFFIX, 'NUMBER_TRS_IN_READS_AFTER_REDUND', $rc);
 }
 close($input);
 
@@ -116,10 +101,10 @@ if ($rc =~ /(\d+) (\d+) (\d+)/) {
 close($input);
 
 
-SetStatistics("NUMBER_TRS_IN_READS_GE7",$readTRsWithPatternGE7);
-SetStatistics("NUMBER_READS_WITHTRS_GE7",$totalReadsWithTRsPatternGE7);
-SetStatistics("NUMBER_READS_WITHTRS",$totalReadsWithTRs);
-SetStatistics("NUMBER_READS_WITHTRS_GE7_AFTER_REDUND",$readTRsWPGE7AfterCyclicRedundancyElimination);
+set_statistics($DBSUFFIX, "NUMBER_TRS_IN_READS_GE7", $readTRsWithPatternGE7);
+set_statistics($DBSUFFIX, "NUMBER_READS_WITHTRS_GE7", $totalReadsWithTRsPatternGE7);
+set_statistics($DBSUFFIX, "NUMBER_READS_WITHTRS", $totalReadsWithTRs);
+set_statistics($DBSUFFIX, "NUMBER_READS_WITHTRS_GE7_AFTER_REDUND", $readTRsWPGE7AfterCyclicRedundancyElimination);
 
 
 1;

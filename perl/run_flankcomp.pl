@@ -7,74 +7,57 @@ use List::Util qw[min max];
 use strict;
 use warnings;
 use Cwd;
+use POSIX qw(strftime);
 use DBI;
 
 use FindBin;
 use File::Basename;
 
-use lib "$FindBin::RealBin/lib"; 
-require "vutil.pm";
+use lib "$FindBin::RealBin/lib";
 
-use vutil ('get_credentials');
-use vutil ('write_mysql');
-use vutil ('stats_set');
+use vutil qw(get_config get_dbh set_statistics get_trunc_query);
 
-my $sec; 
-my $min;
-my $hour;
-my $mday;
-my $mon;
-my $year;
-my $wday;
-my $yday;
-my $isdst;
-
-sub nowhitespace($)
-{
-	my $string = shift;
-	$string =~ s/\s+//g;
-	return $string;
+sub nowhitespace($) {
+    my $string = shift;
+    $string =~ s/\s+//g;
+    return $string;
 }
 
-($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst)=localtime(time);
-print STDERR sprintf("\n\nstart: %4d-%02d-%02d %02d:%02d:%02d\n\n",$year+1900,$mon+1,$mday,$hour,$min,$sec);
+say STDERR strftime( "\n\nstart: %F %T\n\n", localtime );
 
-my $curdir =  getcwd;
+my $curdir = getcwd;
 
 my $argc = @ARGV;
-if ($argc<4) { die "Usage: run_flankcomp.pl inputfile dbname msdir tempdir\n"; }
-
+if ( $argc < 4 ) {
+    die "Usage: run_flankcomp.pl inputfile dbname msdir tempdir\n";
+}
 
 my $inputfile = $ARGV[0];
-my $DBNAME = $ARGV[1];
-my $MSDIR = $ARGV[2];
-my $TEMPDIR = $ARGV[3];
+my $DBSUFFIX  = $ARGV[1];
+my $MSDIR     = $ARGV[2];
+my $TEMPDIR   = $ARGV[3];
 
 # set these mysql credentials in vs.cnf (in installation directory)
-my ($LOGIN,$PASS,$HOST) = get_credentials($MSDIR);
-
+my %run_conf = get_config( $MSDIR . "vs.cnf" );
+my ( $LOGIN, $PASS, $HOST ) = @run_conf{qw(LOGIN PASS HOST)};
 
 my $clusters_processed = 0;
-my $totalRefReps = 0;
-my $totalReadReps = 0;
+my $totalRefReps       = 0;
+my $totalReadReps      = 0;
 
-
-my $dbh = DBI->connect("DBI:mysql:$DBNAME;mysql_local_infile=1;host=$HOST", "$LOGIN", "$PASS"
-	           ) || die "Could not connect to database: $DBI::errstr";
+my $dbh = get_dbh( $DBSUFFIX, $MSDIR . "vs.cnf" )
+    or die "Could not connect to database: $DBI::errstr";
 
 my $sth;
 my $sth1;
 my $sth2;
 my $sth3;
 
-my $mostReps = 0;
+my $mostReps    = 0;
 my $mostRefReps = 0;
-my $maxRange = 0;
-
+my $maxRange    = 0;
 
 my $BREAK_SIZE = 4000;
-
-
 
 #for my $i (keys %BELONG) {
 #  print STDERR $i.":".$BELONG{$i}."\n";
@@ -82,133 +65,103 @@ my $BREAK_SIZE = 4000;
 #exit(1);
 
 # clear database cluster tables
-$sth = $dbh->prepare('TRUNCATE TABLE clusters; ') or die "Couldn't prepare statement: " . $dbh->errstr;
-     $sth->execute()             # Execute the query
-            or die "Couldn't execute statement: " . $sth->errstr;
+$dbh->do( get_trunc_query( $run_conf{BACKEND}, "clusters" ) )
+    or die "Couldn't do statement: " . $dbh->errstr;
 
-$sth = $dbh->prepare('TRUNCATE TABLE clusterlnk; ') or die "Couldn't prepare statement: " . $dbh->errstr;
-     $sth->execute()             # Execute the query
-            or die "Couldn't execute statement: " . $sth->errstr;
+$dbh->do( get_trunc_query( $run_conf{BACKEND}, "clusterlnk" ) )
+    or die "Couldn't do statement: " . $dbh->errstr;
 
+if ( $run_conf{BACKEND} eq "mysql" ) {
+    $dbh->do('ALTER TABLE clusterlnk DISABLE KEYS;')
+        or die "Couldn't do statement: " . $dbh->errstr;
 
-$sth = $dbh->prepare('ALTER TABLE clusterlnk DISABLE KEYS;')
-                or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute or die "Cannot execute: " . $sth->errstr();;
-$sth->finish;
+    $dbh->do('SET AUTOCOMMIT = 0;')
+        or die "Couldn't do statement: " . $dbh->errstr;
 
-$sth = $dbh->prepare('SET AUTOCOMMIT = 0;')
-                or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute()             # Execute the query
-            or die "Couldn't execute statement: " . $sth->errstr;
-$sth->finish;
+    $dbh->do('SET FOREIGN_KEY_CHECKS = 0;')
+        or die "Couldn't do statement: " . $dbh->errstr;
 
-$sth = $dbh->prepare('SET FOREIGN_KEY_CHECKS = 0;')
-                or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute()             # Execute the query
-            or die "Couldn't execute statement: " . $sth->errstr;
-$sth->finish;
-
-$sth = $dbh->prepare('SET UNIQUE_CHECKS = 0;')
-                or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute()             # Execute the query
-            or die "Couldn't execute statement: " . $sth->errstr;
-$sth->finish;
-
-
-
-$sth2 = $dbh->prepare('INSERT INTO clusters(cid,minpat,maxpat,repeatcount,refcount) VALUES(?,?,?,?,?)')
-                or die "Couldn't prepare statement: " . $dbh->errstr;
-
-
-####################################
-sub SetStatistics {
-
-  my $argc = @_;
-  if ($argc <2) { die "stats_set: expects 2 parameters, passed $argc !\n"; }
-
-  my $NAME = $_[0];
-  my $VALUE = $_[1];
-
-  #print "$DBNAME,$LOGIN,$PASS,$NAME,$VALUE\n";
-  return stats_set($DBNAME,$LOGIN,$PASS,$HOST,$NAME,$VALUE);
+    $dbh->do('SET UNIQUE_CHECKS = 0;')
+        or die "Couldn't do statement: " . $dbh->errstr;
 }
-####################################
+elsif ( $run_conf{BACKEND} eq "sqlite" ) {
+    $dbh->do("PRAGMA foreign_keys = OFF");
+    $dbh->{AutoCommit} = 0;
+}
 
-
-
 #############################################################################################
 #############################################################################################
 #############################################################################################
 #############################################################################################
 #############################################################################################
 #############################################################################################
-
 
 print STDERR "\nInserting into clusterlnk table...\n";
 
 open FILE, "<$inputfile" or die $!;
+
 #open QFILE, ">$inputfile.reads.fq" or die $!;
 
-
-$sth3 = $dbh->prepare("LOAD DATA LOCAL INFILE '$TEMPDIR/clusterlnk_$DBNAME.txt' INTO TABLE clusterlnk FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';")
-                or die "Couldn't prepare statement: " . $dbh->errstr;
-
+if ($run_conf{BACKEND} eq "mysql") {
+    $sth
+        = $dbh->prepare(
+        "LOAD DATA LOCAL INFILE '$TEMPDIR/clusterlnk_$DBSUFFIX.txt' INTO TABLE clusterlnk FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';"
+        ) or die "Couldn't prepare statement: " . $dbh->errstr;
+}
+elsif ($run_conf{BACKEND} eq "sqlite") {
+    $sth = $dbh->prepare(qq{INSERT INTO clusterlnk VALUES (?, ?, ?, 0, 0)})
+        or die "Couldn't prepare statement: " . $dbh->errstr;
+}
 
 my $TEMPFILE;
-open ($TEMPFILE, ">$TEMPDIR/clusterlnk_$DBNAME.txt") or die $!;
-
+open( $TEMPFILE, ">$TEMPDIR/clusterlnk_$DBSUFFIX.txt" ) or die $!;
 
 # insert into clusterlnk
 my $totalreps = 0;
-while (<FILE>) { 
- $clusters_processed++;
+while (<FILE>) {
+    $clusters_processed++;
 
- chomp;
- 
- my @values = split(',', $_);
+    chomp;
 
- foreach my $val (@values) {
+    my @values = split( ',', $_ );
 
-     # insert clusterlnk entry
+    foreach my $val (@values) {
 
-     $totalreps++;
+        # insert clusterlnk entry
 
-     my $dir = '\'';
-     if ($val =~ m/([\'\"])/) { $dir = $1; }
+        $totalreps++;
 
-     print $TEMPFILE $clusters_processed,",",$val,",",$dir,",",0,",",0,"\n";
-
-     if ($totalreps % $RECORDS_PER_INFILE_INSERT == 0) {
-       close($TEMPFILE);
-       $sth3->execute();
-       open ($TEMPFILE, ">$TEMPDIR/clusterlnk_$DBNAME.txt") or die $!;
-     }
+        my $dir = '\'';
+        if ( $val =~ m/([\'\"])/ ) { $dir = $1; }
 
 
- }
+        if ( ($run_conf{BACKEND} eq "mysql") && $totalreps % $RECORDS_PER_INFILE_INSERT == 0 ) {
+            print $TEMPFILE $clusters_processed, ",", $val, ",", $dir, ",", 0,
+                ",", 0, "\n";
+            close($TEMPFILE);
+            $sth->execute();
+            open( $TEMPFILE, ">$TEMPDIR/clusterlnk_$DBSUFFIX.txt" ) or die $!;
+        }
+        elsif ($run_conf{BACKEND} eq "sqlite") {
+            $sth->execute($clusters_processed, $val, $dir);
+        }
+
+    }
+
+}    # end of while loop
 
 
-} # end of while loop
+if ($run_conf{BACKEND} eq "mysql"){
+    # finish clustelnk load infile
+    close($TEMPFILE);
+    $sth->execute();
+    unlink("$TEMPDIR/clusterlnk_$DBSUFFIX.txt");
+    # reenable indices
+    $dbh->do('ALTER TABLE clusterlnk ENABLE KEYS;')
+        or die "Couldn't do statement: " . $dbh->errstr;
+}
 
-
-# finish clustelnk load infile
-close($TEMPFILE);
-$sth3->execute();
-unlink("$TEMPDIR/clusterlnk_$DBNAME.txt");
-
-
-# reenable indices
-$sth = $dbh->prepare('ALTER TABLE clusterlnk ENABLE KEYS;')
-                or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute or die "Cannot execute: " . $sth->errstr();;
-$sth->finish;
-
-
-#cleanup
-$sth2->finish;
-$sth3->finish;
-
-
+$dbh->commit;
 
 #############################################################################################
 #############################################################################################
@@ -220,189 +173,194 @@ $sth3->finish;
 print STDERR "\nPrinting DNA and inserting into cluster table...\n";
 
 # now print dna and quals (also insert into cluster table)
-$sth = $dbh->prepare('SELECT rid,flankleft,sequence,flankright,pattern,copynum,direction FROM fasta_ref_reps INNER JOIN clusterlnk ON rid=-repeatid WHERE clusterid = ?')
-                or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth1 = $dbh->prepare('SELECT rid, dna, first, last, pattern, copynum,direction FROM fasta_reads INNER JOIN replnk ON fasta_reads.sid=replnk.sid INNER JOIN clusterlnk ON rid=repeatid WHERE clusterid = ?')
-                or die "Couldn't prepare statement: " . $dbh->errstr;
-
+$sth
+    = $dbh->prepare(
+    'SELECT rid,flankleft,sequence,flankright,pattern,copynum,direction FROM fasta_ref_reps INNER JOIN clusterlnk ON rid=-repeatid WHERE clusterid = ?'
+    ) or die "Couldn't prepare statement: " . $dbh->errstr;
+$sth1
+    = $dbh->prepare(
+    'SELECT rid, dna, first, last, pattern, copynum,direction FROM fasta_reads INNER JOIN replnk ON fasta_reads.sid=replnk.sid INNER JOIN clusterlnk ON rid=repeatid WHERE clusterid = ?'
+    ) or die "Couldn't prepare statement: " . $dbh->errstr;
+$sth2
+    = $dbh->prepare(
+    'INSERT INTO clusters(cid,minpat,maxpat,repeatcount,refcount) VALUES(?,?,?,?,?)'
+    ) or die "Couldn't prepare statement: " . $dbh->errstr;
 
 my $i;
-seek(FILE,0,0);
+seek( FILE, 0, 0 );
 $clusters_processed = 0;
 while (<FILE>) {
- $clusters_processed++;
+    $clusters_processed++;
 
- chomp;
- 
- my @values = split(',', $_);
-   
- my $repeatcount = 0;
- my $refcount = 0;
- my $readcount = 0;
- my $minpat = 1000000;
- my $maxpat = 0;
- my $range = 0;
+    chomp;
 
+    my @values = split( ',', $_ );
 
-# process each line
-{
+    my $repeatcount = 0;
+    my $refcount    = 0;
+    my $readcount   = 0;
+    my $minpat      = 1000000;
+    my $maxpat      = 0;
+    my $range       = 0;
 
-  # for statistics
-  foreach my $val (@values) {
+    # process each line
+    {
 
-     $val =~ s/[\'\"]//g;
+        # for statistics
+        foreach my $val (@values) {
 
-     # insert clusterlnk entry
-     if ($val<=0) {
+            $val =~ s/[\'\"]//g;
 
-         $refcount++;
+            # insert clusterlnk entry
+            if ( $val <= 0 ) {
 
-         $totalRefReps++;
+                $refcount++;
 
-     } else {
+                $totalRefReps++;
 
-         $readcount++;
+            }
+            else {
 
-         $totalReadReps++;
+                $readcount++;
 
-     }
- 
-     $repeatcount++;
-  }
+                $totalReadReps++;
 
+            }
 
-  # execute ref and read pulls
-  $sth->execute($clusters_processed)
-      or die "Couldn't execute statement: " . $sth->errstr;
-  $sth1->execute($clusters_processed)
-      or die "Couldn't execute statement: " . $sth1->errstr;
+            $repeatcount++;
+        }
 
+        # execute ref and read pulls
+        $sth->execute($clusters_processed)
+            or die "Couldn't execute statement: " . $sth->errstr;
+        $sth1->execute($clusters_processed)
+            or die "Couldn't execute statement: " . $sth1->errstr;
 
-  my $numrefs = $sth->rows;
-  my $numreads = $sth1->rows;
+        my $numrefs  = $sth->rows;
+        my $numreads = $sth1->rows;
 
-   
-  # store refs for later use
-  $i=0;
-  open (RFILE, ">$TEMPDIR/refs_$DBNAME.txt") or die $!;
-  while ($i<$numrefs) { 
-     (my @data = $sth->fetchrow_array()) or die "Can't fetch reference row from database!";
+        # store refs for later use
+        $i = 0;
+        open( RFILE, ">$TEMPDIR/refs_$DBSUFFIX.txt" ) or die $!;
+        while ( $i < $numrefs ) {
+            ( my @data = $sth->fetchrow_array() )
+                or die "Can't fetch reference row from database!";
 
-     print RFILE "-".$data[0].$data[6].",".$data[1].",".$data[2].",".$data[3].",".$data[4]."\n";
+            print RFILE "-"
+                . $data[0]
+                . $data[6] . ","
+                . $data[1] . ","
+                . $data[2] . ","
+                . $data[3] . ","
+                . $data[4] . "\n";
 
-     $minpat = min( $minpat, length($data[4]) );
-     $maxpat = max( $maxpat, length($data[4]) );
+            $minpat = min( $minpat, length( $data[4] ) );
+            $maxpat = max( $maxpat, length( $data[4] ) );
 
-     $i++;
-  }
-  close(RFILE);
+            $i++;
+        }
+        close(RFILE);
 
+        # print reads in blocks of BREAK_SIZE
+        $i = 0;
+        my $hcount = 0;
+        while ( $i < $numreads ) {
 
-  # print reads in blocks of BREAK_SIZE
-  $i = 0;
-  my $hcount = 0;
-  while ($i<$numreads) { 
+            if ( ( $i % $BREAK_SIZE ) == 0 ) {
+                $hcount++;
 
-    if (($i % $BREAK_SIZE)==0) {
-     $hcount++;
-     
-     print "@($clusters_processed\_$hcount):";
-     print "\n**********************************************************************\n";
+                print "@($clusters_processed\_$hcount):";
+                print
+                    "\n**********************************************************************\n";
 
-     # print refs each time 
-     open (RFILE, "$TEMPDIR/refs_$DBNAME.txt") or die $!;
-     while (<RFILE>) { print $_; }
-     close(RFILE);
-    }
+                # print refs each time
+                open( RFILE, "$TEMPDIR/refs_$DBSUFFIX.txt" ) or die $!;
+                while (<RFILE>) { print $_; }
+                close(RFILE);
+            }
 
-    (my @data = $sth1->fetchrow_array()) or die "Can't fetch read row from database!";
-    my $dna = nowhitespace($data[1]);
-    print $data[0].$data[6].",".$data[2].",".$data[3].",".$dna.",".$data[4]."\n";
+            ( my @data = $sth1->fetchrow_array() )
+                or die "Can't fetch read row from database!";
+            my $dna = nowhitespace( $data[1] );
+            print $data[0]
+                . $data[6] . ","
+                . $data[2] . ","
+                . $data[3] . ","
+                . $dna . ","
+                . $data[4] . "\n";
 
-    $minpat = min( $minpat, length($data[4]) );
-    $maxpat = max( $maxpat, length($data[4]) );
+            $minpat = min( $minpat, length( $data[4] ) );
+            $maxpat = max( $maxpat, length( $data[4] ) );
 
-    $i++;
-  }
-  
+            $i++;
+        }
 
+    }    # end of process each line
 
-} # end of process each line
+    # do for 1st 10 clusters for now
+    #if ($clusters_processed >= 20) { last; }
 
+    # insert database records (cluster table)
+    $sth2->execute( $clusters_processed, $minpat, $maxpat, $repeatcount,
+        $refcount )    # Execute the query
+        or die "Couldn't execute statement: " . $sth2->errstr;
 
- # do for 1st 10 clusters for now
- #if ($clusters_processed >= 20) { last; }
+    # stats
+    $range = int( ( $maxpat / $minpat - 1.0 ) * 100 + .5 );
+    $mostReps    = max( $mostReps,    $repeatcount );
+    $mostRefReps = max( $mostRefReps, $refcount );
+    $maxRange    = max( $maxRange,    $range );
 
- # insert database records (cluster table)
- $sth2->execute($clusters_processed,$minpat,$maxpat,$repeatcount,$refcount)  # Execute the query
-         or die "Couldn't execute statement: " . $sth2->errstr;
-
- # stats
- $range = int(($maxpat / $minpat - 1.0) * 100 + .5);
- $mostReps =  max( $mostReps, $repeatcount );
- $mostRefReps =  max( $mostRefReps, $refcount );
- $maxRange =  max( $maxRange, $range );
-
- 
-} # end of while loop
-
+}    # end of while loop
 
 # delete temp ref file
-unlink("$TEMPDIR/refs_$DBNAME.txt");
-
+unlink("$TEMPDIR/refs_$DBSUFFIX.txt");
 
 #cleanup
 close(FILE);
+
 #close(QFILE);
 
 $sth->finish;
 $sth1->finish;
 
-
 # enable old settings
-$sth = $dbh->prepare('SET AUTOCOMMIT = 1;')
-                or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute()             # Execute the query
-            or die "Couldn't execute statement: " . $sth->errstr;
-$sth->finish;
+if ($run_conf{BACKEND} eq "mysql"){
+    $dbh->do('SET AUTOCOMMIT = 1;')
+        or die "Couldn't do statement: " . $dbh->errstr;
 
-$sth = $dbh->prepare('SET FOREIGN_KEY_CHECKS = 1;')
-                or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute()             # Execute the query
-            or die "Couldn't execute statement: " . $sth->errstr;
-$sth->finish;
+    $dbh->do('SET FOREIGN_KEY_CHECKS = 1;')
+        or die "Couldn't do statement: " . $dbh->errstr;
 
-$sth = $dbh->prepare('SET UNIQUE_CHECKS = 1;')
-                or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute()             # Execute the query
-            or die "Couldn't execute statement: " . $sth->errstr;
-$sth->finish;
-
-
+    $dbh->do('SET UNIQUE_CHECKS = 1;')
+        or die "Couldn't do statement: " . $dbh->errstr;
+}
+elsif ($run_conf{BACKEND} eq "sqlite") {
+    $dbh->do("PRAGMA foreign_keys = ON");
+    $dbh->{AutoCommit} = 1;
+}
 
 $dbh->disconnect();
 
-
 # update the stats table
-SetStatistics("CLUST_LARGEST_NUMBER_OF_TRS_IN_PROCLU_CLUSTER",$mostReps);
-SetStatistics("CLUST_LARGEST_NUMBER_OF_REFS_IN_PROCLU_CLUSTER",$mostRefReps);
-SetStatistics("CLUST_LARGEST_PATRANGE_IN_PROCLU_CLUSTER",$maxRange);
+set_statistics( $DBSUFFIX, "CLUST_LARGEST_NUMBER_OF_TRS_IN_PROCLU_CLUSTER",
+    $mostReps );
+set_statistics( $DBSUFFIX, "CLUST_LARGEST_NUMBER_OF_REFS_IN_PROCLU_CLUSTER",
+    $mostRefReps );
+set_statistics( $DBSUFFIX, "CLUST_LARGEST_PATRANGE_IN_PROCLU_CLUSTER",
+    $maxRange );
 
-SetStatistics("CLUST_NUMBER_OF_PROCLU_CLUSTERS",$clusters_processed);
-SetStatistics("CLUST_NUMBER_OF_REF_REPS_IN_CLUSTERS",$totalRefReps);
-SetStatistics("CLUST_NUMBER_OF_READ_REPS_IN_CLUSTERS",$totalReadReps);
+set_statistics( $DBSUFFIX, "CLUST_NUMBER_OF_PROCLU_CLUSTERS",
+    $clusters_processed );
+set_statistics( $DBSUFFIX, "CLUST_NUMBER_OF_REF_REPS_IN_CLUSTERS",
+    $totalRefReps );
+set_statistics( $DBSUFFIX, "CLUST_NUMBER_OF_READ_REPS_IN_CLUSTERS",
+    $totalReadReps );
 
+print STDERR
+    "Processing complete -- processed $clusters_processed cluster(s).\n";
 
-
-print STDERR "Processing complete -- processed $clusters_processed cluster(s).\n";
-
-($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst)=localtime(time);
-print STDERR sprintf("\n\nend: %4d-%02d-%02d %02d:%02d:%02d\n\n",$year+1900,$mon+1,$mday,$hour,$min,$sec);
-
-
+say STDERR strftime( "\n\nend: %F %T\n\n", localtime );
 
 1;
-
-
-
 

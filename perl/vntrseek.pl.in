@@ -35,6 +35,7 @@ use Cwd;
 use FindBin;
 use File::Basename;
 use File::Copy;
+use POSIX qw(strftime);
 use Data::Dumper;
 
 use Getopt::Long qw(GetOptionsFromArray);
@@ -50,7 +51,7 @@ my $install_dir = "$FindBin::RealBin";
 use lib "$FindBin::RealBin/lib";    # must be same as install dir!
 
 use vutil
-    qw(get_config get_credentials set_config set_credentials write_mysql stats_set stats_get set_datetime print_config create_blank_file);
+    qw(get_config get_credentials set_config set_statistics set_credentials write_mysql write_sqlite get_dbh stats_set stats_get set_datetime print_config create_blank_file);
 
 my $DOALLSTEPS = 0
     ; # set to 0 to do one step at a time (recommended for test run), 1 to run though all steps (THIS IS OTIONAL AS SPECIFYING END STEP IS POSSIBLE)
@@ -84,6 +85,7 @@ my $HELPSTRING
     . "\t--MIN_SUPPORT_REQUIRED        minimum number of mapped reads which agree on copy number to call an allele (default 2)\n"
     . "\t--KEEPPCRDUPS                      if this flag is given, PCR duplicates will not be looked for or removed. (default: PCR duplicates are removed)"
     . "\t--DBSUFFIX                    suffix for database name\n"
+    . "\t--BACKEND                     Specify the database backend {valid values are 'mysql' and 'sqlite'\n"
     . "\t--SERVER                      server name, used for html generating links\n"
     . "\t--STRIP_454_KEYTAGS           for 454 platform, strip leading 'TCAG', 0/1 (default 0)\n"
     . "\t--IS_PAIRED_READS             data is paired reads, 0/1 (default 0)\n"
@@ -117,6 +119,7 @@ GetOptions(
     "MAX_FLANK_CONSIDERED=i",
     "MIN_SUPPORT_REQUIRED=i",
     "KEEPPCRDUPS",
+    "BACKEND=s",
     "DBSUFFIX=s",
     "SERVER=s",
     "STRIP_454_KEYTAGS=i",
@@ -422,8 +425,9 @@ sub SetDatetime {
     }
 
     my $NAME = $_[0];
+    my $VALUE = strftime( "%F %T", localtime );
 
-    return set_datetime( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, $NAME );
+    return set_statistics( $opts{DBSUFFIX}, $NAME, $VALUE );
 }
 
 ####################################
@@ -438,7 +442,7 @@ sub SetStatistics {
     my $VALUE = $_[1];
 
     #print "$DBNAME,$opts{LOGIN},$opts{PASS},$NAME,$VALUE\n";
-    return stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, $NAME, $VALUE );
+    return set_statistics( $opts{DBSUFFIX}, $NAME, $VALUE );
 }
 ####################################
 
@@ -453,14 +457,14 @@ sub SetError {
     my $VALUE2 = $_[1];
     my $VALUE3 = $_[2];
 
-    stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "ERROR_STEP", $VALUE1 );
-    stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "ERROR_DESC", $VALUE2 );
-    stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "ERROR_CODE", $VALUE3 );
+    set_statistics( $opts{DBSUFFIX}, "ERROR_STEP", $VALUE1 );
+    set_statistics( $opts{DBSUFFIX}, "ERROR_DESC", $VALUE2 );
+    set_statistics( $opts{DBSUFFIX}, "ERROR_CODE", $VALUE3 );
 
     return 0;
 }
 
-sub GlearError {
+sub ClearError {
 
     my $argc = @_;
     if ( $argc >= 1 ) {
@@ -534,7 +538,7 @@ sub GlearError {
             stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_MYSQLCREATE",
                 undef );
         }
-        print "\nGlearError: making next step: $to.\n\n";
+        print "\nClearError: making next step: $to.\n\n";
     }
 
     SetError( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "ERROR_STEP", 0 );
@@ -633,8 +637,8 @@ if ( $STEP != 0 ) {
     # clear error?
     if ( $STEP == 100 ) {
 
-        if   ( $STEPEND >= 0 && $STEPEND <= 19 ) { GlearError($STEPEND); }
-        else                                     { GlearError(); }
+        if   ( $STEPEND >= 0 && $STEPEND <= 19 ) { ClearError($STEPEND); }
+        else                                     { ClearError(); }
 
         print STDERR "\n\nPipeline error cleared!\n";
         exit 0;
@@ -667,14 +671,19 @@ if ( $STEP == 0 ) {
         warn "\nWarning: Failed to create data directory!\n";
     }
 
-    write_mysql( $DBNAME, $opts{TMPDIR} );
+    my $exstring;
 
-    my $exstring
-        = "mysql -u $opts{LOGIN} --password=$opts{PASS} -h $opts{HOST} < $opts{TMPDIR}/${DBNAME}.sql";
-    system($exstring);
+    if($opts{BACKEND} eq "mysql") {
+        write_mysql( $DBNAME, $opts{TMPDIR} );
+        $exstring = "mysql -u $opts{LOGIN} --password=$opts{PASS} -h $opts{HOST} < $opts{TMPDIR}/${DBNAME}.sql";
+        system($exstring);
+        $exstring = "rm -f $opts{TMPDIR}/${DBNAME}.sql";
+        system($exstring);
+    }
+    else {
+        write_sqlite($opts{DBSUFFIX}, $opts{OUTPUT_ROOT}, $config_file);
+    }
 
-    $exstring = "rm -f $opts{TMPDIR}/${DBNAME}.sql";
-    system($exstring);
 
     if ( !mkdir("$opts{HTML_DIR}") ) {
         warn "\nWarning: Failed to create html directory!\n";
@@ -691,7 +700,7 @@ if ( $STEP == 0 ) {
     SetStatistics( "TIME_MYSQLCREATE", time() - $timestart );
     SetDatetime("DATE_MYSQLCREATE");
 
-    print STDERR "done!\n";
+    warn "done!\n";
 
     if    ( $STEPEND == $STEP ) { $STEP = 100; }
     elsif ($DOALLSTEPS)         { $STEP = 1; }
@@ -903,7 +912,7 @@ if ( $STEP == 3 ) {
 
     print STDERR "setting additional statistics...\n";
     system(
-        "./setdbstats.pl $opts{REFERENCE_FILE} $read_profiles_folder $reference_folder $read_profiles_folder_clean $DBNAME $MSDIR"
+        "./setdbstats.pl $opts{REFERENCE_FILE} $read_profiles_folder $reference_folder $read_profiles_folder_clean $opts{DBSUFFIX} $MSDIR"
     );
     if ( $? == -1 ) {
         SetError( $STEP, "command failed: $!", -1 );
@@ -1082,46 +1091,44 @@ if ( $STEP == 7 ) {
 # a temporary sql file while exposing the password on the command line is
 # totally unnecessary.
 # TODO Change so that reference seq file does not need to be in install dir
-    $exstring
-        = "echo \"truncate TABLE $DBNAME.fasta_ref_reps; LOAD DATA LOCAL INFILE '$install_dir/$opts{REFERENCE_SEQ}' INTO TABLE $DBNAME.fasta_ref_reps FIELDS TERMINATED BY ',' IGNORE 1 LINES;\" > $opts{TMPDIR}/${DBNAME}_2.sql";
-    system($exstring);
-    if ( $? == -1 ) {
-        SetError( $STEP, "command failed: $!", -1 );
-        die "command failed: $!\n";
-    }
-    else {
-        my $rc = ( $? >> 8 );
-        if ( 0 != $rc ) {
-            SetError(
-                $STEP,
-                "inserting REFERENCE flanks into database (script creation) failed",
-                $rc
-            );
-            die "command exited with value $rc";
+    my $dbh = get_dbh($opts{DBSUFFIX}, $config_file);
+    if ($opts{BACKEND} eq "sqlite") {
+        # Truncate table
+        $dbh->do("DELETE FROM fasta_ref_reps;");
+        # Same number of placeholders as fields in seq file.
+        my $cols = join(",", qw(rid
+            firstindex
+            lastindex
+            copynum
+            head
+            flankleft
+            pattern
+            sequence
+            flankright
+            conserved
+            entropy) # Need entropy col since it is NOT NULL. Set to 0 below
+        );
+        my $placeholders = join(",", ("?") x 11);
+        my $query = "INSERT INTO fasta_ref_reps ($cols) VALUES ($placeholders)";
+        my $insert_sth = $dbh->prepare($query); 
+        open my $refset, "<", "$install_dir/$opts{REFERENCE_SEQ}";
+        # Skip header
+        <$refset>;
+        # Insert all ref TRs from refset file
+        while (my $r = <$refset>) {
+            chomp $r;
+            my @fields = split /,/, $r;
+            # 0 is for entropy column above
+            $insert_sth->execute(@fields, 0);
         }
+        $dbh->commit();
+        $dbh->disconnect();
     }
-
-    $exstring
-        = "mysql -u $opts{LOGIN} --password=$opts{PASS} -h $opts{HOST} --local-infile=1 $DBNAME < $opts{TMPDIR}/${DBNAME}_2.sql";
-    system($exstring);
-    if ( $? == -1 ) {
-        SetError( $STEP, "command failed: $!", -1 );
-        die "command failed: $!\n";
+    elsif ($opts{BACKEND} eq "mysql") {
+        $dbh->do("TRUNCATE TABLE fasta_ref_reps;");
+        $dbh->do("LOAD DATA LOCAL INFILE '$install_dir/$opts{REFERENCE_SEQ}' INTO TABLE $DBNAME.fasta_ref_reps FIELDS TERMINATED BY ',' IGNORE 1 LINES;");
+        $dbh->commit;
     }
-    else {
-        my $rc = ( $? >> 8 );
-        if ( 0 != $rc ) {
-            SetError(
-                $STEP,
-                "inserting REFERENCE flanks into database (mysql call) failed",
-                $rc
-            );
-            die "command exited with value $rc";
-        }
-    }
-
-    $exstring = "rm -f $opts{TMPDIR}/${DBNAME}_2.sql";
-    system($exstring);
 
     SetStatistics( "TIME_DB_INSTERT_REFS", time() - $timestart );
     SetDatetime("DATE_DB_INSTERT_REFS");
@@ -1139,7 +1146,7 @@ if ( $STEP == 8 ) {
         "\n\nExecuting step #$STEP (inserting READS flanks into database)...";
     my $extra_param = ($opts{STRIP_454_KEYTAGS}) ? '1' : '0';
     my $exstring
-        = "./insert_reads.pl $read_profiles_folder_clean/all.clusters $read_profiles_folder  $opts{FASTA_DIR} $read_profiles_folder_clean $reference_folder/reference.leb36.rotindex $extra_param $DBNAME $MSDIR $opts{TMPDIR} $opts{IS_PAIRED_READS}";
+        = "./insert_reads.pl $read_profiles_folder_clean/all.clusters $read_profiles_folder  $opts{FASTA_DIR} $read_profiles_folder_clean $reference_folder/reference.leb36.rotindex $extra_param $opts{DBSUFFIX} $MSDIR $opts{TMPDIR} $opts{IS_PAIRED_READS}";
     system($exstring);
     if ( $? == -1 ) {
         SetError( $STEP, "command failed: $!", -1 );
@@ -1168,7 +1175,7 @@ if ( $STEP == 9 ) {
     print STDERR
         "\n\nExecuting step #$STEP (outputting flanks inside each cluster)...";
     my $exstring
-        = "./run_flankcomp.pl $read_profiles_folder_clean/allwithdups.clusters $DBNAME $MSDIR $opts{TMPDIR} > $read_profiles_folder_clean/allwithdups.flanks";
+        = "./run_flankcomp.pl $read_profiles_folder_clean/allwithdups.clusters $opts{DBSUFFIX} $MSDIR $opts{TMPDIR} > $read_profiles_folder_clean/allwithdups.flanks";
     system($exstring);
     if ( $? == -1 ) {
         SetError( $STEP, "command failed: $!", -1 );
@@ -1352,10 +1359,10 @@ if ( $STEP == 11 ) {
     }
 
     # update DB
-    print STDERR "\n\n(updating database with dist/undist info)...";
+    print STDERR "\n\n(updating database with dist/indist info)...";
     $exstring = "./vntrpipe_xml2sql.pl";
     my @exargs
-        = ( qw(-r -k5 -t50 -d), $DBNAME, "-u", $MSDIR, $opts{REFERENCE_INDIST} );
+        = ( qw(-r -k5 -t50 -d), $opts{DBSUFFIX}, "-u", $MSDIR );
     system( $exstring, @exargs );
     if ( $? == -1 ) {
         SetError( $STEP, "command failed: $!", -1 );
