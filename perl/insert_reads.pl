@@ -22,7 +22,7 @@ my $timestart;
 my $count;
 
 ################ main ####################
-say STDERR strftime( "\n\nstart: %F %T\n\n", localtime );
+warn strftime( "\n\nstart: %F %T\n\n", localtime );
 
 my $argc = @ARGV;
 
@@ -487,7 +487,7 @@ else {
 
 say STDERR "\n\nProcessing complete (insert_reads.pl).";
 
-say STDERR strftime( "\n\nend: %F %T\n\n", localtime );
+warn strftime( "\n\nend: %F %T\n\n", localtime );
 
 1;
 

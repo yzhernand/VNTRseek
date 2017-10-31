@@ -21,7 +21,7 @@ sub nowhitespace($) {
     return $string;
 }
 
-say STDERR strftime( "\n\nstart: %F %T\n\n", localtime );
+warn strftime( "\n\nstart: %F %T\n\n", localtime );
 
 my $curdir = getcwd;
 
@@ -369,7 +369,7 @@ while ( ( my $pid = wait ) != -1 ) {
 
 print STDERR
     "Processing complete -- processed $files_processed cluster(s).\n";
-say STDERR strftime( "\n\nend: %F %T\n\n", localtime );
+warn strftime( "\n\nend: %F %T\n\n", localtime );
 
 # update database
 #AAA:
@@ -764,7 +764,7 @@ set_statistics(
 );
 
 print STDERR "Finished. Deleted from rank using temptable: $delfromtable\n";
-say STDERR strftime( "\n\nend: %F %T\n\n", localtime );
+warn strftime( "\n\nend: %F %T\n\n", localtime );
 
 1;
 

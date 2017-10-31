@@ -23,7 +23,7 @@ sub nowhitespace($) {
     return $string;
 }
 
-say STDERR strftime( "\n\nstart: %F %T\n\n", localtime );
+warn strftime( "\n\nstart: %F %T\n\n", localtime );
 
 my $curdir = getcwd;
 
@@ -360,7 +360,7 @@ set_statistics( $DBSUFFIX, "CLUST_NUMBER_OF_READ_REPS_IN_CLUSTERS",
 print STDERR
     "Processing complete -- processed $clusters_processed cluster(s).\n";
 
-say STDERR strftime( "\n\nend: %F %T\n\n", localtime );
+warn strftime( "\n\nend: %F %T\n\n", localtime );
 
 1;
 

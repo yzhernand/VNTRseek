@@ -13,7 +13,7 @@ if (@ARGV<2) {
  exit 1;
 }
 
-say STDERR strftime( "\n\nstart: %F %T\n\n", localtime );
+warn strftime( "\n\nstart: %F %T\n\n", localtime );
 
 my $curdir =  getcwd;
 my $tgz_dir = $ARGV[0];
@@ -59,4 +59,4 @@ foreach my $ifile (@tarballs) {
 
 %uhash = ();
 
-say STDERR strftime( "\n\nend: %F %T\n\n", localtime );
+warn strftime( "\n\nend: %F %T\n\n", localtime );

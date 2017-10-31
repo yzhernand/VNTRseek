@@ -23,7 +23,7 @@ sub trim($) {
     return $string;
 }
 
-say STDERR strftime( "\n\nstart: %F %T\n\n", localtime );
+warn strftime( "\n\nstart: %F %T\n\n", localtime );
 
 my $argc = @ARGV;
 
@@ -36,16 +36,15 @@ my $DBSUFFIX = $ARGV[1];
 my $MSDIR    = $ARGV[2];
 
 # set these mysql credentials in vs.cnf (in installation directory)
-my ( $LOGIN, $PASS, $HOST ) = get_credentials($MSDIR);
+my %run_conf = get_config( $MSDIR . "vs.cnf" );
+my ( $LOGIN, $PASS, $HOST ) = @run_conf{qw(LOGIN PASS HOST)};
+my $dbh = get_dbh( $DBSUFFIX, $MSDIR . "vs.cnf" )
+    or die "Could not connect to database: $DBI::errstr";
 
 # create folder
 my $exstring = "rm -rf $folder";
 system($exstring);
 mkdir($folder);
-
-# db setup
-my $dbh = DBI->connect( "DBI:mysql:$DBSUFFIX;host=$HOST", "$LOGIN", "$PASS" )
-    || die "Could not connect to database: $DBI::errstr";
 
 my $sth;
 my $query;
@@ -53,10 +52,15 @@ my $result;
 my $num;
 my $i;
 
-$sth
-    = $dbh->prepare(
-    'SELECT map.refid, map.readid, replnk.sid, replnk.first, replnk.last, replnk.copynum, replnk.patsize, replnk.pattern,fasta_reads.dna from map INNER JOIN rank ON rank.refid=map.refid AND rank.readid=map.readid INNER JOIN rankflank ON rankflank.refid=map.refid AND rankflank.readid=map.readid INNER JOIN replnk ON replnk.rid=map.readid INNER JOIN fasta_reads on fasta_reads.sid=replnk.sid ORDER BY map.refid,map.readid;'
-    ) or die "Couldn't prepare statement: " . $dbh->errstr;
+$sth = $dbh->prepare(q{
+  SELECT map.refid, map.readid, replnk.sid, replnk.first, replnk.last, replnk.copynum, replnk.patsize, replnk.pattern,fasta_reads.dna
+  FROM map INNER JOIN
+    rank ON rank.refid=map.refid AND rank.readid=map.readid INNER JOIN
+    rankflank ON rankflank.refid=map.refid AND rankflank.readid=map.readid INNER JOIN
+    replnk ON replnk.rid=map.readid INNER JOIN
+    fasta_reads on fasta_reads.sid=replnk.sid
+  ORDER BY map.refid,map.readid})
+  or die "Couldn't prepare statement: " . $dbh->errstr;
 
 $sth->execute() or die "Couldn't execute: " . $sth->errstr;
 $num = $sth->rows;
@@ -68,30 +72,31 @@ my $oldread = -1;
 $i = 0;
 my $nrefs = 0;
 
+my $fh;
 while ( $i < $num ) {
     my @data = $sth->fetchrow_array();
     if ( $data[0] != $oldref ) {
-        if ( $i != 0 ) { close(FILE); }
+        if ( $i != 0 ) { close($fh); }
         $nrefs++;
         print "\n$nrefs";
-        open FILE, ">$folder/$data[0].seq" or die $!;
+        open $fh, ">$folder/$data[0].seq" or die $!;
     }
-    print FILE "$data[1] $data[2] $data[3] $data[4]";
-    printf FILE " %.2lf", $data[5];
+    print $fh "$data[1] $data[2] $data[3] $data[4]";
+    printf $fh " %.2lf", $data[5];
     $data[8] =~ s/\s+//g;
-    print FILE " $data[6] $data[7] $data[8]\n";
+    print $fh " $data[6] $data[7] $data[8]\n";
     $oldref  = $data[0];
     $oldread = $data[1];
     $i++;
 }
 
-close(FILE);
+close($fh);
 
 $sth->finish;
 
 print "\n\nProcessing complete (extra_index.pl), $nrefs files created.\n";
 
-say STDERR strftime( "\n\nend: %F %T\n\n", localtime );
+warn strftime( "\n\nend: %F %T\n\n", localtime );
 #
 $dbh->disconnect();
 

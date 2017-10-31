@@ -416,36 +416,6 @@ sub trim {
     return $string;
 }
 
-####################################
-sub SetDatetime {
-
-    my $argc = @_;
-    if ( $argc < 1 ) {
-        die "stats_set: expects 1 parameter, passed $argc !\n";
-    }
-
-    my $NAME = $_[0];
-    my $VALUE = strftime( "%F %T", localtime );
-
-    return set_statistics( $opts{DBSUFFIX}, $NAME, $VALUE );
-}
-
-####################################
-sub SetStatistics {
-
-    my $argc = @_;
-    if ( $argc < 2 ) {
-        die "stats_set: expects 2 parameters, passed $argc !\n";
-    }
-
-    my $NAME  = $_[0];
-    my $VALUE = $_[1];
-
-    #print "$DBNAME,$opts{LOGIN},$opts{PASS},$NAME,$VALUE\n";
-    return set_statistics( $opts{DBSUFFIX}, $NAME, $VALUE );
-}
-####################################
-
 sub SetError {
 
     my $argc = @_;
@@ -457,9 +427,14 @@ sub SetError {
     my $VALUE2 = $_[1];
     my $VALUE3 = $_[2];
 
-    set_statistics( $opts{DBSUFFIX}, "ERROR_STEP", $VALUE1 );
-    set_statistics( $opts{DBSUFFIX}, "ERROR_DESC", $VALUE2 );
-    set_statistics( $opts{DBSUFFIX}, "ERROR_CODE", $VALUE3 );
+    set_statistics($opts{DBSUFFIX}, (
+        ERROR_STEP => $VALUE1,
+        ERROR_DESC => $VALUE2,
+        ERROR_CODE => $VALUE3,
+    ));
+    # set_statistics( $opts{DBSUFFIX}, "ERROR_STEP", $VALUE1 );
+    # set_statistics( $opts{DBSUFFIX}, "ERROR_DESC", $VALUE2 );
+    # set_statistics( $opts{DBSUFFIX}, "ERROR_CODE", $VALUE3 );
 
     return 0;
 }
@@ -467,101 +442,134 @@ sub SetError {
 sub ClearError {
 
     my $argc = @_;
-    if ( $argc >= 1 ) {
-        my $to = int( $_[0] );
-
-        if ( $to <= 19 ) {
-            stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_REPORTS", undef );
-        }
-        if ( $to <= 18 ) {
-            stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_ASSEMBLYREQ",
-                undef );
-        }
-        if ( $to <= 17 ) {
-            stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_VNTR_PREDICT",
-                undef );
-        }
-        if ( $to <= 16 ) {
-            stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_MAP_DUP", undef );
-        }
-        if ( $to <= 15 ) {
-            stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_PCR_DUP", undef );
-        }
-        if ( $to <= 14 ) {
-            stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_INDEX_PCR",
-                undef );
-        }
-        if ( $to <= 13 ) {
-            stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_EDGES", undef );
-        }
-        if ( $to <= 12 ) {
-            stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_MAP_INSERT",
-                undef );
-        }
-        if ( $to <= 11 ) {
-            stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_MAP_REFFLANKS",
-                undef );
-        }
-        if ( $to <= 10 ) {
-            stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_MAP_FLANKS",
-                undef );
-        }
-        if ( $to <= 9 ) {
-            stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_WRITE_FLANKS",
-                undef );
-        }
-        if ( $to <= 8 ) {
-            stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST},
-                "DATE_DB_INSTERT_READS", undef );
-        }
-        if ( $to <= 7 ) {
-            stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_DB_INSTERT_REFS",
-                undef );
-        }
-        if ( $to <= 5 ) {
-            stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_JOINCLUST",
-                undef );
-        }
-        if ( $to <= 4 ) {
-            stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_PROCLU", undef );
-        }
-        if ( $to <= 3 ) {
-            stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_REDUND", undef );
-        }
-        if ( $to <= 2 ) {
-            stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_RENUMB", undef );
-        }
-        if ( $to <= 1 ) {
-            stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_TRF", undef );
-        }
-        if ( $to == 0 ) {
-            stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_MYSQLCREATE",
-                undef );
-        }
+    my @stats = qw(
+        DATE_MYSQLCREATE
+        DATE_TRF
+        DATE_RENUMB
+        DATE_REDUND
+        DATE_PROCLU
+        DATE_JOINCLUST
+        DATE_DB_INSTERT_REFS
+        DATE_DB_INSTERT_READS
+        DATE_WRITE_FLANKS
+        DATE_MAP_FLANKS
+        DATE_MAP_REFFLANKS
+        DATE_MAP_INSERT
+        DATE_EDGES
+        DATE_INDEX_PCR
+        DATE_PCR_DUP
+        DATE_MAP_DUP
+        DATE_VNTR_PREDICT
+        DATE_ASSEMBLYREQ
+        DATE_REPORTS
+        );
+    if (@_) {
+        my $to = int shift;
+        $to = min($to, 19);
+        my %clear_stats = map {$_ => undef} @stats[$to .. 19];
+        set_statistics($opts{DBSUFFIX}, %clear_stats);
         print "\nClearError: making next step: $to.\n\n";
     }
+    # if ( $argc >= 1 ) {
+    #     my $to = int( $_[0] );
 
-    SetError( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "ERROR_STEP", 0 );
-    SetError( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "ERROR_DESC", "" );
-    SetError( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "ERROR_CODE", 0 );
+    #     if ( $to <= 19 ) {
+    #         stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_REPORTS", undef );
+    #     }
+    #     if ( $to <= 18 ) {
+    #         stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_ASSEMBLYREQ",
+    #             undef );
+    #     }
+    #     if ( $to <= 17 ) {
+    #         stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_VNTR_PREDICT",
+    #             undef );
+    #     }
+    #     if ( $to <= 16 ) {
+    #         stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_MAP_DUP", undef );
+    #     }
+    #     if ( $to <= 15 ) {
+    #         stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_PCR_DUP", undef );
+    #     }
+    #     if ( $to <= 14 ) {
+    #         stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_INDEX_PCR",
+    #             undef );
+    #     }
+    #     if ( $to <= 13 ) {
+    #         stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_EDGES", undef );
+    #     }
+    #     if ( $to <= 12 ) {
+    #         stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_MAP_INSERT",
+    #             undef );
+    #     }
+    #     if ( $to <= 11 ) {
+    #         stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_MAP_REFFLANKS",
+    #             undef );
+    #     }
+    #     if ( $to <= 10 ) {
+    #         stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_MAP_FLANKS",
+    #             undef );
+    #     }
+    #     if ( $to <= 9 ) {
+    #         stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_WRITE_FLANKS",
+    #             undef );
+    #     }
+    #     if ( $to <= 8 ) {
+    #         stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST},
+    #             "DATE_DB_INSTERT_READS", undef );
+    #     }
+    #     if ( $to <= 7 ) {
+    #         stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_DB_INSTERT_REFS",
+    #             undef );
+    #     }
+    #     if ( $to <= 5 ) {
+    #         stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_JOINCLUST",
+    #             undef );
+    #     }
+    #     if ( $to <= 4 ) {
+    #         stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_PROCLU", undef );
+    #     }
+    #     if ( $to <= 3 ) {
+    #         stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_REDUND", undef );
+    #     }
+    #     if ( $to <= 2 ) {
+    #         stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_RENUMB", undef );
+    #     }
+    #     if ( $to <= 1 ) {
+    #         stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_TRF", undef );
+    #     }
+    #     if ( $to == 0 ) {
+    #         stats_set( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_MYSQLCREATE",
+    #             undef );
+    #     }
+    #     print "\nClearError: making next step: $to.\n\n";
+    # }
+
+    set_statistics($opts{DBSUFFIX}, (
+        ERROR_STEP => 0,
+        ERROR_DESC => "",
+        ERROR_CODE => 0,
+    ));
+    # SetError( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "ERROR_STEP", 0 );
+    # SetError( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "ERROR_DESC", "" );
+    # SetError( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "ERROR_CODE", 0 );
     return 0;
 }
 
 sub GetErrorStep {
 
-    my $rc = int( stats_get( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "ERROR_STEP" ) );
+    my $rc = int( stats_get( $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "ERROR_STEP" ) );
     return $rc;
 }
 
 sub GetErrorDesc {
 
-    my $rc = stats_get( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "ERROR_DESC" );
+    my $rc = stats_get( $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "ERROR_DESC" );
     return $rc;
 }
 
 sub GetErrorCode {
 
-    my $rc = int( stats_get( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "ERROR_CODE" ) );
+    my $rc = int( stats_get( $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "ERROR_CODE" ) );
     return $rc;
 }
 
@@ -571,58 +579,58 @@ sub GetNextStep {
 
     # note: this will return 0 regardless if step 0 has been completed or not
 
-    $rc = stats_get( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_REPORTS" );
+    $rc = stats_get( $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_REPORTS" );
     if ( "" ne $rc ) { return 20; }
 
-    $rc = stats_get( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_VNTR_PREDICT" );
+    $rc = stats_get( $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_VNTR_PREDICT" );
     if ( "" ne $rc ) { return 19; }
 
-    $rc = stats_get( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_MAP_DUP" );
+    $rc = stats_get( $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_MAP_DUP" );
     if ( "" ne $rc ) { return 17; }
 
-    $rc = stats_get( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_PCR_DUP" );
+    $rc = stats_get( $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_PCR_DUP" );
     if ( "" ne $rc ) { return 16; }
 
-    $rc = stats_get( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_INDEX_PCR" );
+    $rc = stats_get( $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_INDEX_PCR" );
     if ( "" ne $rc ) { return 15; }
 
-    $rc = stats_get( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_EDGES" );
+    $rc = stats_get( $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_EDGES" );
     if ( "" ne $rc ) { return 14; }
 
-    $rc = stats_get( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_MAP_INSERT" );
+    $rc = stats_get( $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_MAP_INSERT" );
     if ( "" ne $rc ) { return 13; }
 
-    $rc = stats_get( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_MAP_REFFLANKS" );
+    $rc = stats_get( $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_MAP_REFFLANKS" );
     if ( "" ne $rc ) { return 12; }
 
-    $rc = stats_get( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_MAP_FLANKS" );
+    $rc = stats_get( $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_MAP_FLANKS" );
     if ( "" ne $rc ) { return 11; }
 
-    $rc = stats_get( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_WRITE_FLANKS" );
+    $rc = stats_get( $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_WRITE_FLANKS" );
     if ( "" ne $rc ) { return 10; }
 
-    $rc = stats_get( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_DB_INSTERT_READS" );
+    $rc = stats_get( $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_DB_INSTERT_READS" );
     if ( "" ne $rc ) { return 9; }
 
-    $rc = stats_get( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_DB_INSTERT_REFS" );
+    $rc = stats_get( $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_DB_INSTERT_REFS" );
     if ( "" ne $rc ) { return 8; }
 
-    $rc = stats_get( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_JOINCLUST" );
+    $rc = stats_get( $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_JOINCLUST" );
     if ( "" ne $rc ) { return 7; }
 
-    $rc = stats_get( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_PROCLU" );
+    $rc = stats_get( $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_PROCLU" );
     if ( "" ne $rc ) { return 5 }
 
-    $rc = stats_get( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_REDUND" );
+    $rc = stats_get( $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_REDUND" );
     if ( "" ne $rc ) { return 4; }
 
-    $rc = stats_get( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_RENUMB" );
+    $rc = stats_get( $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_RENUMB" );
     if ( "" ne $rc ) { return 3; }
 
-    $rc = stats_get( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_TRF" );
+    $rc = stats_get( $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_TRF" );
     if ( "" ne $rc ) { return 2; }
 
-    $rc = stats_get( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_MYSQLCREATE" );
+    $rc = stats_get( $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "DATE_MYSQLCREATE" );
     if ( "" ne $rc ) { return 1; }
 
     return 0;
@@ -692,13 +700,15 @@ if ( $STEP == 0 ) {
         warn "\nWarning: Failed to create output directory!\n";
     }
 
-    SetStatistics( "MAP_ROOT",             $install_dir );
-    SetStatistics( "N_MIN_SUPPORT",        $opts{MIN_SUPPORT_REQUIRED} );
-    SetStatistics( "MIN_FLANK_REQUIRED",   $opts{MIN_FLANK_REQUIRED} );
-    SetStatistics( "MAX_FLANK_CONSIDERED", $opts{MAX_FLANK_CONSIDERED} );
-
-    SetStatistics( "TIME_MYSQLCREATE", time() - $timestart );
-    SetDatetime("DATE_MYSQLCREATE");
+    set_statistics($opts{DBSUFFIX},  (
+        "MAP_ROOT" =>             $install_dir,
+        "N_MIN_SUPPORT" =>        $opts{MIN_SUPPORT_REQUIRED},
+        "MIN_FLANK_REQUIRED" =>   $opts{MIN_FLANK_REQUIRED},
+        "MAX_FLANK_CONSIDERED" => $opts{MAX_FLANK_CONSIDERED},
+        "TIME_MYSQLCREATE" => time() - $timestart,
+        )
+    );
+    set_datetime($opts{DBSUFFIX}, "DATE_MYSQLCREATE");
 
     warn "done!\n";
 
@@ -732,12 +742,13 @@ if ( $STEP == 1 ) {
         }
     }
 
-    SetStatistics( "PARAM_TRF",       $TRF_PARAM );
-    SetStatistics( "FOLDER_FASTA",    $opts{FASTA_DIR} );
-    SetStatistics( "FOLDER_PROFILES", $read_profiles_folder );
-
-    SetStatistics( "TIME_TRF", time() - $timestart );
-    SetDatetime("DATE_TRF");
+    set_statistics($opts{DBSUFFIX},(
+        "PARAM_TRF" =>       $TRF_PARAM,
+        "FOLDER_FASTA" =>    $opts{FASTA_DIR},
+        "FOLDER_PROFILES" => $read_profiles_folder,
+        "TIME_TRF" => time() - $timestart,
+    ));
+    set_datetime($opts{DBSUFFIX}, "DATE_TRF");
     print STDERR "done!\n";
 
     if    ( $STEPEND == $STEP ) { $STEP = 100; }
@@ -801,12 +812,13 @@ if ( $STEP == 2 ) {
         }
     }
 
-    SetStatistics( "FOLDER_REFERENCE",   $reference_folder );
-    SetStatistics( "FILE_REFERENCE_LEB", $opts{REFERENCE_FILE} );
-    SetStatistics( "FILE_REFERENCE_SEQ", $opts{REFERENCE_SEQ} );
-
-    SetStatistics( "TIME_RENUMB", time() - $timestart );
-    SetDatetime("DATE_RENUMB");
+    set_statistics($opts{DBSUFFIX}, (
+        "FOLDER_REFERENCE" =>   $reference_folder,
+        "FILE_REFERENCE_LEB" => $opts{REFERENCE_FILE},
+        "FILE_REFERENCE_SEQ" => $opts{REFERENCE_SEQ},
+        "TIME_RENUMB" => time() - $timestart,
+    ));
+    set_datetime($opts{DBSUFFIX}, "DATE_RENUMB");
 
     print STDERR "done!\n";
 
@@ -820,6 +832,8 @@ if ( $STEP == 3 ) {
     system($exstring);
 
     $timestart = time();
+    # TODO Remove this and/or replace with something that one-time
+    # generates an leb36 file with the right ref set seqs.
     print STDERR
         "\n\nExecuting step #$STEP (eliminating cyclic redundancies)...";
 
@@ -926,9 +940,11 @@ if ( $STEP == 3 ) {
         }
     }
 
-    SetStatistics( "FOLDER_PROFILES_CLEAN", $read_profiles_folder_clean );
-    SetStatistics( "TIME_REDUND",           time() - $timestart );
-    SetDatetime("DATE_REDUND");
+    set_statistics($opts{DBSUFFIX}, (
+        "FOLDER_PROFILES_CLEAN" => $read_profiles_folder_clean,
+        "TIME_REDUND" =>           time() - $timestart,
+    ));
+    set_datetime($opts{DBSUFFIX}, "DATE_REDUND");
     print STDERR "done!\n";
 
     if    ( $STEPEND == $STEP ) { $STEP = 100; }
@@ -1027,10 +1043,12 @@ if ( $STEP == 4 ) {
         }
     }
 
-    SetStatistics( "PARAM_PROCLU", $CLUST_PARAMS );
+    set_statistics($opts{DBSUFFIX}, (
+        "PARAM_PROCLU" => $CLUST_PARAMS,
+        "TIME_PROCLU" => time() - $timestart,
+    ));
 
-    SetStatistics( "TIME_PROCLU", time() - $timestart );
-    SetDatetime("DATE_PROCLU");
+    set_datetime($opts{DBSUFFIX}, "DATE_PROCLU");
     print STDERR "done!\n";
 
     if    ( $STEPEND == $STEP ) { $STEP = 100; }
@@ -1061,8 +1079,10 @@ if ( $STEP == 5 ) {
         }
     }
 
-    SetStatistics( "TIME_JOINCLUST", time() - $timestart );
-    SetDatetime("DATE_JOINCLUST");
+    set_statistics($opts{DBSUFFIX}, (
+        "TIME_JOINCLUST" => time() - $timestart,
+    ) );
+    set_datetime($opts{DBSUFFIX}, "DATE_JOINCLUST");
     print STDERR "done!\n";
 
     if    ( $STEPEND == $STEP ) { $STEP = 100; }
@@ -1071,7 +1091,6 @@ if ( $STEP == 5 ) {
 
 if ( $STEP == 6 ) {
 
-    $timestart = time();
     print STDERR "\n\nSTEP #$STEP IS EMPTY!";
     print STDERR "done!\n";
 
@@ -1086,11 +1105,9 @@ if ( $STEP == 7 ) {
     print STDERR
         "\n\nExecuting step #$STEP (inserting REFERENCE flanks into database)...";
 
-# TODO Replace this, and the mysql exec later, with a function in vutil which
-# just takes in a file name and then uses DBI to load the data. Doing this with
-# a temporary sql file while exposing the password on the command line is
-# totally unnecessary.
-# TODO Change so that reference seq file does not need to be in install dir
+    # TODO Change so that reference seq file does not need to be in install dir
+    # TODO Change this to a one-time process that produces an SQLite db, if it does not
+    # already exist, and populate it with the proper ref seqs.
     my $dbh = get_dbh($opts{DBSUFFIX}, $config_file);
     if ($opts{BACKEND} eq "sqlite") {
         # Truncate table
@@ -1124,7 +1141,6 @@ if ( $STEP == 7 ) {
         }
         $dbh->commit();
         $dbh->{AutoCommit} = 1;
-        $dbh->disconnect();
     }
     elsif ($opts{BACKEND} eq "mysql") {
         $dbh->do("TRUNCATE TABLE fasta_ref_reps;");
@@ -1132,8 +1148,12 @@ if ( $STEP == 7 ) {
         $dbh->commit;
     }
 
-    SetStatistics( "TIME_DB_INSTERT_REFS", time() - $timestart );
-    SetDatetime("DATE_DB_INSTERT_REFS");
+    $dbh->disconnect();
+
+    set_statistics($opts{DBSUFFIX}, (
+        "TIME_DB_INSTERT_REFS" => time() - $timestart,
+    ) );
+    set_datetime($opts{DBSUFFIX}, "DATE_DB_INSTERT_REFS");
 
     print STDERR "done!\n";
 
@@ -1163,8 +1183,10 @@ if ( $STEP == 8 ) {
         }
     }
 
-    SetStatistics( "TIME_DB_INSTERT_READS", time() - $timestart );
-    SetDatetime("DATE_DB_INSTERT_READS");
+    set_statistics($opts{DBSUFFIX}, (
+        "TIME_DB_INSTERT_READS" => time() - $timestart,
+    ) );
+    set_datetime($opts{DBSUFFIX}, "DATE_DB_INSTERT_READS");
     print STDERR "done!\n";
 
     if    ( $STEPEND == $STEP ) { $STEP = 100; }
@@ -1192,8 +1214,10 @@ if ( $STEP == 9 ) {
         }
     }
 
-    SetStatistics( "TIME_WRITE_FLANKS", time() - $timestart );
-    SetDatetime("DATE_WRITE_FLANKS");
+    set_statistics($opts{DBSUFFIX}, (
+        "TIME_WRITE_FLANKS" => time() - $timestart,
+    ) );
+    set_datetime($opts{DBSUFFIX}, "DATE_WRITE_FLANKS");
     print STDERR "done!\n";
 
     if    ( $STEPEND == $STEP ) { $STEP = 100; }
@@ -1234,8 +1258,10 @@ if ( $STEP == 10 ) {
         }
     }
 
-    SetStatistics( "TIME_MAP_FLANKS", time() - $timestart );
-    SetDatetime("DATE_MAP_FLANKS");
+    set_statistics($opts{DBSUFFIX}, (
+        "TIME_MAP_FLANKS" => time() - $timestart,
+    ) );
+    set_datetime($opts{DBSUFFIX}, "DATE_MAP_FLANKS");
     print STDERR "done!\n";
 
     if    ( $STEPEND == $STEP ) { $STEP = 100; }
@@ -1379,8 +1405,10 @@ if ( $STEP == 11 ) {
         }
     }
 
-    SetStatistics( "TIME_MAP_REFFLANKS", time() - $timestart );
-    SetDatetime("DATE_MAP_REFFLANKS");
+    set_statistics($opts{DBSUFFIX}, (
+        "TIME_MAP_REFFLANKS" => time() - $timestart,
+    ) );
+    set_datetime($opts{DBSUFFIX}, "DATE_MAP_REFFLANKS");
     print STDERR "done!\n";
 
     if    ( $STEPEND == $STEP ) { $STEP = 100; }
@@ -1416,8 +1444,10 @@ if ( $STEP == 12 ) {
         }
     }
 
-    SetStatistics( "TIME_MAP_INSERT", time() - $timestart );
-    SetDatetime("DATE_MAP_INSERT");
+    set_statistics($opts{DBSUFFIX}, (
+        "TIME_MAP_INSERT" => time() - $timestart,
+    ) );
+    set_datetime($opts{DBSUFFIX}, "DATE_MAP_INSERT");
     print STDERR "done!\n";
 
     if    ( $STEPEND == $STEP ) { $STEP = 100; }
@@ -1448,8 +1478,10 @@ if ( $STEP == 13 ) {
         }
     }
 
-    SetStatistics( "TIME_EDGES", time() - $timestart );
-    SetDatetime("DATE_EDGES");
+    set_statistics($opts{DBSUFFIX}, (
+        "TIME_EDGES" => time() - $timestart,
+    ) );
+    set_datetime($opts{DBSUFFIX}, "DATE_EDGES");
     print STDERR "done!\n";
 
     if    ( $STEPEND == $STEP ) { $STEP = 100; }
@@ -1463,7 +1495,7 @@ if ( $STEP == 14 ) {
         "\n\nExecuting step #$STEP (generating .index files for pcr_dup)...";
 
     my $exstring = "./extra_index.pl";
-    my @exargs = ( "$read_profiles_folder_clean/best", "$DBNAME", "$MSDIR",
+    my @exargs = ( "$read_profiles_folder_clean/best", "$opts{DBSUFFIX}", "$MSDIR",
         "$opts{TMPDIR}" );
     system( $exstring, @exargs );
     if ( $? == -1 ) {
@@ -1479,8 +1511,10 @@ if ( $STEP == 14 ) {
         }
     }
 
-    SetStatistics( "TIME_INDEX_PCR", time() - $timestart );
-    SetDatetime("DATE_INDEX_PCR");
+    set_statistics($opts{DBSUFFIX}, (
+        "TIME_INDEX_PCR" => time() - $timestart,
+    ) );
+    set_datetime($opts{DBSUFFIX}, "DATE_INDEX_PCR");
     print STDERR "done!\n";
 
     if    ( $STEPEND == $STEP ) { $STEP = 100; }
@@ -1514,8 +1548,10 @@ if ( $STEP == 15 ) {
         }
     }
 
-    SetStatistics( "TIME_PCR_DUP", time() - $timestart );
-    SetDatetime("DATE_PCR_DUP");
+    set_statistics($opts{DBSUFFIX}, (
+        "TIME_PCR_DUP" => time() - $timestart
+    ));
+    set_datetime($opts{DBSUFFIX}, "DATE_PCR_DUP");
     print STDERR "done!\n";
 
     if    ( $STEPEND == $STEP ) { $STEP = 100; }
@@ -1542,8 +1578,10 @@ if ( $STEP == 16 ) {
         }
     }
 
-    SetStatistics( "TIME_MAP_DUP", time() - $timestart );
-    SetDatetime("DATE_MAP_DUP");
+    set_statistics($opts{DBSUFFIX}, (
+        "TIME_MAP_DUP" => time() - $timestart,
+    ) );
+    set_datetime($opts{DBSUFFIX}, "DATE_MAP_DUP");
     print STDERR "done!\n";
 
     if    ( $STEPEND == $STEP ) { $STEP = 100; }
@@ -1569,8 +1607,10 @@ if ( $STEP == 17 ) {
         }
     }
 
-    SetStatistics( "TIME_VNTR_PREDICT", time() - $timestart );
-    SetDatetime("DATE_VNTR_PREDICT");
+    set_statistics($opts{DBSUFFIX}, (
+        "TIME_VNTR_PREDICT" => time() - $timestart,
+    ) );
+    set_datetime($opts{DBSUFFIX}, "DATE_VNTR_PREDICT");
     print STDERR "done!\n";
 
     if    ( $STEPEND == $STEP ) { $STEP = 100; }
@@ -1592,8 +1632,10 @@ if ( $STEP == 18 ) {
 #  if ( 0 != $rc ) { SetError($STEP,"computing variability (assembly required) failed",$rc); die "command exited with value $rc"; }
 #}
 
-    SetStatistics( "TIME_ASSEMBLYREQ", time() - $timestart );
-    SetDatetime("DATE_ASSEMBLYREQ");
+    set_statistics($opts{DBSUFFIX}, (
+        "TIME_ASSEMBLYREQ" => time() - $timestart,
+    ) );
+    set_datetime($opts{DBSUFFIX}, "DATE_ASSEMBLYREQ");
     print STDERR "done!\n";
 
     if    ( $STEPEND == $STEP ) { $STEP = 100; }
@@ -1704,8 +1746,10 @@ if ( $STEP == 19 ) {
     $exstring = qq(find "${read_profiles_folder_clean}/out" -type f -delete);
     system($exstring);
 
-    SetStatistics( "TIME_REPORTS", time() - $timestart );
-    SetDatetime("DATE_REPORTS");
+    set_statistics($opts{DBSUFFIX}, (
+        "TIME_REPORTS" => time() - $timestart
+    ) );
+    set_datetime($opts{DBSUFFIX}, "DATE_REPORTS");
     print STDERR "done!\n";
 }
 

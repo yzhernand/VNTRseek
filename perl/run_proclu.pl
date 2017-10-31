@@ -20,7 +20,7 @@ if (@ARGV<8) {
  exit 1;
 }
 
-say STDERR strftime( "\n\nstart: %F %T\n\n", localtime );
+warn strftime( "\n\nstart: %F %T\n\n", localtime );
 
 my $curdir =  getcwd;
 my $PROCLU = "$curdir/$ARGV[5]";
@@ -125,7 +125,7 @@ while ((my $pid = wait) != -1) {
 }
 print STDERR "Processing complete -- processed $files_processed file(s).\n";
 
-say STDERR strftime( "\n\nend: %F %T\n\n", localtime );
+warn strftime( "\n\nend: %F %T\n\n", localtime );
 
 
 1;
