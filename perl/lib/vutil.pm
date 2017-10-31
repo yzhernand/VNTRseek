@@ -4,8 +4,12 @@ use Cwd;
 use DBI;
 use Carp;
 use Config::Simple;
-
 use FindBin;
+use POSIX qw(strftime);
+
+if ($ENV{DEBUG}) {
+ use Data::Dumper;
+}
 
 use base 'Exporter';
 our @EXPORT_OK = qw(read_config_file get_config get_credentials set_config set_credentials get_dbh write_mysql write_sqlite stats_set set_statistics stats_get set_datetime print_config trim create_blank_file get_trunc_query);
@@ -142,35 +146,6 @@ sub set_credentials {
 
 ################################################################
 
-sub set_datetime {
-
- my $argc = @_;
- if ($argc <5) { die "set_datetime: expects 5 parameters, passed $argc !\n"; }
-
- my $DBNAME = $_[0];
- my $LOGIN = $_[1];
- my $PASS = $_[2];
- my $HOST = $_[3];
- my $NAME = $_[4];
-
- my $dbh = DBI->connect("DBI:mysql:$DBNAME;host=$HOST", "$LOGIN", "$PASS"
-                   ) || die "Could not connect to database: $DBI::errstr"; 
-
- my $sth = $dbh->prepare("UPDATE stats SET $NAME=now()")
-                or die "Couldn't prepare statement: " . $dbh->errstr;
-
- $sth->execute()             # Execute the query
-            or die "Couldn't execute statement: " . $sth->errstr;
-
- $sth->finish;
- $dbh->disconnect();
-
- return 0;
-
-}
-
-################################################################
-
 sub stats_set {
 
  my $argc = @_;
@@ -201,24 +176,48 @@ sub stats_set {
 sub set_statistics {
 
   my $argc = @_;
-  if ( $argc < 3 ) {
-      die "stats_set: expects 3 parameters, passed $argc !\n";
+  if ( $argc < 2 ) {
+      die "set_statistics: expects at least 2 parameters, passed $argc !\n";
   }
 
-  my ($DBSUFFIX, $NAME, $VALUE)  = @_;
+  my $DBSUFFIX = shift;
+  my %stats = @_;
   my $dbh = get_dbh($DBSUFFIX, $ENV{HOME} . "/". $DBSUFFIX . ".vs.cnf");
+  my ($sql_clause, @sql_qual, @sql_bind);
+  warn Dumper(\%stats) . "\n";
 
-  if ($ENV{DEBUG}) {
-    warn "Setting stat: $NAME to $VALUE\n";
+  while (my ($key, $val) = each %stats){
+    if ($ENV{DEBUG}) {
+      warn "Setting stat: $key to $val\n";
+    }
+    push @sql_qual, "$key=?";
+    push @sql_bind, $val;
   }
 
-  my $sth = $dbh->prepare("UPDATE stats SET $NAME=?")
+  $sql_clause = join ",", @sql_qual;
+  my $sth = $dbh->prepare("UPDATE stats SET $sql_clause")
     or croak "Couldn't prepare statement: " . $dbh->errstr;
 
-  $sth->execute($VALUE)             # Execute the query
+  $sth->execute(@sql_bind)             # Execute the query
     or croak "Couldn't execute statement: " . $sth->errstr;
 
   $dbh->disconnect();
+}
+
+################################################################
+
+sub set_datetime {
+
+  my $argc = @_;
+  if ( $argc < 2 ) {
+      die "set_datetime: expects 2 parameter, passed $argc !\n";
+  }
+
+  my $DBSUFFIX = shift;
+  my $NAME = shift;
+  my $VALUE = strftime( "%F %T", localtime );
+
+  return set_statistics( $DBSUFFIX, $NAME, $VALUE );
 }
 
 ################################################################
@@ -228,30 +227,22 @@ sub stats_get {
  my $argc = @_;
  if ($argc <5) { die "stats_set: expects 5 parameters, passed $argc !\n"; }
 
- my $DBNAME = $_[0];
+ my $DBSUFFIX = $_[0];
  my $LOGIN = $_[1];
  my $PASS = $_[2];
  my $HOST = $_[3];
  my $NAME = $_[4];
  my $VALUE = undef;
 
- my $dbh = DBI->connect("DBI:mysql:INFORMATION_SCHEMA;host=$HOST", "$LOGIN", "$PASS"
-                   ) || die "Could not connect to database: $DBI::errstr"; 
+ my $dbh = get_dbh($DBSUFFIX, $ENV{HOME} . "/". $DBSUFFIX . ".vs.cnf"); 
 
  # check if database exists first, return undef if not
- my $sth = $dbh->prepare("SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '$DBNAME';")
-                or die "Couldn't prepare statement: " . $dbh->errstr;
- $sth->execute()             # Execute the query
-            or die "Couldn't execute statement: " . $sth->errstr;
- if ($sth->rows == 0) {
-   $sth->finish;
-   $dbh->disconnect();
-   return undef;
+ unless ($dbh) {
+  return undef;
  }
- $sth->finish;
 
  # get the namve/value pair
- my $sth = $dbh->prepare("SELECT $NAME FROM ${DBNAME}.stats;")
+ my $sth = $dbh->prepare("SELECT $NAME FROM stats;")
                 or die "Couldn't prepare statement: " . $dbh->errstr;
 
  $sth->execute()             # Execute the query

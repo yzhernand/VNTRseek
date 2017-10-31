@@ -4,30 +4,16 @@ my $RECORDS_PER_INFILE_INSERT = 100000;
 
 use List::Util qw[min max];
 
-#use strict;
+use strict;
 use warnings;
 use Cwd;
 use DBI;
-
+use POSIX qw(strftime);
 use FindBin;
 use File::Basename;
 
 use lib "$FindBin::RealBin/lib";
-require "vutil.pm";
-
-use vutil ('get_credentials');
-use vutil ('write_mysql');
-use vutil ('stats_set');
-
-my $sec;
-my $min;
-my $hour;
-my $mday;
-my $mon;
-my $year;
-my $wday;
-my $yday;
-my $isdst;
+use vutil qw(get_config get_dbh set_statistics get_trunc_query);
 
 sub nowhitespace($) {
     my $string = shift;
@@ -35,13 +21,7 @@ sub nowhitespace($) {
     return $string;
 }
 
-( $sec, $min, $hour, $mday, $mon, $year, $wday, $yday, $isdst )
-    = localtime(time);
-print STDERR sprintf(
-    "\n\nstart: %4d-%02d-%02d %02d:%02d:%02d\n\n",
-    $year + 1900,
-    $mon + 1, $mday, $hour, $min, $sec
-);
+say STDERR strftime( "\n\nstart: %F %T\n\n", localtime );
 
 my $curdir = getcwd;
 
@@ -58,12 +38,12 @@ my $argc = @ARGV;
 
 if ( $argc < 8 ) {
     die
-        "Usage: run_edges.pl reference_file edges_folder dbname msdir MINPROFSCORE NPROCESSORS PSEARCH TMPDIR\nn";
+        "Usage: run_edges.pl reference_file edges_folder dbsuffix msdir MINPROFSCORE NPROCESSORS PSEARCH TMPDIR\nn";
 }
 
 my $inputfile    = $ARGV[0];
 my $folder       = $ARGV[1];
-my $DBNAME       = $ARGV[2];
+my $DBSUFFIX     = $ARGV[2];
 my $MSDIR        = $ARGV[3];
 my $MINPROFSCORE = $ARGV[4];
 my $cpucount     = $ARGV[5];
@@ -71,15 +51,15 @@ my $PROCLU       = "$curdir/$ARGV[6]";
 my $tmp          = $ARGV[7];
 
 # set these mysql credentials in vs.cnf (in installation directory)
-my ( $LOGIN, $PASS, $HOST ) = get_credentials($MSDIR);
+my %run_conf = get_config( $MSDIR . "vs.cnf" );
+my ( $LOGIN, $PASS, $HOST ) = @run_conf{qw(LOGIN PASS HOST)};
 
 my $clusters_processed = 0;
 my $totalRefReps       = 0;
 my $totalReadReps      = 0;
 
-my $dbh = DBI->connect( "DBI:mysql:$DBNAME;mysql_local_infile=1;host=$HOST",
-    "$LOGIN", "$PASS" )
-    || die "Could not connect to database: $DBI::errstr";
+my $dbh = get_dbh( $DBSUFFIX, $MSDIR . "vs.cnf" )
+    or die "Could not connect to database: $DBI::errstr";
 
 my $sth;
 my $sth2;
@@ -94,92 +74,60 @@ my $exstring;
 my $leftname  = "";
 my $rightname = "";
 
-####################################
-sub SetStatistics {
-
-    my $argc = @_;
-    if ( $argc < 2 ) {
-        die "stats_set: expects 2 parameters, passed $argc !\n";
-    }
-
-    my $NAME  = $_[0];
-    my $VALUE = $_[1];
-
-    #print "$DBNAME,$LOGIN,$PASS,$NAME,$VALUE\n";
-    return stats_set( $DBNAME, $LOGIN, $PASS, $HOST, $NAME, $VALUE );
-}
-####################################
-
-#goto AAA;
-
 # create folder
 $exstring = "rm -f $folder -R";
 system($exstring);
 mkdir($folder);
 
-$query = "CREATE TEMPORARY TABLE tempmap (rid int  PRIMARY KEY);";
-$sth   = $dbh->prepare($query);
-$sth->execute();
-$sth->finish;
+$dbh->do("CREATE TEMPORARY TABLE tempmap (rid int  PRIMARY KEY)")
+    or die "Couldn't do statement: " . $dbh->errstr;
 
-$sth = $dbh->prepare('ALTER TABLE tempmap DISABLE KEYS;')
-    or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute()    # Execute the query
-    or die "Couldn't execute statement: " . $sth->errstr;
-$sth->finish;
+$dbh->do("INSERT INTO tempmap (rid) SELECT DISTINCT -refid FROM map")
+    or die "Couldn't do statement: " . $dbh->errstr;
 
-$sth = $dbh->prepare('SET AUTOCOMMIT = 0;')
-    or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute()    # Execute the query
-    or die "Couldn't execute statement: " . $sth->errstr;
-$sth->finish;
-
-$sth = $dbh->prepare('SET FOREIGN_KEY_CHECKS = 0;')
-    or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute()    # Execute the query
-    or die "Couldn't execute statement: " . $sth->errstr;
-$sth->finish;
-
-$sth = $dbh->prepare('SET UNIQUE_CHECKS = 0;')
-    or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute()    # Execute the query
-    or die "Couldn't execute statement: " . $sth->errstr;
-$sth->finish;
-
-$query = "INSERT INTO tempmap(rid) SELECT DISTINCT -refid FROM map;";
-$sth   = $dbh->prepare($query);
-$sth->execute();
-$sth->finish;
-
-$sth = $dbh->prepare('ALTER TABLE tempmap ENABLE KEYS;')
-    or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute()    # Execute the query
-    or die "Couldn't execute statement: " . $sth->errstr;
-$sth->finish;
+if ( $run_conf{BACKEND} eq "mysql" ) {
+    $sth = $dbh->do('ALTER TABLE tempmap DISABLE KEYS;')
+        or die "Couldn't do statement: " . $dbh->errstr;
+    $sth = $dbh->do('ALTER TABLE tempmap ENABLE KEYS;')
+        or die "Couldn't do statement: " . $dbh->errstr;
+    $sth = $dbh->do('SET AUTOCOMMIT = 0;')
+        or die "Couldn't do statement: " . $dbh->errstr;
+    $sth = $dbh->do('SET FOREIGN_KEY_CHECKS = 0;')
+        or die "Couldn't do statement: " . $dbh->errstr;
+    $sth = $dbh->do('SET UNIQUE_CHECKS = 0;')
+        or die "Couldn't do statement: " . $dbh->errstr;
+}
+elsif ( $run_conf{BACKEND} eq "sqlite" ) {
+    $dbh->do("PRAGMA foreign_keys = OFF");
+    # warn "\nTurning off AutoCommit\n";
+    $dbh->{AutoCommit} = 0;
+}
 
 # print ref leb files
 my %LHASH = ();
-open( MYINPUTFILE, "<$inputfile" )
-    or die "\nCannot open file '$inputfile'!\n";    # open for inpu
-while (<MYINPUTFILE>) {                             # read file into list
+open( my $input_fh, "<$inputfile" )
+    or die "\nCannot open file '$inputfile'!\n";    # open for input
+while (<$input_fh>) {                               # read file into list
     if (/^(\d+)/) {
         $LHASH{$1} = $_;
-
-        #print "aaa: ($inputfile): $1";
-        #exit(0);
     }
 }
-close(MYINPUTFILE);
+close($input_fh);
 
 $clusters_processed = 0;
-$query
-    = "SELECT repeatid,clusterid,profile,profilerc,patsize,copynum FROM clusterlnk LEFT OUTER JOIN replnk ON clusterlnk.repeatid=replnk.rid INNER JOIN tempmap on clusterlnk.repeatid=tempmap.rid ORDER BY clusterid;";
+$query              = qq{
+    SELECT repeatid,clusterid,profile,profilerc,patsize,copynum
+    FROM clusterlnk
+        LEFT OUTER JOIN replnk ON clusterlnk.repeatid=replnk.rid
+        INNER JOIN tempmap on clusterlnk.repeatid=tempmap.rid
+    ORDER BY clusterid
+};
 $sth = $dbh->prepare($query);
 $sth->execute();
 $num          = $sth->rows;
 $i            = 0;
 $clusteridold = -1;
-open( MYOUTFILE, ">$folder/dummy.txt" )
+open( my $outfile, ">$folder/dummy.txt" )
     or die "\nCannot open file '$folder/dummy.txt'!\n";    # open for output
 
 while ( $i < $num ) {
@@ -192,8 +140,8 @@ while ( $i < $num ) {
 
     if ( $clusterid != $clusteridold ) {
         $leftname = "refs.${clusterid}.leb36";
-        close(MYOUTFILE);
-        open( MYOUTFILE, ">$folder/$leftname" )
+        close($outfile);
+        open( $outfile, ">$folder/$leftname" )
             or die
             "\nCannot open file '$folder/$leftname'!\n";    # open for output
 
@@ -207,7 +155,7 @@ while ( $i < $num ) {
         #$exstring = "echo -`grep $repid $inputfile`  >> $folder/$leftname";
         #system($exstring);
 
-        if ( exists $LHASH{$repid} ) { print MYOUTFILE "-" . $LHASH{$repid}; }
+        if ( exists $LHASH{$repid} ) { print $outfile "-" . $LHASH{$repid}; }
         else {
             print STDERR "\nCould not lookup reference in hash ($repid)!\n";
             exit(1);
@@ -218,7 +166,7 @@ while ( $i < $num ) {
     $clusteridold = $clusterid;
     $i++;
 }
-close MYOUTFILE;
+close $outfile;
 
 $sth->finish;
 
@@ -227,8 +175,12 @@ print STDERR
 
 # create edges files
 $clusters_processed = 0;
-$query
-    = "SELECT clusterid,refid,readid FROM map,clusterlnk WHERE -refid=clusterlnk.repeatid ORDER BY clusterid, refid, readid;";
+$query              = qq{
+    SELECT clusterid,refid,readid
+    FROM map,clusterlnk
+    WHERE -refid=clusterlnk.repeatid
+    ORDER BY clusterid, refid, readid
+    };
 $sth = $dbh->prepare($query);
 $sth->execute();
 $num          = $sth->rows;
@@ -266,31 +218,26 @@ print STDERR
 #AAA:
 
 $query = "DROP TABLE tempmap;";
-$sth   = $dbh->prepare($query);
-$sth->execute();
-$sth->finish;
+$dbh->do($query)
+    or die "Couldn't do statement: " . $dbh->errstr;
 
 $query = "CREATE TEMPORARY TABLE tempmap (rid int  PRIMARY KEY);";
-$sth   = $dbh->prepare($query);
-$sth->execute();
-$sth->finish;
+$dbh->do($query)
+    or die "Couldn't do statement: " . $dbh->errstr;
 
-$sth = $dbh->prepare('ALTER TABLE tempmap DISABLE KEYS;')
-    or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute()    # Execute the query
-    or die "Couldn't execute statement: " . $sth->errstr;
-$sth->finish;
+if ( $run_conf{BACKEND} eq "mysql" ) {
+    $dbh->do('ALTER TABLE tempmap DISABLE KEYS;')
+        or die "Couldn't do statement: " . $dbh->errstr;
+}
 
 $query = "INSERT INTO tempmap(rid) SELECT DISTINCT readid FROM map;";
-$sth   = $dbh->prepare($query);
-$sth->execute();
-$sth->finish;
+$sth   = $dbh->do($query)
+    or die "Couldn't do statement: " . $dbh->errstr;
 
-$sth = $dbh->prepare('ALTER TABLE tempmap ENABLE KEYS;')
-    or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute()    # Execute the query
-    or die "Couldn't execute statement: " . $sth->errstr;
-$sth->finish;
+if ( $run_conf{BACKEND} eq "mysql" ) {
+    $dbh->do('ALTER TABLE tempmap ENABLE KEYS;')
+        or die "Couldn't do statement: " . $dbh->errstr;
+}
 
 # print read leb files
 $clusters_processed = 0;
@@ -298,9 +245,17 @@ $clusters_processed = 0;
 $query = "select cid FROM clusters ORDER BY cid;";
 $sth2  = $dbh->prepare($query);
 $sth2->execute();
-$nclusters    = $sth2->rows;
+my $nclusters = $sth2->rows;
 $clusteridold = -1;
 
+$query = qq{
+    SELECT repeatid,clusterid,profile,profilerc,patsize,copynum
+    FROM clusterlnk
+        LEFT OUTER JOIN replnk ON clusterlnk.repeatid=replnk.rid
+    WHERE clusterid=?
+        AND clusterlnk.repeatid IN (SELECT rid FROM tempmap)
+    };
+$sth = $dbh->prepare($query);
 while ( $clusters_processed < $nclusters ) {
     my @data2 = $sth2->fetchrow_array();
 
@@ -309,13 +264,12 @@ while ( $clusters_processed < $nclusters ) {
     print "$clusters_processed\n";
 
 #$query = "SELECT repeatid,clusterid,profile,profilerc,patsize,copynum FROM clusterlnk LEFT OUTER JOIN replnk ON clusterlnk.repeatid=replnk.rid INNER JOIN tempmap on clusterlnk.repeatid=tempmap.rid ORDER BY clusterid;";
-    $query
-        = "SELECT repeatid,clusterid,profile,profilerc,patsize,copynum FROM clusterlnk LEFT OUTER JOIN replnk ON clusterlnk.repeatid=replnk.rid  WHERE clusterid=$clusterid AND clusterlnk.repeatid IN (SELECT rid FROM tempmap);";
-    $sth = $dbh->prepare($query);
-    $sth->execute();
+    $sth->execute($clusterid);
     $num = $sth->rows;
 
     if ( $num > 0 ) {
+
+        # TODO Change this to not produce one file per cluster
         $rightname = "reads.${clusterid}.leb36";
         close(MYFILE);
         open( MYFILE, ">$folder/$rightname" )
@@ -368,9 +322,14 @@ opendir( DIR, $folder );
 my @tarballs = grep( /reads\.(\d+)\.(?:leb36)$/, readdir(DIR) );
 closedir(DIR);
 my $tarball_count = @tarballs;
-print STDERR "$tarball_count supported files found in $folder\n";
 
-#die "Exiting\n" if $tarball_count == 0;
+if ($tarball_count == 0) {
+    warn strftime( "\n\nend: %F %T\n\n", localtime );
+    warn "No files to process. Exiting...\n";
+    exit 0;
+}
+
+print STDERR "$tarball_count supported files found in $folder\n";
 $files_to_process = $tarball_count if $files_to_process > $tarball_count;
 
 # enter dir
@@ -410,14 +369,7 @@ while ( ( my $pid = wait ) != -1 ) {
 
 print STDERR
     "Processing complete -- processed $files_processed cluster(s).\n";
-
-( $sec, $min, $hour, $mday, $mon, $year, $wday, $yday, $isdst )
-    = localtime(time);
-print STDERR sprintf(
-    "\n\nend: %4d-%02d-%02d %02d:%02d:%02d\n\n",
-    $year + 1900,
-    $mon + 1, $mday, $hour, $min, $sec
-);
+say STDERR strftime( "\n\nend: %F %T\n\n", localtime );
 
 # update database
 #AAA:
@@ -425,9 +377,22 @@ print STDERR sprintf(
 my %RHASH = ();
 my %SHASH = ();
 
-$dbh = DBI->connect( "DBI:mysql:$DBNAME;mysql_local_infile=1;host=$HOST",
-    "$LOGIN", "$PASS" )
-    || die "Could not connect to database: $DBI::errstr";
+$dbh = get_dbh( $DBSUFFIX, $MSDIR . "vs.cnf" )
+    or die "Could not connect to database: $DBI::errstr";
+
+if ( $run_conf{BACKEND} eq "mysql" ) {
+    $sth = $dbh->do('SET AUTOCOMMIT = 0;')
+        or die "Couldn't do statement: " . $dbh->errstr;
+    $sth = $dbh->do('SET FOREIGN_KEY_CHECKS = 0;')
+        or die "Couldn't do statement: " . $dbh->errstr;
+    $sth = $dbh->do('SET UNIQUE_CHECKS = 0;')
+        or die "Couldn't do statement: " . $dbh->errstr;
+}
+elsif ( $run_conf{BACKEND} eq "sqlite" ) {
+    $dbh->do("PRAGMA foreign_keys = OFF");
+    # warn "\nTurning off AutoCommit\n";
+    $dbh->{AutoCommit} = 0;
+}
 
 #$query = "UPDATE clusters SET profdensity=? WHERE cid=?;";
 #$sth = $dbh->prepare($query);
@@ -435,26 +400,30 @@ $dbh = DBI->connect( "DBI:mysql:$DBNAME;mysql_local_infile=1;host=$HOST",
 # update cluster entries via temp file
 print STDERR "Updating cluster table...\n";
 
-$sth
-    = $dbh->prepare(
-    'CREATE TEMPORARY TABLE clustemp (`cid` INT(11) NOT NULL PRIMARY KEY, `pd` float NOT NULL) ENGINE=INNODB;'
-    ) or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute()    # Execute the query
-    or die "Couldn't execute statement: " . $sth->errstr;
-$sth->finish;
-
-$sth = $dbh->prepare('ALTER TABLE clustemp DISABLE KEYS;')
-    or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute();
-$sth->finish;
-
-$sth
-    = $dbh->prepare(
-    "LOAD DATA LOCAL INFILE '$tmp/pcd_$DBNAME.txt' INTO TABLE clustemp FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';"
-    ) or die "Couldn't prepare statement: " . $dbh->errstr;
-
 my $TEMPFILE;
-open( $TEMPFILE, ">$tmp/pcd_$DBNAME.txt" ) or die $!;
+$query = q{
+    CREATE TEMPORARY TABLE clustemp (
+        `cid` integer NOT NULL PRIMARY KEY,
+        `pd` float NOT NULL
+    )};
+if ( $run_conf{BACKEND} eq "mysql" ) {
+    open( $TEMPFILE, ">$tmp/pcd_$DBSUFFIX.txt" ) or die $!;
+    $query .= q{ENGINE=INNODB};
+    $dbh->do($query)
+        or die "Couldn't do statement: " . $dbh->errstr;
+    $sth = $dbh->do('ALTER TABLE clustemp DISABLE KEYS;')
+        or die "Couldn't do statement: " . $dbh->errstr;
+    $sth
+        = $dbh->prepare(
+        "LOAD DATA LOCAL INFILE '$tmp/pcd_$DBSUFFIX.txt' INTO TABLE clustemp FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';"
+        ) or die "Couldn't prepare statement: " . $dbh->errstr;
+}
+elsif ( $run_conf{BACKEND} eq "sqlite" ) {
+    $dbh->do($query)
+        or die "Couldn't do statement: " . $dbh->errstr;
+    $sth = $dbh->prepare(q{INSERT INTO clustemp VALUES(?, ?)})
+        or die "Couldn't prepare statement: " . $dbh->errstr;
+}
 
 opendir( DIR, $folder );
 @tarballs = grep( /(?:edges)$/, readdir(DIR) );
@@ -474,10 +443,10 @@ foreach (@tarballs) {
         $id = $1;
     }
 
-    open( MYFILE, "$folder/$_" ) or die;
-    while (<MYFILE>) {
+    open( my $fh, "$folder/$_" ) or die;
+    while (my $line = <$fh>) {
 
-        if ( $_ =~ /-(\d+)(['"]),(\d+),(\d+\.\d+)/i ) {
+        if ( $line =~ /-(\d+)(['"]),(\d+),(\d+\.\d+)/i ) {
 
             # do a check here if the read-ref pair is in the map file
             #$sth2->execute($1,$3);
@@ -506,71 +475,81 @@ foreach (@tarballs) {
             }
 
         }
-        elsif ( $_ =~ /ave: (\d+\.\d+)/i ) {
+        elsif ( $line =~ /ave: (\d+\.\d+)/i ) {
 
             #print $id. ": ". $1."\n";
             #$sth->execute($1,$id);
 
             $pcd++;
-            print $TEMPFILE "$id,$1\n";
+            warn "Inserting... $id, $i\n";
+            if ( $run_conf{BACKEND} eq "mysql" ) {
+                print $TEMPFILE "$id,$1\n";
 
-            if ( $pcd % $RECORDS_PER_INFILE_INSERT == 0 ) {
-                close($TEMPFILE);
-                $pcdupd += $sth->execute();
-                open( $TEMPFILE, ">$tmp/pcd_$DBNAME.txt" ) or die $!;
+                if ( $pcd % $RECORDS_PER_INFILE_INSERT == 0 ) {
+                    close($TEMPFILE);
+                    $pcdupd += $sth->execute();
+                    open( $TEMPFILE, ">$tmp/pcd_$DBSUFFIX.txt" ) or die $!;
+                }
             }
-
+            elsif ( $run_conf{BACKEND} eq "sqlite" ) {
+                $sth->execute( $id, $1 );
+                $pcdupd++;
+            }
         }
     }
-    close MYFILE;
+    close $fh;
 
 }
 
 # finish insert and update based on temp table
-close($TEMPFILE);
-$pcdupd += $sth->execute();
-$sth->finish;
-unlink("$tmp/pcd_$DBNAME.txt");
+if ( $run_conf{BACKEND} eq "mysql" ) {
+    close($TEMPFILE);
+    $pcdupd += $sth->execute();
+    $sth->finish;
+    unlink("$tmp/pcd_$DBSUFFIX.txt");
 
-$sth = $dbh->prepare('ALTER TABLE clustemp ENABLE KEYS;')
-    or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute();
-$sth->finish;
+    $sth = $dbh->do('ALTER TABLE clustemp ENABLE KEYS;')
+        or die "Couldn't do statement: " . $dbh->errstr;
+}
 
 my $updfromtable = 0;
-$query
-    = "UPDATE clustemp p, clusters pp SET pp.profdensity=p.pd WHERE pp.cid = p.cid;";
-$sth          = $dbh->prepare($query);
-$updfromtable = $sth->execute();
-$sth->finish;
+# $query = "UPDATE clustemp, clusters SET clusters.profdensity=clustemp.pd WHERE clusters.cid = clustemp.cid";
+$query = q{
+    UPDATE clusters SET profdensity=(
+        SELECT pd FROM clustemp t2
+        WHERE clusters.cid = t2.cid
+    )};
+$updfromtable = $dbh->do($query)
+    or die "Couldn't do statement: " . $dbh->errstr;
 
 # populate rank table
 print STDERR "Populating rank table...\n";
-$i       = 0;
-$j       = 0;
-$rankins = 0;
+$i = 0;
+my $j       = 0;
+my $rankins = 0;
 
 # prepare rank table
-$query = "TRUNCATE TABLE rank;";
-$sth   = $dbh->prepare($query);
-$sth->execute();
-$sth->finish;
+$sth = $dbh->do( get_trunc_query( $run_conf{BACKEND}, "rank" ) )
+    or die "Couldn't do statement: " . $dbh->errstr;
 
-$sth = $dbh->prepare('ALTER TABLE rank DISABLE KEYS;')
-    or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute()    # Execute the query
-    or die "Couldn't execute statement: " . $sth->errstr;
-$sth->finish;
+if ( $run_conf{BACKEND} eq "mysql" ) {
+    $sth = $dbh->do('ALTER TABLE rank DISABLE KEYS;')
+        or die "Couldn't do statement: " . $dbh->errstr;
+    open( $TEMPFILE, ">$tmp/ranktemp_$DBSUFFIX.txt" ) or die $!;
+
+    $query
+        = "LOAD DATA LOCAL INFILE '$tmp/ranktemp_$DBSUFFIX.txt' INTO TABLE rank FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';";
+}
+elsif ( $run_conf{BACKEND} eq "sqlite" ) {
+    $query = q{
+        INSERT INTO rank VALUES(?, ?, ?, ?, "'")};
+}
 
 # insert rank entries via temp file
-open( $TEMPFILE, ">$tmp/ranktemp_$DBNAME.txt" ) or die $!;
-
-$query
-    = "LOAD DATA LOCAL INFILE '$tmp/ranktemp_$DBNAME.txt' INTO TABLE rank FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';";
 $sth = $dbh->prepare($query)
     or die "Couldn't prepare statement: " . $dbh->errstr;
 
-while ( ( $key, $value ) = each(%RHASH) ) {
+while ( my ( $key, $value ) = each(%RHASH) ) {
     $i++;
 
     #print "$key => $value (". $SHASH{$key}. ")\n";
@@ -582,49 +561,56 @@ while ( ( $key, $value ) = each(%RHASH) ) {
         print $TEMPFILE $ps, ",", $key, ",", $SHASH{$key}, ",", $ties, "\n";
 
         if ( $j % $RECORDS_PER_INFILE_INSERT == 0 ) {
-            close($TEMPFILE);
-            $rankins += $sth->execute();
-            open( $TEMPFILE, ">$tmp/ranktemp_$DBNAME.txt" ) or die $!;
+            if ( $run_conf{BACKEND} eq "mysql" ) {
+                close($TEMPFILE);
+                $rankins += $sth->execute();
+                open( $TEMPFILE, ">$tmp/ranktemp_$DBSUFFIX.txt" ) or die $!;
+            }
+            # elsif ( $run_conf{BACKEND} eq "sqlite" ) {
+            #     $dbh->commit;
+            # }
         }
     }
 }
 
 # finish insert
-close($TEMPFILE);
-$rankins += $sth->execute();
-$sth->finish;
+if ( $run_conf{BACKEND} eq "mysql" ) {
+    close($TEMPFILE);
+    $rankins += $sth->execute();
+}
 
-# enable keys in rank, set stats, print msg
-$sth = $dbh->prepare('ALTER TABLE rank ENABLE KEYS;')
-    or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute()    # Execute the query
-    or die "Couldn't execute statement: " . $sth->errstr;
-$sth->finish;
-
-SetStatistics( "RANK_EDGES_OVERCUTOFF", $j );
-print STDERR "Inserted ($j) rank records for $i reads.\n";
+$dbh->commit;
+warn "Inserted ($j) rank records for $i reads.\n";
 
 # create temp table for deletions
-$sth
-    = $dbh->prepare(
-    'CREATE TEMPORARY TABLE ranktemp (`refid` INT(11) NOT NULL, `readid` INT(11) NOT NULL, PRIMARY KEY (refid,readid)) ENGINE=INNODB;'
-    ) or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute()    # Execute the query
-    or die "Couldn't execute statement: " . $sth->errstr;
-$sth->finish;
+$query = q{CREATE TEMPORARY TABLE ranktemp (
+    `refid` INTEGER NOT NULL,
+    `readid` INTEGER NOT NULL,
+    PRIMARY KEY (refid,readid)
+)};
 
-$sth = $dbh->prepare('ALTER TABLE ranktemp DISABLE KEYS;')
-    or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute()    # Execute the query
-    or die "Couldn't execute statement: " . $sth->errstr;
-$sth->finish;
+if ( $run_conf{BACKEND} eq "mysql" ) {
+    $query .= ' ENGINE=INNODB';
+}
 
-open( $TEMPFILE, ">$tmp/ranktemp_$DBNAME.txt" ) or die $!;
+$dbh->do($query)
+    or die "Couldn't do statement: " . $dbh->errstr;
 
-print STDERR
-    "Prunning (keep best ref TR for each read TR) from rank table...\n";
-$query
-    = "Select refid,readid,sid,score FROM rank INNER JOIN replnk ON rank.readid=replnk.rid ORDER BY readid, score;";
+if ( $run_conf{BACKEND} eq "mysql" ) {
+    # enable keys in rank, set stats, print msg
+    $dbh->do('ALTER TABLE rank ENABLE KEYS;')
+        or die "Couldn't do statement: " . $dbh->errstr;
+    $dbh->do('ALTER TABLE ranktemp DISABLE KEYS;')
+        or die "Couldn't do statement: " . $dbh->errstr;
+
+    open( $TEMPFILE, ">$tmp/ranktemp_$DBSUFFIX.txt" ) or die $!;
+}
+
+warn "Prunning (keep best ref TR for each read TR) from rank table...\n";
+$query = q{Select refid,readid,sid,score
+    FROM rank INNER JOIN
+        replnk ON rank.readid=replnk.rid
+    ORDER BY readid, score};
 $sth = $dbh->prepare($query);
 $sth->execute();
 $num = $sth->rows;
@@ -635,12 +621,23 @@ my $oldref   = -1;
 my $oldread  = -1;
 my $oldscore = -1.0;
 
+
+if ( $run_conf{BACKEND} eq "sqlite" ) {
+    $query = q{INSERT INTO ranktemp VALUES(?, ?)};
+    $sth2 = $dbh->prepare($query);
+}
+
 while ( $i < $num ) {
     my @data = $sth->fetchrow_array();
     if ( $data[1] == $oldread && $data[3] != $oldscore ) {
 
         # delete old one
-        print $TEMPFILE $oldref, ",", $oldread, "\n";
+        if ( $run_conf{BACKEND} eq "mysql" ) {
+            print $TEMPFILE $oldref, ",", $oldread, "\n";
+        }
+        elsif ( $run_conf{BACKEND} eq "sqlite" ) {
+            $sth2->execute($oldref, $oldread);
+        }
 
         $count++;
     }
@@ -652,13 +649,15 @@ while ( $i < $num ) {
 }
 
 $sth->finish;
+$dbh->commit;
 print STDERR "Prunning complete. Pruned $count rank records.\n";
-SetStatistics( "RANK_REMOVED_SAMEREF", $count );
 
 print STDERR "Prunning (one TR/same read) from rank table...\n";
-$query
-    = "Select refid,readid,sid,score FROM rank INNER JOIN replnk ON rank.readid=replnk.rid ORDER BY refid, sid, score, readid;"
-    ; # readid added for tie resolution to keep rank and rankflank entries more in sync
+# readid added for tie resolution to keep rank and rankflank entries more in sync
+$query = q{Select refid,readid,sid,score
+    FROM rank INNER JOIN
+        replnk ON rank.readid=replnk.rid
+    ORDER BY refid, sid, score, readid}; 
 $sth = $dbh->prepare($query);
 $sth->execute();
 $num     = $sth->rows;
@@ -672,7 +671,12 @@ while ( $i < $num ) {
     if ( $data[0] == $oldref && $data[2] == $oldseq ) {
 
         # delete old one
-        print $TEMPFILE $oldref, ",", $oldread, "\n";
+        if ( $run_conf{BACKEND} eq "mysql" ) {
+            print $TEMPFILE $oldref, ",", $oldread, "\n";
+        }
+        elsif ( $run_conf{BACKEND} eq "sqlite" ) {
+            $sth2->execute($oldref, $oldread);
+        }
 
         $count++;
     }
@@ -683,51 +687,59 @@ while ( $i < $num ) {
 }
 
 $sth->finish;
-print STDERR "Prunning complete. Pruned $count rank records.\n";
-SetStatistics( "RANK_REMOVED_SAMESEQ", $count );
+$dbh->commit;
+warn "Prunning complete. Pruned $count rank records.\n";
 
-# load the file into tempfile
-close($TEMPFILE);
-$sth
-    = $dbh->prepare(
-    "LOAD DATA LOCAL INFILE '$tmp/ranktemp_$DBNAME.txt' INTO TABLE ranktemp FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';"
-    ) or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute();
-$sth->finish;
-$sth = $dbh->prepare('ALTER TABLE ranktemp ENABLE KEYS;')
-    or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute();
-$sth->finish;
 
-# delete from rankd based on temptable entries
+if ( $run_conf{BACKEND} eq "mysql" ) {
+    # load the file into tempfile
+    close($TEMPFILE);
+    $sth
+        = $dbh->do(
+        "LOAD DATA LOCAL INFILE '$tmp/ranktemp_$DBSUFFIX.txt' INTO TABLE ranktemp FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';"
+        ) or die "Couldn't do statement: " . $dbh->errstr;
+    $sth = $dbh->do('ALTER TABLE ranktemp ENABLE KEYS;')
+        or die "Couldn't do statement: " . $dbh->errstr;
+    # delete from rank based on temptable entries
+    $query = q{DELETE FROM t1
+    USING rank t1 INNER JOIN
+        ranktemp t2 ON (
+            t1.refid = t2.refid AND t1.readid = t2.readid
+        )};
+    # cleanup temp file
+    unlink("$tmp/ranktemp_$DBSUFFIX.txt");
+}
+elsif ($run_conf{BACKEND} eq "sqlite") {
+    # delete from rank based on temptable entries
+    $query = qq{
+        DELETE FROM rank
+        WHERE EXISTS (
+            SELECT * FROM ranktemp t2
+            WHERE rank.refid = t2.refid
+                AND rank.readid = t2.readid
+        )};
+}
+
 my $delfromtable = 0;
-$query
-    = "DELETE FROM t1 USING rank t1 INNER JOIN ranktemp t2 ON ( t1.refid = t2.refid AND t1.readid = t2.readid );";
 $sth          = $dbh->prepare($query);
 $delfromtable = $sth->execute();
-$sth->finish;
 
-# cleanup temp file
-unlink("$tmp/ranktemp_$DBNAME.txt");
 
 # set old db settings
-$sth = $dbh->prepare('SET AUTOCOMMIT = 1;')
-    or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute()    # Execute the query
-    or die "Couldn't execute statement: " . $sth->errstr;
-$sth->finish;
+if ( $run_conf{BACKEND} eq "mysql" ) {
+    $sth = $dbh->do('SET AUTOCOMMIT = 1;')
+        or die "Couldn't do statement: " . $dbh->errstr;
 
-$sth = $dbh->prepare('SET FOREIGN_KEY_CHECKS = 1;')
-    or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute()    # Execute the query
-    or die "Couldn't execute statement: " . $sth->errstr;
-$sth->finish;
+    $sth = $dbh->do('SET FOREIGN_KEY_CHECKS = 1;')
+        or die "Couldn't do statement: " . $dbh->errstr;
 
-$sth = $dbh->prepare('SET UNIQUE_CHECKS = 1;')
-    or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute()    # Execute the query
-    or die "Couldn't execute statement: " . $sth->errstr;
-$sth->finish;
+    $sth = $dbh->do('SET UNIQUE_CHECKS = 1;')
+        or die "Couldn't do statement: " . $dbh->errstr;
+}
+elsif ($run_conf{BACKEND} eq "sqlite") {
+    $dbh->do("PRAGMA foreign_keys = ON");
+    $dbh->{AutoCommit} = 1;
+}
 
 if ( $updfromtable != $pcdupd ) {
     die
@@ -743,16 +755,16 @@ if ( $delfromtable != $count ) {
 }
 
 $dbh->disconnect();
+set_statistics(
+    $DBSUFFIX,
+    (   "RANK_EDGES_OVERCUTOFF" => $j,
+        "RANK_REMOVED_SAMEREF"  => $count,
+        "RANK_REMOVED_SAMESEQ"  => $count,
+    )
+);
 
 print STDERR "Finished. Deleted from rank using temptable: $delfromtable\n";
-
-( $sec, $min, $hour, $mday, $mon, $year, $wday, $yday, $isdst )
-    = localtime(time);
-print STDERR sprintf(
-    "\n\nend: %4d-%02d-%02d %02d:%02d:%02d\n\n",
-    $year + 1900,
-    $mon + 1, $mday, $hour, $min, $sec
-);
+say STDERR strftime( "\n\nend: %F %T\n\n", localtime );
 
 1;
 

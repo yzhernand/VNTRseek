@@ -11,7 +11,6 @@ use FindBin;
 use File::Basename;
 
 use lib "$FindBin::RealBin/lib";
-require "vutil.pm";
 
 use vutil qw(get_credentials stats_get stats_set);
 

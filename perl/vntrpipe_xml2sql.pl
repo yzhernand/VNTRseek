@@ -98,9 +98,9 @@ while (<FILE>) {
  my @values = split(' ', $_);
  my $repcount = @values - 1;
 
- if ($ENV{DEBUG}) {
- 	warn $count . ". " . @values . "\n";
- }
+ # if ($ENV{DEBUG}) {
+ # 	warn $count . ". " . @values . "\n";
+ # }
 
  my $i=0;
  foreach my $val (@values) {

@@ -37,50 +37,50 @@ my ( $LOGIN, $PASS, $HOST ) = @run_conf{qw(LOGIN PASS HOST)};
 
 ####################################
 
-my $rc;
+my %stats;
 my $exstring;
 my $input;
 
 open($input, "-|", "wc -l $reffile | tail -1");
-$rc = <$input>;
+my $rc = <$input>;
 if ($rc =~ /(\d+)/) {
-  set_statistics($DBSUFFIX, 'NUMBER_REF_TRS', $rc);
+  $stats{NUMBER_REF_TRS} = $rc;
 }
 close($input);
 
 open($input, "-|", "wc -l $readpf/*.indexhist | tail -1");
 $rc = <$input>;
 if ($rc =~ /(\d+)/) {
-  set_statistics($DBSUFFIX, 'NUMBER_TRS_IN_READS', $rc);
+  $stats{NUMBER_TRS_IN_READS} = $rc;
 }
 close($input);
 
 open($input, "-|", "wc -l $reffolder/reference.leb36.rotindex | tail -1");
 $rc = <$input>;
 if ($rc =~ /(\d+)/) {
-  set_statistics($DBSUFFIX, 'NUMBER_REFS_TRS_AFTER_REDUND', $rc);
+  $stats{NUMBER_REFS_TRS_AFTER_REDUND} = $rc;
 }
 close($input);
 
 open($input, "-|", "wc -l $rpfc/*.rotindex | tail -1");
 $rc = <$input>;
 if ($rc =~ /(\d+)/) {
-  set_statistics($DBSUFFIX, 'NUMBER_TRS_IN_READS_AFTER_REDUND', $rc);
+  $stats{NUMBER_TRS_IN_READS_AFTER_REDUND} = $rc;
 }
 close($input);
 
 
-my $readTRsWithPatternGE7 = 0;
-my $totalReadsWithTRsPatternGE7 = 0;
-my $totalReadsWithTRs = 0;
-my $readTRsWPGE7AfterCyclicRedundancyElimination = 0;
+$stats{NUMBER_TRS_IN_READS_GE7} = 0;
+$stats{NUMBER_READS_WITHTRS_GE7} = 0;
+$stats{NUMBER_READS_WITHTRS} = 0;
+$stats{NUMBER_READS_WITHTRS_GE7_AFTER_REDUND} = 0;
 
 open($input, "-|", "./ge7.pl $readpf/*.index");
 $rc = <$input>;
 if ($rc =~ /(\d+) (\d+) (\d+)/) {
-   $readTRsWithPatternGE7 = $1;
-   $totalReadsWithTRsPatternGE7 = $2;
-   $totalReadsWithTRs = $3;
+   $stats{NUMBER_TRS_IN_READS_GE7} = $1;
+   $stats{NUMBER_READS_WITHTRS_GE7} = $2;
+   $stats{NUMBER_READS_WITHTRS} = $3;
 }
 close($input);
 
@@ -88,7 +88,7 @@ close($input);
 open($input, "-|", "./ge7.pl $readpf/*.indexhist");
 $rc = <$input>;
 if ($rc =~ /(\d+) (\d+) (\d+)/) {
-  $totalReadsWithTRs = $3;
+  $stats{NUMBER_READS_WITHTRS} = $3;
 }
 close($input);
 
@@ -96,19 +96,10 @@ close($input);
 open($input, "-|", "cat $rpfc/*.rotindex | wc");
 $rc = <$input>;
 if ($rc =~ /(\d+) (\d+) (\d+)/) {
-  $readTRsWPGE7AfterCyclicRedundancyElimination = $1;
+  $stats{NUMBER_READS_WITHTRS_GE7_AFTER_REDUND} = $1;
 }
 close($input);
 
-
-set_statistics($DBSUFFIX, "NUMBER_TRS_IN_READS_GE7", $readTRsWithPatternGE7);
-set_statistics($DBSUFFIX, "NUMBER_READS_WITHTRS_GE7", $totalReadsWithTRsPatternGE7);
-set_statistics($DBSUFFIX, "NUMBER_READS_WITHTRS", $totalReadsWithTRs);
-set_statistics($DBSUFFIX, "NUMBER_READS_WITHTRS_GE7_AFTER_REDUND", $readTRsWPGE7AfterCyclicRedundancyElimination);
-
+set_statistics($DBSUFFIX, %stats);
 
 1;
-
-
-
-

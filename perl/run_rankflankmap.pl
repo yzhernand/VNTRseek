@@ -19,16 +19,6 @@ use vutil qw(get_config get_dbh set_statistics get_trunc_query);
 my $updatedClustersCount = 0;
 my $updatedRefsCount     = 0;
 
-my $sec;
-my $min;
-my $hour;
-my $mday;
-my $mon;
-my $year;
-my $wday;
-my $yday;
-my $isdst;
-
 sub nowhitespace($) {
     my $string = shift;
     $string =~ s/\s+//g;
@@ -469,9 +459,11 @@ if ( $delfromtable != $count ) {
 }
 
 $dbh->disconnect();
-set_statistics( $DBSUFFIX, "RANKFLANK_EDGES_INSERTED", $j );
-set_statistics( $DBSUFFIX, "RANKFLANK_REMOVED_SAMEREF", $count );
-set_statistics( $DBSUFFIX, "RANKFLANK_REMOVED_SAMESEQ", $count );
+set_statistics( $DBSUFFIX, (
+    "RANKFLANK_EDGES_INSERTED" => $j,
+    "RANKFLANK_REMOVED_SAMEREF" => $count,
+    "RANKFLANK_REMOVED_SAMESEQ" => $count,
+) );
 
 print STDERR "\n\n";
 

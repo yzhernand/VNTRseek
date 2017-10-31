@@ -12,24 +12,15 @@
 use strict;
 use warnings;
 use Cwd;
+use POSIX qw(strftime);
 
-my $sec; 
-my $min;
-my $hour;
-my $mday;
-my $mon;
-my $year;
-my $wday;
-my $yday;
-my $isdst;
 
 if (@ARGV<8) {
  print STDERR "\n\nrun_proclu.pl: NOT ENOUGH INPUT PARAMS!\n";
  exit 1;
 }
 
-($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst)=localtime(time);
-printf "\n\nstart: %4d-%02d-%02d %02d:%02d:%02d\n",$year+1900,$mon+1,$mday,$hour,$min,$sec;
+say STDERR strftime( "\n\nstart: %F %T\n\n", localtime );
 
 my $curdir =  getcwd;
 my $PROCLU = "$curdir/$ARGV[5]";
@@ -134,8 +125,7 @@ while ((my $pid = wait) != -1) {
 }
 print STDERR "Processing complete -- processed $files_processed file(s).\n";
 
-($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst)=localtime(time);
-printf "\n\nend: %4d-%02d-%02d %02d:%02d:%02d\n",$year+1900,$mon+1,$mday,$hour,$min,$sec;
+say STDERR strftime( "\n\nend: %F %T\n\n", localtime );
 
 
 1;

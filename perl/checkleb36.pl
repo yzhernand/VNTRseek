@@ -6,24 +6,14 @@
 use strict;
 use warnings;
 use Cwd;
-
-my $sec; 
-my $min;
-my $hour;
-my $mday;
-my $mon;
-my $year;
-my $wday;
-my $yday;
-my $isdst;
+use POSIX qw(strftime);
 
 if (@ARGV<2) {
  print STDERR "\n\ncheckl3b36.pl: NOT ENOUGH INPUT PARAMS!\n";
  exit 1;
 }
 
-($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst)=localtime(time);
-printf "\n\nstart: %4d-%02d-%02d %02d:%02d:%02d\n",$year+1900,$mon+1,$mday,$hour,$min,$sec;
+say STDERR strftime( "\n\nstart: %F %T\n\n", localtime );
 
 my $curdir =  getcwd;
 my $tgz_dir = $ARGV[0];
@@ -69,4 +59,4 @@ foreach my $ifile (@tarballs) {
 
 %uhash = ();
 
-0;
+say STDERR strftime( "\n\nend: %F %T\n\n", localtime );
