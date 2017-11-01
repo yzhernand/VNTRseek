@@ -7,26 +7,12 @@ use warnings;
 use Cwd;
 use DBI;
 use List::Util qw[min max];
-
+use POSIX qw(strftime);
 use FindBin;
 use File::Basename;
 
 use lib "$FindBin::RealBin/lib";
-require "vutil.pm";
-
-use vutil ('get_credentials');
-use vutil ('write_mysql');
-use vutil ('stats_set');
-
-my $sec;
-my $min;
-my $hour;
-my $mday;
-my $mon;
-my $year;
-my $wday;
-my $yday;
-my $isdst;
+use vutil qw(get_config get_dbh set_statistics get_trunc_query);
 
 # Perl trim function to remove whitespace from the start and end of the string
 sub trim($) {
@@ -35,11 +21,7 @@ sub trim($) {
     $string =~ s/\s+$//;
     return $string;
 }
-
-( $sec, $min, $hour, $mday, $mon, $year, $wday, $yday, $isdst )
-    = localtime(time);
-printf "\n\nstart: %4d-%02d-%02d %02d:%02d:%02d\n\n\n", $year + 1900,
-    $mon + 1, $mday, $hour, $min, $sec;
+warn strftime( "\n\nstart: %F %T\n\n", localtime );
 
 my $argc = @ARGV;
 
@@ -52,38 +34,25 @@ my $curdir = getcwd;
 
 my $indexfolder  = $ARGV[0];
 my $pcleanfolder = $ARGV[1];
-my $DBNAME       = $ARGV[2];
+my $DBSUFFIX     = $ARGV[2];
 my $MSDIR        = $ARGV[3];
 my $cpucount     = $ARGV[4];
 my $TEMPDIR      = $ARGV[5];
 my $KEEPPCRDUPS  = $ARGV[6];
 
 # set these mysql credentials in vs.cnf (in installation directory)
-my ( $LOGIN, $PASS, $HOST ) = get_credentials($MSDIR);
-
-####################################
-sub SetStatistics {
-
-    my $argc = @_;
-    if ( $argc < 2 ) {
-        die "stats_set: expects 2 parameters, passed $argc !\n";
-    }
-
-    my $NAME  = $_[0];
-    my $VALUE = $_[1];
-
-    #print "$DBNAME,$LOGIN,$PASS,$NAME,$VALUE\n";
-    return stats_set( $DBNAME, $LOGIN, $PASS, $HOST, $NAME, $VALUE );
-}
-
-#goto AAA;
+my %run_conf = get_config( $MSDIR . "vs.cnf" );
+my ( $LOGIN, $PASS, $HOST ) = @run_conf{qw(LOGIN PASS HOST)};
+my $dbh = get_dbh( $DBSUFFIX, $MSDIR . "vs.cnf" )
+    or die "Could not connect to database: $DBI::errstr";
+my %stats;
 
 # process
-print STDERR "reading: $indexfolder";
+warn "reading: $indexfolder\n";
 
-opendir( DIR, $indexfolder );
-my @indexfiles = grep( /\.(?:seq)$/, readdir(DIR) );
-closedir(DIR);
+opendir( my $dir, $indexfolder );
+my @indexfiles = grep( /\.(?:seq)$/, readdir($dir) );
+closedir($dir);
 
 #my $i=0;
 #foreach my $ifile (@indexfiles) {
@@ -102,7 +71,7 @@ my %p;                         # associates forked pids with output pipe pids
 my $MYLOCK = 0;
 
 my $tarball_count = @indexfiles;
-print STDERR "$tarball_count supported files found in $indexfolder\n";
+warn "$tarball_count supported files found in $indexfolder\n";
 
 #die "Exiting\n" if $tarball_count == 0;
 $files_to_process = $tarball_count if $files_to_process > $tarball_count;
@@ -123,24 +92,17 @@ while ( ( my $pid = wait ) != -1 ) {
     }
 }
 
-print STDERR
-    "Processing complete -- processed $files_processed cluster(s).\n";
-
-AAA:
+warn "Processing complete -- processed $files_processed cluster(s).\n";
 
 # load results
-print STDERR "reading: $indexfolder";
-
-my $dbh = DBI->connect( "DBI:mysql:$DBNAME;mysql_local_infile=1;host=$HOST",
-    "$LOGIN", "$PASS" )
-    || die "Could not connect to database: $DBI::errstr";
+warn "reading: $indexfolder\n";
 
 # first count the intersect before pcr dup
 my $rrintersect = 0;
-my $sth
-    = $dbh->prepare(
-    "SELECT count(*) FROM rank INNER JOIN rankflank ON rank.refid=rankflank.refid AND rank.readid=rankflank.readid;"
-    ) or die "Couldn't prepare statement: " . $dbh->errstr;
+my $sth = $dbh->prepare(q{SELECT count(*)
+    FROM rank INNER JOIN
+        rankflank ON rank.refid=rankflank.refid AND rank.readid=rankflank.readid})
+    or die "Couldn't prepare statement: " . $dbh->errstr;
 $sth->execute() or die "Cannot execute: " . $sth->errstr();
 my $num = $sth->rows;
 if ($num) {
@@ -148,46 +110,47 @@ if ($num) {
     $rrintersect = $data[0];
 }
 $sth->finish();
-SetStatistics( "INTERSECT_RANK_AND_RANKFLANK_BEFORE_PCR", $rrintersect );
+$stats{INTERSECT_RANK_AND_RANKFLANK_BEFORE_PCR} = $rrintersect;
 
 # deleteing PCR DUPS in database
 my %PENTRIES = ();
 
 # create temp table for updates
-$sth
-    = $dbh->prepare(
-    'CREATE TEMPORARY TABLE pduptemp (`refid` INT(11) NOT NULL, `readid` INT(11) NOT NULL, PRIMARY KEY (refid,readid)) ENGINE=INNODB;'
-    ) or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute()    # Execute the query
-    or die "Couldn't execute statement: " . $sth->errstr;
-$sth->finish;
+my $query = q{CREATE TEMPORARY TABLE pduptemp (
+    `refid` INT(11) NOT NULL,
+    `readid` INT(11) NOT NULL,
+    PRIMARY KEY (refid,readid)
+    )};
 
-$sth = $dbh->prepare('ALTER TABLE pduptemp DISABLE KEYS;')
-    or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute()    # Execute the query
-    or die "Couldn't execute statement: " . $sth->errstr;
-$sth->finish;
+if ( $run_conf{BACKEND} eq "mysql" ) {
+    $query .= " ENGINE=INNODB";
+}
 
-$sth = $dbh->prepare('SET AUTOCOMMIT = 0;')
-    or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute()    # Execute the query
-    or die "Couldn't execute statement: " . $sth->errstr;
-$sth->finish;
-
-$sth = $dbh->prepare('SET FOREIGN_KEY_CHECKS = 0;')
-    or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute()    # Execute the query
-    or die "Couldn't execute statement: " . $sth->errstr;
-$sth->finish;
-
-$sth = $dbh->prepare('SET UNIQUE_CHECKS = 0;')
-    or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute()    # Execute the query
-    or die "Couldn't execute statement: " . $sth->errstr;
-$sth->finish;
+$dbh->do($query)
+    or die "Couldn't do statement: " . $dbh->errstr;
 
 my $TEMPFILE;
-open( $TEMPFILE, ">$TEMPDIR/pduptemp_$DBNAME.txt" ) or die $!;
+if ( $run_conf{BACKEND} eq "mysql" ) {
+    $dbh->do('ALTER TABLE pduptemp DISABLE KEYS;')
+        or die "Couldn't do statement: " . $dbh->errstr;
+
+    $dbh->do('SET AUTOCOMMIT = 0;')
+        or die "Couldn't do statement: " . $dbh->errstr;
+
+    $dbh->do('SET FOREIGN_KEY_CHECKS = 0;')
+        or die "Couldn't do statement: " . $dbh->errstr;
+
+    $dbh->do('SET UNIQUE_CHECKS = 0;')
+        or die "Couldn't do statement: " . $dbh->errstr;
+
+    open( $TEMPFILE, ">$TEMPDIR/pduptemp_$DBSUFFIX.txt" ) or die $!;
+}
+elsif ( $run_conf{BACKEND} eq "sqlite" ) {
+    $dbh->do("PRAGMA foreign_keys = OFF");
+    # warn "\nTurning off AutoCommit\n";
+    $dbh->{AutoCommit} = 0;
+    $sth = $dbh->prepare(q{INSERT INTO pduptemp VALUES (?, ?)});
+}
 
 #my $query = "DELETE FROM rank WHERE refid=? AND readid=?;";
 #$sth = $dbh->prepare($query);
@@ -195,9 +158,9 @@ open( $TEMPFILE, ">$TEMPDIR/pduptemp_$DBNAME.txt" ) or die $!;
 #$query = "DELETE FROM rankflank WHERE refid=? AND readid=?;";
 #my $sth1 = $dbh->prepare($query);
 
-opendir( DIR, $indexfolder );
-@indexfiles = grep( /\.(?:pcr_dup)$/, readdir(DIR) );
-closedir(DIR);
+opendir( $dir, $indexfolder );
+@indexfiles = grep( /\.(?:pcr_dup)$/, readdir($dir) );
+closedir($dir);
 
 my $i       = 0;
 my $deleted = 0;
@@ -211,14 +174,14 @@ foreach my $ifile (@indexfiles) {
         my $filedelted = 0;
         print "\n $i. " . $ifile . "...";
 
-        if ( open( FILE, "$indexfolder/$ifile" ) ) {
+        if ( open( my $fh, "$indexfolder/$ifile" ) ) {
 
             my %RHASH = ();
 
             # added at 1.02, to eliminate most connected nodes preferentiably
             my %RCOUNTS = ();
             my %NEWIDS  = ();
-            while (<FILE>) {
+            while (<$fh>) {
                 if (/^compare: (\d+) (\d+) (\d+) (\d+)\|(\d+)/) {
                     $RCOUNTS{$1}++;
                     $RCOUNTS{$5}++;
@@ -229,8 +192,8 @@ foreach my $ifile (@indexfiles) {
             my $iditer = 1;
             foreach my $key (@keys) { $NEWIDS{$key} = $iditer; $iditer++; }
 
-            seek FILE, 0, 0;
-            while (<FILE>) {
+            seek $fh, 0, 0;
+            while (<$fh>) {
                 if (/^compare: (\d+) (\d+) (\d+) (\d+)\|(\d+)/) {
 
                     #my $read = max($1,$5);
@@ -250,7 +213,12 @@ foreach my $ifile (@indexfiles) {
 
                         #$sth->execute($ref,$read);
                         #$sth1->execute($ref,$read);
-                        print $TEMPFILE $ref, ",", $read, "\n";
+                        if ( $run_conf{BACKEND} eq "mysql" ) {
+                            print $TEMPFILE $ref, ",", $read, "\n";
+                        }
+                        elsif ( $run_conf{BACKEND} eq "sqlite" ) {
+                            $sth->execute($ref, $read);
+                        }
 
                         #print "deleting: -$ref -> $read\n";
                         $deleted++;
@@ -268,7 +236,7 @@ foreach my $ifile (@indexfiles) {
                 }
             }
 
-            close(FILE);
+            close($fh);
             print "($filedelted deleted)";
 
         }
@@ -281,56 +249,57 @@ foreach my $ifile (@indexfiles) {
 #$sth1->finish;
 
 # load the file into tempfile
-close($TEMPFILE);
-$sth
-    = $dbh->prepare(
-    "LOAD DATA LOCAL INFILE '$TEMPDIR/pduptemp_$DBNAME.txt' INTO TABLE pduptemp FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';"
-    ) or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute();
-$sth->finish;
-$sth = $dbh->prepare('ALTER TABLE pduptemp ENABLE KEYS;')
-    or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute();
-$sth->finish;
+if ( $run_conf{BACKEND} eq "mysql" ) {
+    close($TEMPFILE);
+    $dbh->do(
+        "LOAD DATA LOCAL INFILE '$TEMPDIR/pduptemp_$DBSUFFIX.txt' INTO TABLE pduptemp FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';"
+        ) or die "Couldn't do statement: " . $dbh->errstr;
+    $dbh->do('ALTER TABLE pduptemp ENABLE KEYS;')
+        or die "Couldn't do statement: " . $dbh->errstr;
+    # delete from rankdflank based on temptable entries
+    $query = q{DELETE FROM t1
+    USING rank t1 INNER JOIN
+        pduptemp t2 ON ( t1.refid = t2.refid AND t1.readid = t2.readid )};
+}
+elsif ( $run_conf{BACKEND} eq "sqlite" ) {
+    $dbh->commit;
+    # delete from rankdflank based on temptable entries
+    $query = q{DELETE FROM rank
+    WHERE EXISTS (
+        SELECT * FROM pduptemp t2
+        WHERE rank.refid = t2.refid
+            AND rank.readid = t2.readid
+    )};
+}
 
-# delete from rankdflank based on temptable entries
-my $delfromtable = 0;
-my $query
-    = "DELETE FROM t1 USING rank t1 INNER JOIN pduptemp t2 ON ( t1.refid = t2.refid AND t1.readid = t2.readid );";
-$sth          = $dbh->prepare($query);
-$delfromtable = $sth->execute();
-$sth->finish;
-$query
-    = "DELETE FROM t1 USING rankflank t1 INNER JOIN pduptemp t2 ON ( t1.refid = t2.refid AND t1.readid = t2.readid );";
-$sth = $dbh->prepare($query);
-$sth->execute();
-$sth->finish;
+my $delfromtable = $dbh->do($query);
 
 # cleanup temp file
-unlink("$TEMPDIR/pduptemp_$DBNAME.txt");
+if ( $run_conf{BACKEND} eq "mysql" ) {
+    unlink("$TEMPDIR/pduptemp_$DBSUFFIX.txt");
+}
 
 print "\n\nProcessing complete (pcr_dup.pl), deleted $deleted duplicates.\n";
-SetStatistics( "RANK_REMOVED_PCRDUP",      $deleted );
-SetStatistics( "RANKFLANK_REMOVED_PCRDUP", $deleted );
+@stats{qw( RANK_REMOVED_PCRDUP RANKFLANK_REMOVED_PCRDUP )}
+    = ( $deleted, $deleted );
 
 # for accounting of pcr dups
-print STDERR "\nMaking a list of pcr_dup removed...\n";
-if ( open( FILE, ">$pcleanfolder/result/$DBNAME.pcr_dup.txt" ) ) {
+warn "\nMaking a list of pcr_dup removed...\n";
+if ( open( my $fh, ">$pcleanfolder/result/$DBSUFFIX.pcr_dup.txt" ) ) {
     $i = 0;
     for my $key ( sort keys %PENTRIES ) {
         $i++;
-        print FILE "$i\t-" . $key . "\n";
+        print $fh "$i\t-" . $key . "\n";
     }
-    print STDERR "PCR_DUP list complete with $i removed entries.\n";
-    close(FILE);
+    warn "PCR_DUP list complete with $i removed entries.\n";
+    close($fh);
 }
 
 # first count the intersect
 $rrintersect = 0;
-$sth
-    = $dbh->prepare(
-    "SELECT count(*) FROM rank INNER JOIN rankflank ON rank.refid=rankflank.refid AND rank.readid=rankflank.readid;"
-    ) or die "Couldn't prepare statement: " . $dbh->errstr;
+$sth = $dbh->prepare(q{SELECT count(*) FROM rank
+    INNER JOIN rankflank ON rank.refid=rankflank.refid AND rank.readid=rankflank.readid})
+    or die "Couldn't prepare statement: " . $dbh->errstr;
 $sth->execute() or die "Cannot execute: " . $sth->errstr();
 $num = $sth->rows;
 if ($num) {
@@ -338,46 +307,51 @@ if ($num) {
     $rrintersect = $data[0];
 }
 $sth->finish();
-SetStatistics( "INTERSECT_RANK_AND_RANKFLANK", $rrintersect );
+$stats{INTERSECT_RANK_AND_RANKFLANK} = $rrintersect;
 
 # now exclude ties, mark in map table and record the number
-print STDERR "Updating BEST BEST BEST map entries...\n";
-$sth = $dbh->prepare("UPDATE map SET bbb=0;");    # clear all bbb entries
+warn "Updating BEST BEST BEST map entries...\n";
+# clear all bbb entries
+$dbh->do("UPDATE map SET bbb=0;")
+    or die "Couldn't do statement: " . $dbh->errstr;
+
+# clear all pduptemp entries
+$dbh->do(get_trunc_query($run_conf{BACKEND},"pduptemp"))
+    or die "Couldn't do statement: " . $dbh->errstr;
+
+if ( $run_conf{BACKEND} eq "mysql" ) {
+    $dbh->do('ALTER TABLE pduptemp DISABLE KEYS;')
+        or die "Couldn't do statement: " . $dbh->errstr;
+}
+
+# clear all pduptemp entries
+$sth = $dbh->prepare(q{INSERT INTO pduptemp
+    SELECT map.refid, map.readid FROM map
+    INNER JOIN rank ON rank.refid=map.refid AND rank.readid=map.readid
+    INNER JOIN rankflank ON rankflank.refid=map.refid AND rankflank.readid=map.readid
+    WHERE rank.ties=0 OR rankflank.ties=0});
 $sth->execute();
-$sth->finish;
+$dbh->commit;
 
-$sth = $dbh->prepare("truncate table pduptemp;"); # clear all pduptemp entries
-$sth->execute();
-$sth->finish;
 
-$sth = $dbh->prepare('ALTER TABLE pduptemp DISABLE KEYS;')
-    or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute();
-$sth->finish;
+if ( $run_conf{BACKEND} eq "mysql" ) {
+    $dbh->do('ALTER TABLE pduptemp ENABLE KEYS;')
+        or die "Couldn't do statement: " . $dbh->errstr;
+}
 
-$sth
-    = $dbh->prepare(
-    "INSERT INTO pduptemp SELECT map.refid, map.readid FROM map INNER JOIN rank ON rank.refid=map.refid AND rank.readid=map.readid INNER JOIN rankflank ON rankflank.refid=map.refid AND rankflank.readid=map.readid WHERE rank.ties=0 OR rankflank.ties=0;"
-    );                                            # clear all pduptemp entries
-$sth->execute();
-$sth->finish;
+$query = q{UPDATE map SET bbb=1
+    WHERE EXISTS (
+    SELECT refid FROM pduptemp t2
+    WHERE map.refid = t2.refid AND map.readid=t2.readid
+)};
+$i = $dbh->do($query)
+    or die "Couldn't do statement: " . $dbh->errstr;
 
-$sth = $dbh->prepare('ALTER TABLE pduptemp ENABLE KEYS;')
-    or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute();
-$sth->finish;
-
-$query
-    = "UPDATE pduptemp p, map pp SET bbb=1 WHERE pp.refid = p.refid AND pp.readid=p.readid;";
-$sth = $dbh->prepare($query);
-$i   = $sth->execute();
-$sth->finish;
-
-SetStatistics( "BBB_WITH_MAP_DUPS", $i );
+$stats{BBB_WITH_MAP_DUPS} = $i;
 
 # make a list of ties
-print STDERR "Making a list of ties (references)...\n";
-if ( open( FILE, ">$pcleanfolder/result/$DBNAME.ties.txt" ) ) {
+warn "Making a list of ties (references)...\n";
+if ( open( my $fh, ">$pcleanfolder/result/$DBSUFFIX.ties.txt" ) ) {
 
     $query
         = "SELECT map.refid, max(bbb) as mbb, (select head from fasta_ref_reps where rid=map.refid) as chr,(select firstindex from fasta_ref_reps where rid=map.refid) as tind  FROM map INNER JOIN rank ON rank.refid=map.refid AND rank.readid=map.readid INNER JOIN rankflank ON rankflank.refid=map.refid AND rankflank.readid=map.readid GROUP BY map.refid HAVING mbb=0 ORDER BY chr, tind;";
@@ -388,22 +362,28 @@ if ( open( FILE, ">$pcleanfolder/result/$DBNAME.ties.txt" ) ) {
     while ( $i < $num ) {
         my @data = $sth->fetchrow_array();
         $i++;
-        print FILE "$i\t-"
+        print $fh "$i\t-"
             . $data[0] . "\t"
             . $data[2] . "\t"
             . $data[3] . "\n";
     }
     $sth->finish;
-    close(FILE);
+    close($fh);
 }
-print STDERR "Ties list complete with $i removed references.\n";
+warn "Ties list complete with $i removed references.\n";
 
 # make a list of ties
-print STDERR "\nMaking a list of ties (entries)...\n";
-if ( open( FILE, ">$pcleanfolder/result/$DBNAME.ties_entries.txt" ) ) {
+warn "\nMaking a list of ties (entries)...\n";
+if (open( my $fh, ">$pcleanfolder/result/$DBSUFFIX.ties_entries.txt"
+    )
+    )
+{
 
-    $query
-        = "SELECT map.refid, map.readid,rank.ties,rankflank.ties  FROM map INNER JOIN rank ON rank.refid=map.refid AND rank.readid=map.readid INNER JOIN rankflank ON rankflank.refid=map.refid AND rankflank.readid=map.readid WHERE bbb=0 ORDER BY map.refid,map.readid;";
+    $query = q{SELECT map.refid, map.readid,rank.ties,rankflank.ties
+    FROM map
+    INNER JOIN rank ON rank.refid=map.refid AND rank.readid=map.readid
+    INNER JOIN rankflank ON rankflank.refid=map.refid AND rankflank.readid=map.readid
+    WHERE bbb=0 ORDER BY map.refid,map.readid};
     $sth = $dbh->prepare($query);
     $sth->execute();
     $num = $sth->rows;
@@ -411,35 +391,32 @@ if ( open( FILE, ">$pcleanfolder/result/$DBNAME.ties_entries.txt" ) ) {
     while ( $i < $num ) {
         my @data = $sth->fetchrow_array();
         $i++;
-        print FILE "$i\t-"
+        print $fh "$i\t-"
             . $data[0] . "\t"
             . $data[1] . "\t"
             . $data[2] . "\t"
             . $data[3] . "\n";
     }
     $sth->finish;
-    close(FILE);
+    close($fh);
 }
-print STDERR "Ties list complete with $i removed entries.\n";
+warn "Ties list complete with $i removed entries.\n";
 
 # set old settings
-$sth = $dbh->prepare('SET AUTOCOMMIT = 1;')
-    or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute()    # Execute the query
-    or die "Couldn't execute statement: " . $sth->errstr;
-$sth->finish;
+if ( $run_conf{BACKEND} eq "mysql" ) {
+    $sth = $dbh->do('SET AUTOCOMMIT = 1;')
+        or die "Couldn't do statement: " . $dbh->errstr;
 
-$sth = $dbh->prepare('SET FOREIGN_KEY_CHECKS = 1;')
-    or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute()    # Execute the query
-    or die "Couldn't execute statement: " . $sth->errstr;
-$sth->finish;
+    $sth = $dbh->do('SET FOREIGN_KEY_CHECKS = 1;')
+        or die "Couldn't do statement: " . $dbh->errstr;
 
-$sth = $dbh->prepare('SET UNIQUE_CHECKS = 1;')
-    or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute()    # Execute the query
-    or die "Couldn't execute statement: " . $sth->errstr;
-$sth->finish;
+    $sth = $dbh->do('SET UNIQUE_CHECKS = 1;')
+        or die "Couldn't do statement: " . $dbh->errstr;
+}
+elsif ($run_conf{BACKEND} eq "sqlite") {
+    $dbh->do("PRAGMA foreign_keys = ON");
+    $dbh->{AutoCommit} = 1;
+}
 
 if ( $delfromtable != $deleted ) {
     die
@@ -447,11 +424,8 @@ if ( $delfromtable != $deleted ) {
 }
 
 $dbh->disconnect();
-
-( $sec, $min, $hour, $mday, $mon, $year, $wday, $yday, $isdst )
-    = localtime(time);
-printf "\n\nend: %4d-%02d-%02d %02d:%02d:%02d\n", $year + 1900, $mon + 1,
-    $mday, $hour, $min, $sec;
+warn strftime( "\n\nend: %F %T\n\n", localtime );
+set_statistics($DBSUFFIX, %stats);
 
 1;
 
@@ -471,7 +445,7 @@ sub fork_pcrdup {
     # use a predefined number of files
     my $until = $files_processed + $files_to_process - 1;
     $until = $tarball_count - 1 if $until > ( $tarball_count - 1 );
-    print STDERR 'Processing files '
+    warn 'Processing files '
         . ( $files_processed + 1 ) . ' to '
         . ( $until + 1 ) . "\n";
 
@@ -492,7 +466,7 @@ sub fork_pcrdup {
 
         foreach (@file_slice) {
 
-            #print STDERR "\t" . $_ . "\n";
+            #warn "\t" . $_ . "\n";
 
             my $exstring
                 = "./pcr_dup.exe $indexfolder/${_} $indexfolder/${_}.pcr_dup 0 2 $KEEPPCRDUPS > /dev/null";
@@ -500,7 +474,7 @@ sub fork_pcrdup {
 
         }
 
-        #print STDERR "\n";
+        #warn "\n";
 
         # child must never return
         exit 0;

@@ -250,15 +250,19 @@ sub stats_get {
 
  my @data = $sth->fetchrow_array();
 
- if ($sth->rows == 0) {
+ unless (@data) {
             print STDERR "No field in database  stats.`$NAME'. Aborting!\n\n";
             exit(1);
   }
 
  $VALUE = $data[0];
- if (!defined $VALUE) { $VALUE=""; }
-
  $sth->finish;
+
+ if (!defined $VALUE) { $VALUE=""; }
+ if ($ENV{DEBUG}) {
+  warn "$NAME stat is $VALUE\n";
+ }
+
  $dbh->disconnect();
 
  return $VALUE;

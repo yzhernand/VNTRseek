@@ -27,7 +27,6 @@ sub enter_new_paramset {
 	my ($dbh, $backend, $flength, $ferrors) = @_;
 	my $sth = $dbh->prepare('INSERT INTO flank_params (ferrors, flength) VALUES (?, ?)');
 	$sth->execute($flength, $ferrors) or die $sth->errstr;
-	$dbh->commit;
 	if ($backend eq "mysql") {
 		$sth = $dbh->prepare('SELECT LAST_INSERT_ID()');
 	}
@@ -43,8 +42,8 @@ sub enter_new_paramset {
 
 sub set_indist {
     my ($dbh, $refid) = @_;
-    my $sth = $dbh->prepare('UPDATE fasta_ref_reps SET is_singleton=0,is_indist=1 WHERE rid=?');
-    $sth->execute($refid) or die $sth->errstr;
+    $dbh->do(qq{UPDATE fasta_ref_reps SET is_singleton=0,is_indist=1 WHERE rid=$refid})
+    	or die $dbh->errstr;
 }
 
 ######################################################

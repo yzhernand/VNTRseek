@@ -145,7 +145,7 @@ elsif ( $run_conf{BACKEND} eq "sqlite" ) {
     # Insert all ref TRs from replnk file
     $sth
         = $dbh->prepare(
-        qq{INSERT INTO replnk(rid,sid,first,last,copynum,patsize,pattern,profile,profilerc,profsize) VALUES (?,?,?,?,?,?,?,?,?,?)}
+        qq{INSERT INTO replnk(rid,sid,first,last,patsize,copynum,pattern,profile,profilerc,profsize) VALUES (?,?,?,?,?,?,?,?,?,?)}
         );
 }
 

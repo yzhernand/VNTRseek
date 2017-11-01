@@ -44,28 +44,28 @@ my $input;
 open($input, "-|", "wc -l $reffile | tail -1");
 my $rc = <$input>;
 if ($rc =~ /(\d+)/) {
-  $stats{NUMBER_REF_TRS} = $rc;
+  $stats{NUMBER_REF_TRS} = $1;
 }
 close($input);
 
 open($input, "-|", "wc -l $readpf/*.indexhist | tail -1");
 $rc = <$input>;
 if ($rc =~ /(\d+)/) {
-  $stats{NUMBER_TRS_IN_READS} = $rc;
+  $stats{NUMBER_TRS_IN_READS} = $1;
 }
 close($input);
 
 open($input, "-|", "wc -l $reffolder/reference.leb36.rotindex | tail -1");
 $rc = <$input>;
 if ($rc =~ /(\d+)/) {
-  $stats{NUMBER_REFS_TRS_AFTER_REDUND} = $rc;
+  $stats{NUMBER_REFS_TRS_AFTER_REDUND} = $1;
 }
 close($input);
 
 open($input, "-|", "wc -l $rpfc/*.rotindex | tail -1");
 $rc = <$input>;
 if ($rc =~ /(\d+)/) {
-  $stats{NUMBER_TRS_IN_READS_AFTER_REDUND} = $rc;
+  $stats{NUMBER_TRS_IN_READS_AFTER_REDUND} = $1;
 }
 close($input);
 
@@ -75,8 +75,7 @@ $stats{NUMBER_READS_WITHTRS_GE7} = 0;
 $stats{NUMBER_READS_WITHTRS} = 0;
 $stats{NUMBER_READS_WITHTRS_GE7_AFTER_REDUND} = 0;
 
-open($input, "-|", "./ge7.pl $readpf/*.index");
-$rc = <$input>;
+$rc = qx(./ge7.pl $readpf/*.index 2>/dev/null);
 if ($rc =~ /(\d+) (\d+) (\d+)/) {
    $stats{NUMBER_TRS_IN_READS_GE7} = $1;
    $stats{NUMBER_READS_WITHTRS_GE7} = $2;
