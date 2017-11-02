@@ -226,12 +226,6 @@ sub print_vcf {
                 $readTRStop, $dna,       $readdir
             )
         );
-        my $jnum = $vntr_support_sth->rows;
-        if ( 0 == $jnum ) {
-            die "Error: could not get any VNTR_SUPPORT records for rid=$rid!"
-                unless ($allwithsupport);
-            next;
-        }
 
         #print STDERR "\n";
 
@@ -330,6 +324,13 @@ sub print_vcf {
             }
 
             $j++;
+        }
+
+        my $jnum = $vntr_support_sth->rows;
+        if ( 0 == $jnum ) {
+            die "Error: could not get any VNTR_SUPPORT records for rid=$rid!"
+                unless ($allwithsupport);
+            next;
         }
 
         # extra code for single allele, v 1.07
@@ -2001,7 +2002,9 @@ $sth1->execute() or die "Cannot execute: " . $sth1->errstr();
 $sth1->finish;
 
 # create temp table for updates
-my $query = q{CREATE TEMPORARY TABLE updtable (
+my $query;
+if ( $run_conf{BACKEND} eq "mysql" ) {
+    $query = q{CREATE TEMPORARY TABLE updtable (
     `rid` INT(11) NOT NULL PRIMARY KEY,
     `alleles_sup` INT(11) NULL,
     `allele_sup_same_as_ref` INT(11) NULL,
@@ -2016,9 +2019,7 @@ my $query = q{CREATE TEMPORARY TABLE updtable (
     `hetez_multi` INT(11) NULL,
     `support_vntr` INT(11) NULL,
     `support_vntr_span1` INT(11) NULL
-    )};
-if ( $run_conf{BACKEND} eq "mysql" ) {
-    $query .= " ENGINE=INNODB";
+    ) ENGINE=INNODB};
 }
 
 $dbh->do($query)
@@ -2050,6 +2051,7 @@ elsif ( $run_conf{BACKEND} eq "sqlite" ) {
 
     # my $placeholders = join ",", ("?") x 14;
     # $query = qq{INSERT INTO updtable VALUES($placeholders)};
+    # For SQLite we'll just update fasta_ref_reps immediately.
     $query = qq{UPDATE fasta_ref_reps
         SET alleles_sup=?, allele_sup_same_as_ref=?,
         entropy=?, has_support=?, span1=?,

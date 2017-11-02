@@ -355,6 +355,7 @@ if ( $run_conf{BACKEND} eq "mysql" ) {
 }
 elsif ( $run_conf{BACKEND} eq "sqlite" ) {
     $dbh->commit;
+    # ($updfromtable) = $dbh->selectrow_array(q{SELECT COUNT(*) FROM map WHERE reserved=1});
     $query = q{INSERT INTO vntr_support VALUES(?, ?, ?, ?, ?, ?)};
 }
 $sth = $dbh->prepare($query)
@@ -372,7 +373,7 @@ foreach my $key ( keys %VNTR_REF ) {
         }
         print $TEMPFILE "\n";
     }
-    if ( $run_conf{BACKEND} eq "mysql" ) {
+    if ( $run_conf{BACKEND} eq "sqlite" ) {
         $sth->execute(
             $VNTR_REF{$key},
             $VNTR_COPIES{$key},
@@ -392,10 +393,11 @@ $query = q{CREATE TEMPORARY TABLE ctr (
     `varbl` INT(11) NOT NULL DEFAULT 0
     )};
 if ( $run_conf{BACKEND} eq "mysql" ) {
-    $query .= " ENGINE=INNODB";
     close($TEMPFILE);
-    $supInsert = $sth->execute()    # Execute the query
-        or die "Couldn't execute statement: " . $sth->errstr;
+    # Count insertions from previous prepare
+    $supInsert = $sth->execute;
+    # Finish next query statement
+    $query .= " ENGINE=INNODB";
     $dbh->do('ALTER TABLE vntr_support ENABLE KEYS;')
         or die "Couldn't do statement: " . $dbh->errstr;
 
@@ -646,9 +648,10 @@ sub VNTR_YES_NO {
                         }
                     }
                     elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-                        if ( $processed % $RECORDS_PER_INFILE_INSERT == 0 ) {
-                            $sth7->execute( -$val, $key );
+                        if($ENV{DEBUG}) {
+                            warn "mapr insert: " . -$val . ", $key\n";
                         }
+                        $sth7->execute( -$val, $key );
                     }
 
                 }
@@ -678,7 +681,9 @@ sub VNTR_YES_NO {
         }
         elsif ( $run_conf{BACKEND} eq "sqlite" ) {
             $sth6->execute( $clusterid, $val, $change );
-            warn "ctrlnk insert: $clusterid, $val, $change\n";
+            if($ENV{DEBUG}) {
+                warn "ctrlnk insert: $clusterid, $val, $change\n";
+            }
         }
     }
 

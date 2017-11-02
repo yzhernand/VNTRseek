@@ -553,23 +553,26 @@ $sth = $dbh->prepare($query)
 while ( my ( $key, $value ) = each(%RHASH) ) {
     $i++;
 
-    #print "$key => $value (". $SHASH{$key}. ")\n";
     my @pieces = split( /,/, $value );
     my $ties = scalar(@pieces) - 1;
+    if ($ENV{DEBUG}) {
+        warn "$key => $value (". $SHASH{$key}. "), ties: $ties\n";
+    }
     foreach my $ps (@pieces) {
 
         $j++;
-        print $TEMPFILE $ps, ",", $key, ",", $SHASH{$key}, ",", $ties, "\n";
 
-        if ( $j % $RECORDS_PER_INFILE_INSERT == 0 ) {
-            if ( $run_conf{BACKEND} eq "mysql" ) {
+        if ( $run_conf{BACKEND} eq "mysql" ) {
+            print $TEMPFILE $ps, ",", $key, ",", $SHASH{$key}, ",", $ties, "\n";
+            if ( $j % $RECORDS_PER_INFILE_INSERT == 0 ) {
                 close($TEMPFILE);
                 $rankins += $sth->execute();
                 open( $TEMPFILE, ">$tmp/ranktemp_$DBSUFFIX.txt" ) or die $!;
             }
-            # elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-            #     $dbh->commit;
-            # }
+        }
+        elsif ( $run_conf{BACKEND} eq "sqlite" ) {
+            $sth->execute($ps, $key, $SHASH{$key}, $ties);
+            $rankins++;
         }
     }
 }
