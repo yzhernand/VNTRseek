@@ -104,11 +104,7 @@ my $sth = $dbh->prepare(q{SELECT count(*)
         rankflank ON rank.refid=rankflank.refid AND rank.readid=rankflank.readid})
     or die "Couldn't prepare statement: " . $dbh->errstr;
 $sth->execute() or die "Cannot execute: " . $sth->errstr();
-my $num = $sth->rows;
-if ($num) {
-    my @data = $sth->fetchrow_array();
-    $rrintersect = $data[0];
-}
+($rrintersect) = $sth->fetchrow_array();
 $sth->finish();
 $stats{INTERSECT_RANK_AND_RANKFLANK_BEFORE_PCR} = $rrintersect;
 
@@ -301,11 +297,7 @@ $sth = $dbh->prepare(q{SELECT count(*) FROM rank
     INNER JOIN rankflank ON rank.refid=rankflank.refid AND rank.readid=rankflank.readid})
     or die "Couldn't prepare statement: " . $dbh->errstr;
 $sth->execute() or die "Cannot execute: " . $sth->errstr();
-$num = $sth->rows;
-if ($num) {
-    my @data = $sth->fetchrow_array();
-    $rrintersect = $data[0];
-}
+($rrintersect) = $sth->fetchrow_array();
 $sth->finish();
 $stats{INTERSECT_RANK_AND_RANKFLANK} = $rrintersect;
 
@@ -352,15 +344,16 @@ $stats{BBB_WITH_MAP_DUPS} = $i;
 # make a list of ties
 warn "Making a list of ties (references)...\n";
 if ( open( my $fh, ">$pcleanfolder/result/$DBSUFFIX.ties.txt" ) ) {
-
-    $query
-        = "SELECT map.refid, max(bbb) as mbb, (select head from fasta_ref_reps where rid=map.refid) as chr,(select firstindex from fasta_ref_reps where rid=map.refid) as tind  FROM map INNER JOIN rank ON rank.refid=map.refid AND rank.readid=map.readid INNER JOIN rankflank ON rankflank.refid=map.refid AND rankflank.readid=map.readid GROUP BY map.refid HAVING mbb=0 ORDER BY chr, tind;";
+    $query = qq{SELECT map.refid, max(bbb) as mbb,
+            (select head from fasta_ref_reps where rid=map.refid) as chr,
+            (select firstindex from fasta_ref_reps where rid=map.refid) as tind
+        FROM map INNER JOIN rank ON rank.refid=map.refid AND rank.readid=map.readid
+        INNER JOIN rankflank ON rankflank.refid=map.refid AND rankflank.readid=map.readid
+        GROUP BY map.refid HAVING mbb=0 ORDER BY chr, tind};
     $sth = $dbh->prepare($query);
     $sth->execute();
-    $num = $sth->rows;
     $i   = 0;
-    while ( $i < $num ) {
-        my @data = $sth->fetchrow_array();
+    while ( my @data = $sth->fetchrow_array() ) {
         $i++;
         print $fh "$i\t-"
             . $data[0] . "\t"
@@ -386,10 +379,8 @@ if (open( my $fh, ">$pcleanfolder/result/$DBSUFFIX.ties_entries.txt"
     WHERE bbb=0 ORDER BY map.refid,map.readid};
     $sth = $dbh->prepare($query);
     $sth->execute();
-    $num = $sth->rows;
     $i   = 0;
-    while ( $i < $num ) {
-        my @data = $sth->fetchrow_array();
+    while ( my @data = $sth->fetchrow_array() ) {
         $i++;
         print $fh "$i\t-"
             . $data[0] . "\t"

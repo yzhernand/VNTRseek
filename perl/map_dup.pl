@@ -73,6 +73,19 @@ elsif ( $run_conf{BACKEND} eq "sqlite" ) {
 }
 
 my $trsInRead_sth
+    = $dbh->prepare(q{SELECT COUNT(*)
+    FROM map
+    INNER JOIN replnk on replnk.rid=map.readid
+    INNER JOIN rank ON rank.refid=map.refid AND rank.readid=map.readid
+    INNER JOIN rankflank ON rankflank.refid=map.refid AND rankflank.readid=map.readid
+    INNER JOIN fasta_ref_reps ON fasta_ref_reps.rid=map.refid
+    WHERE replnk.sid=? AND bbb=1
+    ORDER BY rank.score ASC, rankflank.score ASC, map.refid ASC})
+    or die "Couldn't prepare statement: " . $dbh->errstr;
+$trsInRead_sth->execute();
+my $numTRsInRead = $trsInRead_sth->rows;
+
+$trsInRead_sth
     = $dbh->prepare(q{SELECT map.readid,map.refid,(
         SELECT head
         FROM fasta_reads
@@ -104,19 +117,14 @@ my $readsWithMultTRsMappedMultRefs_sth
     or die "Couldn't prepare statement: " . $dbh->errstr;
 $readsWithMultTRsMappedMultRefs_sth->execute()
     or die "Cannot execute: " . $readsWithMultTRsMappedMultRefs_sth->errstr();
-my $numReadsWithMultTRsMappedMultRefs
-    = $readsWithMultTRsMappedMultRefs_sth->rows;
 my $insert_mduptemp_sth = $dbh->prepare(q{INSERT INTO mduptemp VALUES(?, ?)});
 my $i = 0;
-while ( $i < $numReadsWithMultTRsMappedMultRefs ) {
+while ( my @data = $readsWithMultTRsMappedMultRefs_sth->fetchrow_array() ) {
 
     # TODO Use read length to calculate $maxRepeatsPerRead
-    my @data = $readsWithMultTRsMappedMultRefs_sth->fetchrow_array();
     $i++;
 
     $trsInRead_sth->execute( $data[0] );
-    my $numTRsInRead = $trsInRead_sth->rows;
-
     my $j          = 0;
     my $oldp       = -1;
     my $oldf       = -1;
@@ -126,9 +134,8 @@ while ( $i < $numReadsWithMultTRsMappedMultRefs ) {
     my $oldRfirst  = -1;
     my $oldRlast   = -1;
     my $isDeleted  = 0;
-    while ( $j < $numTRsInRead ) {
+    while ( my @data2   = $trsInRead_sth->fetchrow_array() ) {
         $j++;
-        my @data2   = $trsInRead_sth->fetchrow_array();
         my $readlen = $data2[8];
         my $RefDiff
             = ( $oldRfirst == -1 || $oldRlast == -1 )
@@ -220,6 +227,8 @@ while ( $i < $numReadsWithMultTRsMappedMultRefs ) {
 
 }
 
+my $numReadsWithMultTRsMappedMultRefs
+    = $readsWithMultTRsMappedMultRefs_sth->rows;
 # $sth3->finish();
 $trsInRead_sth->finish();
 $readsWithMultTRsMappedMultRefs_sth->finish();

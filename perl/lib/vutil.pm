@@ -184,7 +184,9 @@ sub set_statistics {
   my %stats = @_;
   my $dbh = get_dbh($DBSUFFIX, $ENV{HOME} . "/". $DBSUFFIX . ".vs.cnf");
   my ($sql_clause, @sql_qual, @sql_bind);
-  warn Dumper(\%stats) . "\n";
+  if ($ENV{DEBUG}) {
+    warn Dumper(\%stats) . "\n";
+  }
 
   while (my ($key, $val) = each %stats){
     if ($ENV{DEBUG}) {

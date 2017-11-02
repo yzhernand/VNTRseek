@@ -321,13 +321,15 @@ elsif ( $run_conf{BACKEND} eq "sqlite" ) {
 
 my $TEMPFILE;
 
-if ($run_conf{BACKEND} eq "mysql") {
+if ( $run_conf{BACKEND} eq "mysql" ) {
     open( $TEMPFILE, ">$tmp/ranktemp_$DBSUFFIX.txt" ) or die $!;
 }
-elsif ($run_conf{BACKEND} eq "sqlite") {
-    $sth1= $dbh->prepare(qq{
+elsif ( $run_conf{BACKEND} eq "sqlite" ) {
+    $sth1 = $dbh->prepare(
+        qq{
         INSERT INTO ranktemp VALUES (?, ?);
-    });
+    }
+    );
 }
 print STDERR
     "Prunning (keep best ref for each read) from rankflank table...\n";
@@ -335,23 +337,22 @@ my $query
     = "Select refid,readid,sid,score FROM rankflank INNER JOIN replnk ON rankflank.readid=replnk.rid ORDER BY readid, score;";
 $sth = $dbh->prepare($query);
 $sth->execute();
-my $num      = $sth->rows;
 my $i        = 0;
 my $count    = 0;
 my $oldseq   = -1;
 my $oldref   = -1;
 my $oldread  = -1;
 my $oldscore = -1.0;
-while ( $i < $num ) {
-    my @data = $sth->fetchrow_array();
+
+while ( my @data = $sth->fetchrow_array() ) {
     if ( $data[1] == $oldread && $data[3] != $oldscore ) {
 
         # delete old one
-        if ($run_conf{BACKEND} eq "mysql"){
+        if ( $run_conf{BACKEND} eq "mysql" ) {
             print $TEMPFILE $oldref, ",", $oldread, "\n";
         }
-        elsif ($run_conf{BACKEND} eq "sqlite") {
-            $sth1->execute($oldref, $oldread);
+        elsif ( $run_conf{BACKEND} eq "sqlite" ) {
+            $sth1->execute( $oldref, $oldread );
         }
 
         $count++;
@@ -363,6 +364,7 @@ while ( $i < $num ) {
     $i++;
 }
 
+my $num = $sth->rows;
 $sth->finish;
 
 print STDERR "Prunning complete. Pruned $count rankflank records.\n";
@@ -373,22 +375,21 @@ $query
     ; # readid added for tie resolution to keep rank and rankflank entries more in sync
 $sth = $dbh->prepare($query);
 $sth->execute();
-$num     = $sth->rows;
 $i       = 0;
 $count   = 0;
 $oldseq  = -1;
 $oldref  = -1;
 $oldread = -1;
-while ( $i < $num ) {
-    my @data = $sth->fetchrow_array();
+while ( my @data = $sth->fetchrow_array() ) {
+
     if ( $data[0] == $oldref && $data[2] == $oldseq ) {
 
         # delete old one
-        if ($run_conf{BACKEND} eq "mysql"){
+        if ( $run_conf{BACKEND} eq "mysql" ) {
             print $TEMPFILE $oldref, ",", $oldread, "\n";
         }
-        elsif ($run_conf{BACKEND} eq "sqlite") {
-            $sth1->execute($oldref, $oldread);
+        elsif ( $run_conf{BACKEND} eq "sqlite" ) {
+            $sth1->execute( $oldref, $oldread );
         }
 
         $count++;
@@ -399,16 +400,18 @@ while ( $i < $num ) {
     $i++;
 }
 
+$num = $sth->rows;
 $sth->finish;
 
 # load the file into tempfile
-if ($run_conf{BACKEND} eq "mysql"){
+if ( $run_conf{BACKEND} eq "mysql" ) {
     close($TEMPFILE);
     $dbh->do(
         "LOAD DATA LOCAL INFILE '$tmp/ranktemp_$DBSUFFIX.txt' INTO TABLE ranktemp FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';"
-        ) or die "Couldn't do statement: " . $dbh->errstr;
+    ) or die "Couldn't do statement: " . $dbh->errstr;
     $dbh->do('ALTER TABLE ranktemp ENABLE KEYS;')
         or die "Couldn't do statement: " . $dbh->errstr;
+
     # cleanup temp file
     unlink("$tmp/ranktemp_$DBSUFFIX.txt");
 }
@@ -417,14 +420,14 @@ print STDERR "Prunning complete. Pruned $count rankflank records.\n";
 
 # delete from rankflank based on temptable entries
 my $delfromtable = 0;
-if ($run_conf{BACKEND} eq "mysql"){
+if ( $run_conf{BACKEND} eq "mysql" ) {
     $query = qq{
     DELETE FROM t1 USING rankflank t1
     INNER JOIN ranktemp t2
         ON ( t1.refid = t2.refid AND t1.readid = t2.readid )
     };
 }
-elsif ($run_conf{BACKEND} eq "sqlite") {
+elsif ( $run_conf{BACKEND} eq "sqlite" ) {
     $query = qq{
         DELETE FROM rankflank
         WHERE EXISTS (
@@ -436,10 +439,11 @@ elsif ($run_conf{BACKEND} eq "sqlite") {
 }
 $sth          = $dbh->prepare($query);
 $delfromtable = $sth->execute();
+
 # $sth->finish;
 
 # set old settings
-if ($run_conf{BACKEND} eq "mysql") {
+if ( $run_conf{BACKEND} eq "mysql" ) {
     $sth = $dbh->do('SET AUTOCOMMIT = 1;')
         or die "Couldn't do statement: " . $dbh->errstr;
     $sth = $dbh->do('SET FOREIGN_KEY_CHECKS = 1;')
@@ -459,11 +463,13 @@ if ( $delfromtable != $count ) {
 }
 
 $dbh->disconnect();
-set_statistics( $DBSUFFIX, (
-    "RANKFLANK_EDGES_INSERTED" => $j,
-    "RANKFLANK_REMOVED_SAMEREF" => $count,
-    "RANKFLANK_REMOVED_SAMESEQ" => $count,
-) );
+set_statistics(
+    $DBSUFFIX,
+    (   "RANKFLANK_EDGES_INSERTED"  => $j,
+        "RANKFLANK_REMOVED_SAMEREF" => $count,
+        "RANKFLANK_REMOVED_SAMESEQ" => $count,
+    )
+);
 
 print STDERR "\n\n";
 

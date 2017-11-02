@@ -1184,7 +1184,7 @@ sub print_distr {
         "SELECT count(distinct refid) FROM vntr_support INNER JOIN fasta_ref_reps ON fasta_ref_reps.rid = -vntr_support.refid WHERE copies!=0 AND has_support=0 AND support_vntr=0 AND support=1;"
         );
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
-    if (my @data = $sth->fetchrow_array()) {
+    if ( my @data = $sth->fetchrow_array() ) {
         print DISTRFILE $data[0];
     }
     $sth->finish;
@@ -1194,7 +1194,7 @@ sub print_distr {
         "SELECT count(distinct refid) FROM vntr_support INNER JOIN fasta_ref_reps ON fasta_ref_reps.rid = -vntr_support.refid WHERE copies!=0 AND has_support=1 AND support_vntr=0 AND support=1;"
         );
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
-    if (my @data = $sth->fetchrow_array()) {
+    if ( my @data = $sth->fetchrow_array() ) {
         print DISTRFILE $data[0];
     }
     $sth->finish;
@@ -1204,7 +1204,7 @@ sub print_distr {
         "SELECT count(distinct refid) FROM vntr_support INNER JOIN fasta_ref_reps ON fasta_ref_reps.rid = -vntr_support.refid WHERE homez_diff=1 and support=1;"
         );
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
-    if (my @data = $sth->fetchrow_array()) {
+    if ( my @data = $sth->fetchrow_array() ) {
         print DISTRFILE $data[0];
     }
     $sth->finish;
@@ -1214,7 +1214,7 @@ sub print_distr {
         "SELECT count(distinct refid) FROM vntr_support INNER JOIN fasta_ref_reps ON fasta_ref_reps.rid = -vntr_support.refid WHERE (hetez_same=1 OR hetez_diff=1 OR hetez_multi=1) AND support=1;"
         );
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
-    if (my @data = $sth->fetchrow_array()) {
+    if ( my @data = $sth->fetchrow_array() ) {
         print DISTRFILE $data[0];
     }
     $sth->finish;
@@ -1273,7 +1273,7 @@ sub print_latex {
         "SELECT sum(has_support),sum(span1),sum(spanN),sum(homez_same),sum(homez_diff),sum(hetez_same),sum(hetez_diff),sum(hetez_multi),sum(support_vntr) FROM fasta_ref_reps;"
         ) or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
-    if (my @data = $sth->fetchrow_array()) {
+    if ( my @data = $sth->fetchrow_array() ) {
 
         $sum_has_support  = $data[0];
         $sum_span1        = $data[1];
@@ -1384,7 +1384,7 @@ sub print_latex {
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
 
     my $refTRsMappedSingleton;
-    if (my @data = $sth->fetchrow_array()) {
+    if ( my @data = $sth->fetchrow_array() ) {
         $refTRsMappedSingleton = $data[0];
     }
     $sth->finish();
@@ -1400,7 +1400,7 @@ sub print_latex {
         "SELECT count(distinct rid) FROM fasta_ref_reps INNER JOIN map ON fasta_ref_reps.rid=map.refid WHERE bbb=1 AND is_dist=1 and is_singleton=0;"
         ) or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
-    if (my @data = $sth->fetchrow_array()) {
+    if ( my @data = $sth->fetchrow_array() ) {
         $refTRsMappedDistinguishable = $data[0];
     }
     $sth->finish();
@@ -1412,7 +1412,7 @@ sub print_latex {
 
         or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
-    if (my @data = $sth->fetchrow_array()) {
+    if ( my @data = $sth->fetchrow_array() ) {
         $refTRsMappedIndistinguishable = $data[0];
     }
     $sth->finish();
@@ -1429,7 +1429,7 @@ sub print_latex {
         "SELECT count(distinct map.readid) FROM fasta_ref_reps INNER JOIN map ON fasta_ref_reps.rid=map.refid WHERE bbb=1 AND is_singleton=1;"
         ) or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
-    if (my @data = $sth->fetchrow_array()) {
+    if ( my @data = $sth->fetchrow_array() ) {
         $readTRsMappedToSingleton = $data[0];
     }
     $sth->finish();
@@ -1439,7 +1439,7 @@ sub print_latex {
         "SELECT count(distinct map.readid) FROM fasta_ref_reps INNER JOIN map ON fasta_ref_reps.rid=map.refid WHERE bbb=1 AND is_dist=1 AND is_singleton=0;"
         ) or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
-    if (my @data = $sth->fetchrow_array()) {
+    if ( my @data = $sth->fetchrow_array() ) {
         $readTRsMappedToDistinguishable = $data[0];
     }
     $sth->finish();
@@ -1451,7 +1451,7 @@ sub print_latex {
 
         or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
-    if (my @data = $sth->fetchrow_array()) {
+    if ( my @data = $sth->fetchrow_array() ) {
         $readTRsMappedToIndistinguishable = $data[0];
     }
     $sth->finish();
@@ -1464,7 +1464,7 @@ sub print_latex {
     $sth = $dbh->prepare("SELECT count(*) FROM map;")
         or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
-    if (my @data = $sth->fetchrow_array()) {
+    if ( my @data = $sth->fetchrow_array() ) {
         $mapped = $data[0];
     }
     $sth->finish();
@@ -1472,7 +1472,7 @@ sub print_latex {
     $sth = $dbh->prepare("SELECT count(*) FROM rank;")
         or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
-    if (my @data = $sth->fetchrow_array()) {
+    if ( my @data = $sth->fetchrow_array() ) {
         $rank = $data[0];
     }
     $sth->finish();
@@ -1481,7 +1481,7 @@ sub print_latex {
         or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
     my $rankflank;
-    if (my @data = $sth->fetchrow_array()) {
+    if ( my @data = $sth->fetchrow_array() ) {
         $rankflank = $data[0];
     }
     $sth->finish();
@@ -1505,7 +1505,7 @@ sub print_latex {
         "SELECT count(distinct rid) FROM fasta_ref_reps INNER JOIN map ON fasta_ref_reps.rid=map.refid WHERE bbb=1 AND is_singleton=1 AND support_vntr=1;"
         ) or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
-    if (my @data = $sth->fetchrow_array()) {
+    if ( my @data = $sth->fetchrow_array() ) {
         $VNTRasSingleton = $data[0];
     }
     $sth->finish();
@@ -1515,7 +1515,7 @@ sub print_latex {
         "SELECT count(distinct rid) FROM fasta_ref_reps INNER JOIN map ON fasta_ref_reps.rid=map.refid WHERE bbb=1 AND is_dist=1 AND is_singleton=0 AND support_vntr=1;"
         ) or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
-    if (my @data = $sth->fetchrow_array()) {
+    if ( my @data = $sth->fetchrow_array() ) {
         $VNTRasDistinguishable = $data[0];
     }
     $sth->finish();
@@ -1527,7 +1527,7 @@ sub print_latex {
 
         or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
-    if (my @data = $sth->fetchrow_array()) {
+    if ( my @data = $sth->fetchrow_array() ) {
         $VNTRasIndistinguishable = $data[0];
     }
     $sth->finish();
@@ -2047,8 +2047,17 @@ elsif ( $run_conf{BACKEND} eq "sqlite" ) {
 
     # warn "\nTurning off AutoCommit\n";
     $dbh->{AutoCommit} = 0;
-    my $placeholders = join ",", ("?") x 14;
-    $query = qq{INSERT INTO updtable VALUES($placeholders)};
+
+    # my $placeholders = join ",", ("?") x 14;
+    # $query = qq{INSERT INTO updtable VALUES($placeholders)};
+    $query = qq{UPDATE fasta_ref_reps
+        SET alleles_sup=?, allele_sup_same_as_ref=?,
+        entropy=?, has_support=?, span1=?,
+        spanN=?, homez_same=?, homez_diff=?,
+        hetez_same=?, hetez_diff=?, hetez_multi=?,
+        support_vntr=?, support_vntr_span1=?
+        WHERE rid=?
+    };
 }
 
 ##############################
@@ -2182,21 +2191,22 @@ while ( my @data = $sth->fetchrow_array() ) {
     }
     elsif ( $run_conf{BACKEND} eq "sqlite" ) {
         $sth1->execute(
-            $data[0],      $nsupport,    $nsameasref,
-            $entr,         $has_support, $span1,
-            $spanN,        $homez_same,  $homez_diff,
-            $hetez_same,   $hetez_diff,  $hetez_multi,
-            $support_vntr, $support_vntr_span1
-        );
+            $nsupport,           $nsameasref,  $entr,
+            $has_support,        $span1,       $spanN,
+            $homez_same,         $homez_diff,  $hetez_same,
+            $hetez_diff,         $hetez_multi, $support_vntr,
+            $support_vntr_span1, $data[0]
+        ) or die "Cannot execute: " . $sth->errstr;
     }
 }
 
 my $refsInRefsTable = $sth->rows;
 $sth->finish;
 $sth6->finish;
-
+my $updfromtable;
 
 if ( $run_conf{BACKEND} eq "mysql" ) {
+
     # load the file into temp table
     close($TEMPFILE);
     $sth1->execute();
@@ -2210,31 +2220,48 @@ if ( $run_conf{BACKEND} eq "mysql" ) {
         pp.hetez_multi=p.hetez_multi, pp.support_vntr=p.support_vntr,
         pp.support_vntr_span1=p.support_vntr_span1
     WHERE pp.rid = p.rid};
+
+    # update based on temp table
+    $updfromtable = $dbh->do($query);
 }
 elsif ( $run_conf{BACKEND} eq "sqlite" ) {
     $dbh->commit;
-    $query = q{REPLACE INTO fasta_ref_reps
-    (firstindex, lastindex, copynum,
-        pattern, sequence, alleles_sup,
-        allele_sup_same_as_ref,
-        entropy, has_support, span1,
-        spanN, homez_same, homez_diff,
-        hetez_same, hetez_diff,
-        hetez_multi, support_vntr,
-        support_vntr_span1)
-    SELECT t1.firstindex, t1.lastindex, t1.copynum,
-        t1.pattern, t1. sequence, t1.alleles_sup,
-        t1.allele_sup_same_as_ref,
-        t1.entropy, t1.has_support, t1.span1,
-        t1.spanN, t1.homez_same, t1.homez_diff,
-        t1.hetez_same, t1.hetez_diff,
-        t1.hetez_multi, t1.support_vntr,
-        t1.support_vntr_span1
-    FROM fasta_ref_reps t1 JOIN updtable t2 ON t1.rid = t2.rid}
+
+# $query = q{CREATE TEMPORARY VIEW `fasta_ref_reps_tmp`
+#     AS SELECT t1.rid AS rid, t2.entropy AS entropy,
+#     t2.has_support AS has_support, t2.span1 AS span1, t2.spanN AS spanN,
+#     t2.homez_same AS homez_same, t2.homez_diff AS homez_diff,
+#     t2.hetez_same AS hetez_same, t2.hetez_diff AS hetez_diff,
+#     t2.hetez_multi AS hetez_multi, t2.support_vntr AS support_vntr,
+#     t2.support_vntr_span1 AS support_vntr_span1, t2.alleles_sup AS alleles_sup,
+#     t2.allele_sup_same_as_ref AS allele_sup_same_as_ref
+#     FROM fasta_ref_reps t1 INNER JOIN updtable t2 ON t1.rid = t2.rid};
+# $dbh->do($query)
+#     or die "Error in do statement: " . $dbh->errstr;
+# ($updfromtable) = $dbh->selectrow_array(q{SELECT COUNT(*) FROM fasta_ref_reps_tmp});
+
+    # $query = q{INSERT OR REPLACE INTO fasta_ref_reps
+    #     (entropy,
+    #     has_support, span1, spanN,
+    #     homez_same, homez_diff,
+    #     hetez_same, hetez_diff,
+    #     hetez_multi, support_vntr,
+    #     support_vntr_span1, alleles_sup,
+    #     allele_sup_same_as_ref)
+    #     SELECT entropy,
+    #     has_support, span1, spanN,
+    #     homez_same, homez_diff,
+    #     hetez_same, hetez_diff,
+    #     hetez_multi, support_vntr,
+    #     support_vntr_span1, alleles_sup,
+    #     allele_sup_same_as_ref
+    #     FROM fasta_ref_reps_tmp t2
+    #     WHERE fasta_ref_reps.rid = t2.rid};
+    # $dbh->do($query)
+    #     or die "Error in do statement: " . $dbh->errstr;
+    $updfromtable = $refsInRefsTable;
 }
 
-# update based on temp table
-my $updfromtable = $dbh->do($query);
 $dbh->commit;
 
 if ( $updfromtable != $refsInRefsTable ) {
@@ -2366,7 +2393,7 @@ if ( $run_conf{BACKEND} eq "mysql" ) {
     $sth = $dbh->do('SET UNIQUE_CHECKS = 1;')
         or die "Couldn't do statement: " . $dbh->errstr;
 }
-elsif ($run_conf{BACKEND} eq "sqlite") {
+elsif ( $run_conf{BACKEND} eq "sqlite" ) {
     $dbh->do("PRAGMA foreign_keys = ON");
     $dbh->{AutoCommit} = 1;
 }

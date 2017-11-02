@@ -124,14 +124,12 @@ $query              = qq{
 };
 $sth = $dbh->prepare($query);
 $sth->execute();
-$num          = $sth->rows;
 $i            = 0;
 $clusteridold = -1;
 open( my $outfile, ">$folder/dummy.txt" )
     or die "\nCannot open file '$folder/dummy.txt'!\n";    # open for output
 
-while ( $i < $num ) {
-    my @data = $sth->fetchrow_array();
+while ( my @data = $sth->fetchrow_array() ) {
     $clusterid = $data[1];
     $repid     = $data[0];
 
@@ -168,6 +166,7 @@ while ( $i < $num ) {
 }
 close $outfile;
 
+$num          = $sth->rows;
 $sth->finish;
 
 print STDERR
@@ -183,14 +182,12 @@ $query              = qq{
     };
 $sth = $dbh->prepare($query);
 $sth->execute();
-$num          = $sth->rows;
 $i            = 0;
 $clusteridold = -1;
 my $refid;
 my $readid;
 
-while ( $i < $num ) {
-    my @data = $sth->fetchrow_array();
+while ( my @data = $sth->fetchrow_array() ) {
     $clusterid = $data[0];
     $refid     = $data[1];
     $readid    = $data[2];
@@ -208,6 +205,7 @@ while ( $i < $num ) {
     $clusteridold = $clusterid;
     $i++;
 }
+$num          = $sth->rows;
 $sth->finish;
 
 close(EFILE);
@@ -242,12 +240,21 @@ if ( $run_conf{BACKEND} eq "mysql" ) {
 # print read leb files
 $clusters_processed = 0;
 
+$query = "select COUNT(*) FROM clusters ORDER BY cid;";
+my ($nclusters) = $dbh->selectrow_array($query);
 $query = "select cid FROM clusters ORDER BY cid;";
 $sth2  = $dbh->prepare($query);
 $sth2->execute();
-my $nclusters = $sth2->rows;
 $clusteridold = -1;
 
+$query = qq{
+    SELECT COUNT(*)
+    FROM clusterlnk
+        LEFT OUTER JOIN replnk ON clusterlnk.repeatid=replnk.rid
+    WHERE clusterid=?
+        AND clusterlnk.repeatid IN (SELECT rid FROM tempmap)
+    };
+my $count_trs_in_cluster_sth = $dbh->prepare($query);
 $query = qq{
     SELECT repeatid,clusterid,profile,profilerc,patsize,copynum
     FROM clusterlnk
@@ -265,7 +272,7 @@ while ( $clusters_processed < $nclusters ) {
 
 #$query = "SELECT repeatid,clusterid,profile,profilerc,patsize,copynum FROM clusterlnk LEFT OUTER JOIN replnk ON clusterlnk.repeatid=replnk.rid INNER JOIN tempmap on clusterlnk.repeatid=tempmap.rid ORDER BY clusterid;";
     $sth->execute($clusterid);
-    $num = $sth->rows;
+    ($num) = $count_trs_in_cluster_sth->fetchrow_array;
 
     if ( $num > 0 ) {
 
@@ -277,8 +284,7 @@ while ( $clusters_processed < $nclusters ) {
     }
 
     $i = 0;
-    while ( $i < $num ) {
-        my @data = $sth->fetchrow_array();
+    while ( my @data = $sth->fetchrow_array() ) {
         $repid = $data[0];
         print "$clusterid / $repid\n";
 
@@ -613,7 +619,6 @@ $query = q{Select refid,readid,sid,score
     ORDER BY readid, score};
 $sth = $dbh->prepare($query);
 $sth->execute();
-$num = $sth->rows;
 $i   = 0;
 my $count    = 0;
 my $oldseq   = -1;
@@ -627,8 +632,7 @@ if ( $run_conf{BACKEND} eq "sqlite" ) {
     $sth2 = $dbh->prepare($query);
 }
 
-while ( $i < $num ) {
-    my @data = $sth->fetchrow_array();
+while ( my @data = $sth->fetchrow_array() ) {
     if ( $data[1] == $oldread && $data[3] != $oldscore ) {
 
         # delete old one
@@ -660,14 +664,12 @@ $query = q{Select refid,readid,sid,score
     ORDER BY refid, sid, score, readid}; 
 $sth = $dbh->prepare($query);
 $sth->execute();
-$num     = $sth->rows;
 $i       = 0;
 $count   = 0;
 $oldseq  = -1;
 $oldref  = -1;
 $oldread = -1;
-while ( $i < $num ) {
-    my @data = $sth->fetchrow_array();
+while ( my @data = $sth->fetchrow_array() ) {
     if ( $data[0] == $oldref && $data[2] == $oldseq ) {
 
         # delete old one

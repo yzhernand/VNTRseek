@@ -11,7 +11,8 @@ use POSIX qw(strftime);
 use FindBin;
 use lib "$FindBin::RealBin/lib";
 use vutil qw(get_config get_dbh set_statistics get_trunc_query);
-if ($ENV{DEBUG}) {
+
+if ( $ENV{DEBUG} ) {
     use Data::Dumper;
 }
 
@@ -319,11 +320,15 @@ if ( $run_conf{BACKEND} eq "mysql" ) {
             AND pp.readid = p.readid};
 }
 elsif ( $run_conf{BACKEND} eq "sqlite" ) {
+    $dbh->commit;
     $query = q{UPDATE clusterlnk SET reserved=(
         SELECT change FROM ctrlnk t2
         WHERE clusterlnk.clusterid = t2.clusterid
             AND clusterlnk.repeatid=t2.repeatid
-        )};
+        )
+        WHERE EXISTS (SELECT * FROM ctrlnk t2
+        WHERE clusterlnk.clusterid = t2.clusterid
+            AND clusterlnk.repeatid=t2.repeatid)};
     $query2 = q{UPDATE map SET reserved=1
         WHERE EXISTS (
         SELECT * FROM mapr t2
@@ -349,6 +354,7 @@ if ( $run_conf{BACKEND} eq "mysql" ) {
     INTO TABLE vntr_support FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n'};
 }
 elsif ( $run_conf{BACKEND} eq "sqlite" ) {
+    $dbh->commit;
     $query = q{INSERT INTO vntr_support VALUES(?, ?, ?, ?, ?, ?)};
 }
 $sth = $dbh->prepare($query)
@@ -376,8 +382,7 @@ foreach my $key ( keys %VNTR_REF ) {
             ( exists $VNTR_REPRESENTATIVE{$key} )
             ? $VNTR_REPRESENTATIVE{$key}
             : undef
-        )
-            or die "Couldn't execute statement: " . $sth->errstr;
+        ) or die "Couldn't execute statement: " . $sth->errstr;
         $supInsert++;
     }
 }
@@ -390,9 +395,10 @@ if ( $run_conf{BACKEND} eq "mysql" ) {
     $query .= " ENGINE=INNODB";
     close($TEMPFILE);
     $supInsert = $sth->execute()    # Execute the query
-    or die "Couldn't execute statement: " . $sth->errstr;
+        or die "Couldn't execute statement: " . $sth->errstr;
     $dbh->do('ALTER TABLE vntr_support ENABLE KEYS;')
         or die "Couldn't do statement: " . $dbh->errstr;
+
     # cleanup temp file
     unlink("$TEMPDIR/support_$DBSUFFIX.txt");
 }
@@ -401,7 +407,6 @@ elsif ( $run_conf{BACKEND} eq "sqlite" ) {
 }
 
 $dbh->do($query) or die "Couldn't do statement: " . $dbh->errstr;
-
 
 $query = q{INSERT INTO ctr SELECT clusterid, count(*) as vrefs
     FROM clusterlnk
@@ -414,10 +419,11 @@ my $InsClusToFile = $dbh->do($query)
 if ( $run_conf{BACKEND} eq "mysql" ) {
     $sth = $dbh->prepare('ALTER TABLE ctr ENABLE KEYS;')
         or die "Couldn't prepare statement: " . $dbh->errstr;
-    $sth->execute()                        # Execute the query
+    $sth->execute()    # Execute the query
         or die "Couldn't execute statement: " . $sth->errstr;
     $sth->finish;
-    $query = q{UPDATE ctr p, clusters pp SET variability=varbl WHERE pp.cid = p.clusterid};
+    $query
+        = q{UPDATE ctr p, clusters pp SET variability=varbl WHERE pp.cid = p.clusterid};
 }
 elsif ( $run_conf{BACKEND} eq "sqlite" ) {
     $query = q{UPDATE OR IGNORE clusters
@@ -439,7 +445,7 @@ if ( $run_conf{BACKEND} eq "mysql" ) {
     $sth = $dbh->do('SET UNIQUE_CHECKS = 1;')
         or die "Couldn't do statement: " . $dbh->errstr;
 }
-elsif ($run_conf{BACKEND} eq "sqlite") {
+elsif ( $run_conf{BACKEND} eq "sqlite" ) {
     $dbh->do("PRAGMA foreign_keys = ON");
     $dbh->{AutoCommit} = 1;
 }
@@ -467,10 +473,12 @@ print STDERR "\n\n";
 print STDERR
     "Processing complete -- processed $clusters_processed cluster(s), support entries created = $supInsert.\n";
 
-set_statistics( $DBSUFFIX, (
-    CLUST_NUMBER_OF_REFS_WITH_PREDICTED_VNTR => $updCLNKfromfile,
-    CLUST_NUMBER_OF_CLUSTERS_WITH_PREDICTED_VNTR => $updatedClustersCount
-    ) );
+set_statistics(
+    $DBSUFFIX,
+    (   CLUST_NUMBER_OF_REFS_WITH_PREDICTED_VNTR     => $updCLNKfromfile,
+        CLUST_NUMBER_OF_CLUSTERS_WITH_PREDICTED_VNTR => $updatedClustersCount
+    )
+);
 
 warn strftime( "\n\nend: %F %T\n\n", localtime );
 
@@ -549,7 +557,7 @@ sub VNTR_YES_NO {
     #print "\nVNTR_YES_NO:";
 
     # for each read in map file
-    warn Dumper(\%readhash);
+    # warn Dumper( \%readhash );
     while ( my ( $key, @temp ) = each(%readhash) ) {
 
         my $valread;
