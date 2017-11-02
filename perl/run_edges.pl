@@ -239,9 +239,6 @@ if ( $run_conf{BACKEND} eq "mysql" ) {
 
 # print read leb files
 $clusters_processed = 0;
-
-$query = "select COUNT(*) FROM clusters ORDER BY cid;";
-my ($nclusters) = $dbh->selectrow_array($query);
 $query = "select cid FROM clusters ORDER BY cid;";
 $sth2  = $dbh->prepare($query);
 $sth2->execute();
@@ -263,50 +260,48 @@ $query = qq{
         AND clusterlnk.repeatid IN (SELECT rid FROM tempmap)
     };
 $sth = $dbh->prepare($query);
-while ( $clusters_processed < $nclusters ) {
-    my @data2 = $sth2->fetchrow_array();
-
+while ( my @data2 = $sth2->fetchrow_array() ) {
     $clusterid = $data2[0];
 
     print "$clusters_processed\n";
 
 #$query = "SELECT repeatid,clusterid,profile,profilerc,patsize,copynum FROM clusterlnk LEFT OUTER JOIN replnk ON clusterlnk.repeatid=replnk.rid INNER JOIN tempmap on clusterlnk.repeatid=tempmap.rid ORDER BY clusterid;";
-    $sth->execute($clusterid);
-    ($num) = $count_trs_in_cluster_sth->fetchrow_array;
+    $count_trs_in_cluster_sth->execute($clusterid);
+    ($num) = $count_trs_in_cluster_sth->fetchrow_array();
 
     if ( $num > 0 ) {
-
+        $sth->execute($clusterid);
         # TODO Change this to not produce one file per cluster
         $rightname = "reads.${clusterid}.leb36";
         close(MYFILE);
         open( MYFILE, ">$folder/$rightname" )
             or die "\nCannot open file '$folder/$rightname'!\n";
-    }
 
-    $i = 0;
-    while ( my @data = $sth->fetchrow_array() ) {
-        $repid = $data[0];
-        print "$clusterid / $repid\n";
+        $i = 0;
+        while ( my @data = $sth->fetchrow_array() ) {
+            $repid = $data[0];
+            print "$clusterid / $repid\n";
 
-        {
-            my $copies = sprintf( "%.2lf", $data[5] );
-            my $pline
-                = $repid . " "
-                . $data[4] . " "
-                . $copies . " "
-                . ( length( $data[2] ) / 2 ) . " "
-                . ( length( $data[3] ) / 2 ) . " "
-                . $data[2] . " "
-                . $data[3]
-                . " 0 0 0 0 |\n";
-            print MYFILE $pline;
+            {
+                my $copies = sprintf( "%.2lf", $data[5] );
+                my $pline
+                    = $repid . " "
+                    . $data[4] . " "
+                    . $copies . " "
+                    . ( length( $data[2] ) / 2 ) . " "
+                    . ( length( $data[3] ) / 2 ) . " "
+                    . $data[2] . " "
+                    . $data[3]
+                    . " 0 0 0 0 |\n";
+                print MYFILE $pline;
+            }
+
+            $i++;
         }
-
-        $i++;
+        $sth->finish;
     }
 
-    $sth->finish;
-
+    $count_trs_in_cluster_sth->finish;
     $clusteridold = $clusterid;
     $clusters_processed++;
 }
