@@ -12,7 +12,7 @@ use File::Basename;
 
 use lib "$FindBin::RealBin/lib";
 
-use vutil qw(get_config get_dbh stats_get set_statistics);
+use vutil qw(get_config get_dbh stats_get set_statistics get_statistics);
 
 #use GD::Graph::linespoints;
 
@@ -94,12 +94,23 @@ sub commify {
 }
 
 ####################################
-# Takes a dbh and a boolean as arguments. If the boolean is anything perl considers false,
+# Takes a boolean as an argument. If the boolean is anything perl considers false,
 # then this function will only produce a VCF file for supported VNTRs. If true, all
 # supported TRs are included in the file.
 sub print_vcf {
-    my $dbh            = shift;
     my $allwithsupport = shift;
+
+    # Get needed stats
+    my @stats = qw(PARAM_TRF
+        FILE_REFERENCE_SEQ
+        FILE_REFERENCE_LEB
+        NUMBER_REF_TRS
+        FOLDER_FASTA
+        FOLDER_PROFILES
+        NUMBER_READS
+        NUMBER_TRS_IN_READS);
+    my $stat_hash = get_statistics( $DBSUFFIX, @stats );
+    my $dbh = get_dbh( $DBSUFFIX, $MSDIR . "vs.cnf" );
 
     # Get total number of TRs supported
     my $numsup_sth
@@ -151,14 +162,14 @@ sub print_vcf {
     print $vcffile "##fileformat=VCFv4.1\n"
         . strftime( "##fileDate=\"%Y%m%d\"\n", localtime )
         . qq[##source="Vntrseek ver. $VERSION"
-##TRFParameters="] . GetStatistics("PARAM_TRF") . qq["
-##referenceseq="] . GetStatistics("FILE_REFERENCE_SEQ") . qq["
-##referenceprofile="] . GetStatistics("FILE_REFERENCE_LEB") . qq["
-##numrefTRs="] . GetStatistics("NUMBER_REF_TRS") . qq["
-##readseqfolder="] . GetStatistics("FOLDER_FASTA") . qq["
-##readprofilefolder="] . GetStatistics("FOLDER_PROFILES") . qq["
-##numreads="] . GetStatistics("NUMBER_READS") . qq["
-##numreadTRs="] . GetStatistics("NUMBER_TRS_IN_READS") . qq["
+##TRFParameters="$stat_hash->{PARAM_TRF}"
+##referenceseq="$stat_hash->{FILE_REFERENCE_SEQ}"
+##referenceprofile="$stat_hash->{FILE_REFERENCE_LEB}"
+##numrefTRs="$stat_hash->{NUMBER_REF_TRS}"
+##readseqfolder="$stat_hash->{FOLDER_FASTA}"
+##readprofilefolder="$stat_hash->{FOLDER_PROFILES}"
+##numreads="$stat_hash->{NUMBER_READS}"
+##numreadTRs="$stat_hash->{NUMBER_TRS_IN_READS}"
 ##numVNTRs="$numvntrs"
 ##numTRsWithSupport="$numsup"
 ##database="VNTRPIPE_$DBSUFFIX"
@@ -365,16 +376,15 @@ sub print_vcf {
         }
     }
 
-    # $get_trs_sth->finish;
+    $get_trs_sth->finish;
 
-    # $vntr_support_sth->finish;
+    $vntr_support_sth->finish;
     close $vcffile;
+    $dbh->disconnect;
 }
 
 ####################################
 sub print_distr {
-    my $dbh = shift;
-
     my $LARGEST_PSIZE = 122;
     my $LARGEST_ASIZE = 311;
 
@@ -396,6 +406,8 @@ sub print_distr {
 
     print DISTRFILE
         "\n\nPatternSize, All, Span1, PercentageS1, Span${MIN_SUPPORT_REQUIRED}, PercentageS${MIN_SUPPORT_REQUIRED}, VntrSpan${MIN_SUPPORT_REQUIRED}, PercentageVS${MIN_SUPPORT_REQUIRED}\n";
+
+    my $dbh = get_dbh( $DBSUFFIX, $MSDIR . "vs.cnf" );
 
     # 1 patsize (all)
     my $sth
@@ -1219,6 +1231,7 @@ sub print_distr {
         print DISTRFILE $data[0];
     }
     $sth->finish;
+    $dbh->disconnect;
 
     # images
 
@@ -1257,7 +1270,7 @@ sub print_distr {
 
 ###################
 sub print_latex {
-    my ( $dbh, $ReadTRsSupport ) = @_;
+    my $ReadTRsSupport = shift;
 
     my $sum_has_support  = 0;
     my $sum_span1        = 0;
@@ -1269,6 +1282,21 @@ sub print_latex {
     my $sum_hetez_multi  = 0;
     my $sum_support_vntr = 0;
 
+    # Get needed stats
+    my @stats = qw(NUMBER_READS
+        NUMBER_TRS_IN_READS
+        NUMBER_TRS_IN_READS_GE7
+        NUMBER_READS_WITHTRS_GE7
+        NUMBER_READS_WITHTRS
+        NUMBER_READS_WITHTRS_GE7_AFTER_REDUND
+        CLUST_NUMBER_OF_READ_REPS_IN_CLUSTERS
+        NUMBER_REF_TRS
+        NUMBER_REFS_TRS_AFTER_REDUND
+        CLUST_NUMBER_OF_REF_REPS_IN_CLUSTERS
+        CLUST_NUMBER_OF_REFS_WITH_PREDICTED_VNTR);
+    my $stat_hash = get_statistics( $DBSUFFIX, @stats );
+
+    my $dbh = get_dbh( $DBSUFFIX, $MSDIR . "vs.cnf" );
     my $sth
         = $dbh->prepare(
         "SELECT sum(has_support),sum(span1),sum(spanN),sum(homez_same),sum(homez_diff),sum(hetez_same),sum(hetez_diff),sum(hetez_multi),sum(support_vntr) FROM fasta_ref_reps;"
@@ -1315,24 +1343,23 @@ sub print_latex {
     # ***************************************************
     # Yevgeniy, assign real numbers to these variables.
 
-    my $totalReads = GetStatistics("NUMBER_READS");    # INITIAL READS
+    my $totalReads = $stat_hash->{NUMBER_READS};    # INITIAL READS
 
 #$totalReadsWithTRs = $data[0];       # INITIAL READS which contain TRs
 #$totalReadsWithTRsPatternGE7  = $data[0];        # INITIAL READS which contain TRs GE7
 #$readTRsWithPatternGE7  = $data[0];       # INITIAL READ-TRs GE7
 #$readTRsWPGE7AfterCyclicRedundancyElimination = $data[0];       # INITIAL READ-TRs GE7 CRDE
 
-    my $totalReadTRs = GetStatistics("NUMBER_TRS_IN_READS");
+    my $totalReadTRs = $stat_hash->{NUMBER_TRS_IN_READS};
 
-    my $readTRsWithPatternGE7 = GetStatistics("NUMBER_TRS_IN_READS_GE7");
-    my $totalReadsWithTRsPatternGE7
-        = GetStatistics("NUMBER_READS_WITHTRS_GE7");
-    my $totalReadsWithTRs = GetStatistics("NUMBER_READS_WITHTRS");
+    my $readTRsWithPatternGE7       = $stat_hash->{NUMBER_TRS_IN_READS_GE7};
+    my $totalReadsWithTRsPatternGE7 = $stat_hash->{NUMBER_READS_WITHTRS_GE7};
+    my $totalReadsWithTRs           = $stat_hash->{NUMBER_READS_WITHTRS};
     my $readTRsWPGE7AfterCyclicRedundancyElimination
-        = GetStatistics("NUMBER_READS_WITHTRS_GE7_AFTER_REDUND");
+        = $stat_hash->{NUMBER_READS_WITHTRS_GE7_AFTER_REDUND};
 
     my $readTRsProfileClustered
-        = GetStatistics("CLUST_NUMBER_OF_READ_REPS_IN_CLUSTERS")
+        = $stat_hash->{CLUST_NUMBER_OF_READ_REPS_IN_CLUSTERS}
         ;    # INITIAL READ-TRs GE7 PC ADDBACK
 
     $sth
@@ -1353,12 +1380,12 @@ sub print_latex {
         = $REFS_REDUND;               # another hard coded variable
 
     my $refTRsAREWithPatternGE7
-        = GetStatistics("NUMBER_REF_TRS");    # INITIAL REF-TRs RDE GE7
+        = $stat_hash->{NUMBER_REF_TRS};    # INITIAL REF-TRs RDE GE7
     my $refTRsAREWPGE7AfterCyclicRedundancyElimination
-        = GetStatistics("NUMBER_REFS_TRS_AFTER_REDUND")
-        ;                                     # INITIAL REF-TRs RDE GE7 CRDE
+        = $stat_hash->{NUMBER_REFS_TRS_AFTER_REDUND}
+        ;                                  # INITIAL REF-TRs RDE GE7 CRDE
     my $refTRsProfileClustered
-        = GetStatistics("CLUST_NUMBER_OF_REF_REPS_IN_CLUSTERS")
+        = $stat_hash->{CLUST_NUMBER_OF_REF_REPS_IN_CLUSTERS}
         ;    # INITIAL REF-TRs RDE GE7 PC ADDBACK
 
     $sth
@@ -1616,8 +1643,8 @@ sub print_latex {
     my $percentRefAsHeterozygousDiff;
     my $percentRefAsMulti;
     my $percentVNTRTotalByGeneticClass;
-    my $VNTRTotalByRefClass = commify(
-        GetStatistics("CLUST_NUMBER_OF_REFS_WITH_PREDICTED_VNTR") );
+    my $VNTRTotalByRefClass
+        = commify( $stat_hash->{CLUST_NUMBER_OF_REFS_WITH_PREDICTED_VNTR} );
     my $VNTRTotalByGeneticClass;
 
     # latex header
@@ -1900,6 +1927,7 @@ sub print_latex {
         $percentVNTRasIndistinguishable
     );
     printf( STDOUT "\n\\end{document}" );
+    $dbh->disconnect;
 
 }
 
@@ -2020,10 +2048,9 @@ if ( $run_conf{BACKEND} eq "mysql" ) {
     `support_vntr` INT(11) NULL,
     `support_vntr_span1` INT(11) NULL
     ) ENGINE=INNODB};
+    $dbh->do($query)
+        or die "Couldn't do statement: " . $dbh->errstr;
 }
-
-$dbh->do($query)
-    or die "Couldn't do statement: " . $dbh->errstr;
 
 my $TEMPFILE;
 if ( $run_conf{BACKEND} eq "mysql" ) {
@@ -2374,16 +2401,6 @@ $sth2
 $sth2->execute() or die "Cannot execute: " . $sth2->errstr();
 $sth2->finish;
 
-print_latex( $dbh, $ReadTRsSupport );
-
-print_distr($dbh);
-
-# Print VCF for VNTRs with N support
-print_vcf($dbh);
-
-# All with support
-print_vcf( $dbh, 1 );
-
 # set old db settings
 if ( $run_conf{BACKEND} eq "mysql" ) {
     $sth = $dbh->do('SET AUTOCOMMIT = 1;')
@@ -2399,7 +2416,17 @@ elsif ( $run_conf{BACKEND} eq "sqlite" ) {
     $dbh->do("PRAGMA foreign_keys = ON");
     $dbh->{AutoCommit} = 1;
 }
+
 $dbh->disconnect();
+print_latex($ReadTRsSupport);
+
+print_distr();
+
+# Print VCF for VNTRs with N support
+print_vcf();
+
+# All with support
+print_vcf(1);
 
 print STDFILE $STDBUFFER;
 close STDFILE;

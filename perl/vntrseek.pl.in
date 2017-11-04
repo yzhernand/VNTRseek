@@ -165,6 +165,10 @@ for my $k (keys %conf_vars) {
         if (!exists $opts{$k});
 }
 
+if($ENV{DEBUG}) {
+    warn Dumper(\%opts);
+}
+
 set_config(%opts);
 
 # (   $SERVER, $TMPDIR, $html_dir, $opts{FASTA_DIR}, $output_root,
@@ -233,7 +237,7 @@ my $read_profiles_folder_clean = "$output_folder/data_out_clean/";
 my $reference_folder = "$output_folder/reference/";
 
 # this is where edges are calculated
-my $edges_folder = "$read_profiles_folder_clean/edges/";
+my $edges_folder = "$opts{TMPDIR}/vntr_$opts{DBSUFFIX}/edges/";
 
 my $TRF_PARAM
     = "'$TRF_EXE' - $MATCH $MISMATCH $INDEL 80 10 50 2000 -d -h -ngs";
@@ -246,17 +250,17 @@ unless ( $opts{SERVER} ) {
     );
 }
 
-unless ( $opts{LOGIN} ) {
+if ( $opts{BACKEND} ne "sqlite" && !($opts{LOGIN}) ) {
     die("Please set  mysql login (LOGIN) variable on the command line or in the $config_file.\n"
     );
 }
 
-unless ( $opts{PASS} ) {
+if ( $opts{BACKEND} ne "sqlite" && !($opts{PASS}) ) {
     die("Please set mysql pass (PASS) variable on the command line or in the $config_file.\n"
     );
 }
 
-unless ( $opts{HOST} ) {
+if ( $opts{BACKEND} ne "sqlite" && !($opts{HOST}) ) {
     die("Please set mysql host (HOST) variable on the command line or in the $config_file.\n"
     );
 }
@@ -449,6 +453,7 @@ sub ClearError {
         DATE_REDUND
         DATE_PROCLU
         DATE_JOINCLUST
+        DATE_JOINCLUST
         DATE_DB_INSTERT_REFS
         DATE_DB_INSTERT_READS
         DATE_WRITE_FLANKS
@@ -459,16 +464,22 @@ sub ClearError {
         DATE_INDEX_PCR
         DATE_PCR_DUP
         DATE_MAP_DUP
+        DATE_MAP_DUP
         DATE_VNTR_PREDICT
         DATE_ASSEMBLYREQ
         DATE_REPORTS
         );
     if (@_) {
         my $to = int shift;
-        $to = min($to, 19);
-        my %clear_stats = map {$_ => undef} @stats[$to .. 19];
-        set_statistics($opts{DBSUFFIX}, %clear_stats);
         print "\nClearError: making next step: $to.\n\n";
+        my $set_step = min($to, 20);
+        $set_step = max($to, 0);
+        my %clear_stats = map {$_ => undef} @stats[$set_step .. 20];
+        set_statistics($opts{DBSUFFIX}, %clear_stats);
+        # Fill in the previous step with some dummy date/time if needed
+        if (stats_get( $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, $stats[$set_step-1] ) eq "" ) {
+            set_datetime($opts{DBSUFFIX}, $stats[$set_step-1]);
+        }
     }
 
     set_statistics($opts{DBSUFFIX}, (
@@ -1402,6 +1413,9 @@ if ( $STEP == 13 ) {
         }
     }
 
+    $exstring = qq(find "${edges_folder}" -type f -delete);
+    system($exstring);
+
     set_statistics($opts{DBSUFFIX}, (
         "TIME_EDGES" => time() - $timestart,
     ) );
@@ -1448,7 +1462,7 @@ if ( $STEP == 14 ) {
 if ( $STEP == 15 ) {
 
     $timestart = time();
-    print STDERR "\n\nExecuting step #$STEP (calculating PCR duplicates) ...";
+    print STDERR "\n\nExecuting step #$STEP (calculating PCR duplicates) ...\n";
     if ($opts{KEEPPCRDUPS}) {
         warn "\nWarning: Not removing detected PCR duplicates\n";
     }
@@ -1459,6 +1473,7 @@ if ( $STEP == 15 ) {
         "$read_profiles_folder_clean", "$opts{DBSUFFIX}", "$MSDIR", "$opts{NPROCESSES}",
         "$opts{TMPDIR}", "$opts{KEEPPCRDUPS}"
     );
+    warn "exargs: " . join (" ", @exargs) . "\n";
     system( $exstring, @exargs );
     if ( $? == -1 ) {
         SetError( $STEP, "command failed: $!", -1 );

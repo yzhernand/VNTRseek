@@ -246,21 +246,28 @@ int main (int argc, const char * argv[]) {
 		exit(-1);
 	}
 	
+	errno = 0;
 	endVariance = strtol(argv[3], NULL, 10);
 	if ((errno == ERANGE) || (errno != 0 && endVariance == 0)) {
 		perror("strtol");
 		exit(EXIT_FAILURE);
 	}
+
+	errno = 0;
 	numDifferences = strtol(argv[4], NULL, 10);
 	if ((errno == ERANGE) || (errno != 0 && numDifferences == 0)) {
 		perror("strtol");
 		exit(EXIT_FAILURE);
 	}
+
+	errno = 0;
 	keepPCRDups = strtol(argv[5], NULL, 10);
 	if ((errno == ERANGE) || (errno != 0 && keepPCRDups == 0)) {
 		perror("strtol");
 		exit(EXIT_FAILURE);
 	}
+
+	// fprintf(stderr, "Will %sremove PCR duplicates\n", (keepPCRDups) ? "not " : "");
 	
 	//allocate structure for "read" data
 	trStartList = (struct linkedList **) calloc(MAXREADLENGTH+1,sizeof(struct linkedList *));

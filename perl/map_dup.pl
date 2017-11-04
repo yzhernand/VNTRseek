@@ -72,8 +72,8 @@ elsif ( $run_conf{BACKEND} eq "sqlite" ) {
     $dbh->{AutoCommit} = 0;
 }
 
-my $trsInRead_sth
-    = $dbh->prepare(q{SELECT COUNT(*)
+my ($numTRsInRead)
+    = $dbh->selectrow_array(q{SELECT COUNT(*)
     FROM map
     INNER JOIN replnk on replnk.rid=map.readid
     INNER JOIN rank ON rank.refid=map.refid AND rank.readid=map.readid
@@ -82,10 +82,8 @@ my $trsInRead_sth
     WHERE replnk.sid=? AND bbb=1
     ORDER BY rank.score ASC, rankflank.score ASC, map.refid ASC})
     or die "Couldn't prepare statement: " . $dbh->errstr;
-$trsInRead_sth->execute();
-my $numTRsInRead = $trsInRead_sth->rows;
 
-$trsInRead_sth
+my $trsInRead_sth
     = $dbh->prepare(q{SELECT map.readid,map.refid,(
         SELECT head
         FROM fasta_reads

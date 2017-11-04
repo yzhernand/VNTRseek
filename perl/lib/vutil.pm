@@ -12,7 +12,7 @@ if ($ENV{DEBUG}) {
 }
 
 use base 'Exporter';
-our @EXPORT_OK = qw(read_config_file get_config get_credentials set_config set_credentials get_dbh write_mysql write_sqlite stats_set set_statistics stats_get set_datetime print_config trim create_blank_file get_trunc_query);
+our @EXPORT_OK = qw(read_config_file get_config get_credentials set_config set_credentials get_dbh write_mysql write_sqlite stats_set set_statistics get_statistics stats_get set_datetime print_config trim create_blank_file get_trunc_query);
 
 # vutil.pm
 # author: Yevgeniy Gelfand
@@ -220,6 +220,34 @@ sub set_datetime {
   my $VALUE = strftime( "%F %T", localtime );
 
   return set_statistics( $DBSUFFIX, $NAME, $VALUE );
+}
+
+####################################
+sub get_statistics {
+
+  my $argc = @_;
+  if ( $argc < 2 ) {
+      die "get_statistics: expects at least 2 parameters, passed $argc !\n";
+  }
+
+  my $DBSUFFIX = shift;
+  my @stats = @_;
+  my $dbh = get_dbh($DBSUFFIX, $ENV{HOME} . "/". $DBSUFFIX . ".vs.cnf");
+  my $sql_clause;
+  if ($ENV{DEBUG}) {
+    warn Dumper(\@stats) . "\n";
+  }
+
+  $sql_clause = join ", ", @stats;
+  if ($ENV{DEBUG}) {
+    warn "Setting stats: " . $sql_clause . "\n";
+  }
+
+  my $sql_res = $dbh->selectrow_hashref("SELECT $sql_clause FROM stats")
+    or croak "Couldn't execute statement: " . $dbh->errstr;
+
+  $dbh->disconnect();
+  return $sql_res;
 }
 
 ################################################################

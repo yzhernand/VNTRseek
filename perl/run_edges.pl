@@ -11,7 +11,7 @@ use DBI;
 use POSIX qw(strftime);
 use FindBin;
 use File::Basename;
-
+use File::Path qw(make_path);
 use lib "$FindBin::RealBin/lib";
 use vutil qw(get_config get_dbh set_statistics get_trunc_query);
 
@@ -77,7 +77,7 @@ my $rightname = "";
 # create folder
 $exstring = "rm -f $folder -R";
 system($exstring);
-mkdir($folder);
+make_path($folder);
 
 $dbh->do("CREATE TEMPORARY TABLE tempmap (rid int  PRIMARY KEY)")
     or die "Couldn't do statement: " . $dbh->errstr;
@@ -99,6 +99,7 @@ if ( $run_conf{BACKEND} eq "mysql" ) {
 }
 elsif ( $run_conf{BACKEND} eq "sqlite" ) {
     $dbh->do("PRAGMA foreign_keys = OFF");
+
     # warn "\nTurning off AutoCommit\n";
     $dbh->{AutoCommit} = 0;
 }
@@ -166,7 +167,7 @@ while ( my @data = $sth->fetchrow_array() ) {
 }
 close $outfile;
 
-$num          = $sth->rows;
+$num = $sth->rows;
 $sth->finish;
 
 print STDERR
@@ -205,7 +206,7 @@ while ( my @data = $sth->fetchrow_array() ) {
     $clusteridold = $clusterid;
     $i++;
 }
-$num          = $sth->rows;
+$num = $sth->rows;
 $sth->finish;
 
 close(EFILE);
@@ -215,99 +216,96 @@ print STDERR
 
 #AAA:
 
-$query = "DROP TABLE tempmap;";
-$dbh->do($query)
-    or die "Couldn't do statement: " . $dbh->errstr;
+# $query = "DROP TABLE tempmap;";
+# $dbh->do($query)
+#     or die "Couldn't do statement: " . $dbh->errstr;
 
-$query = "CREATE TEMPORARY TABLE tempmap (rid int  PRIMARY KEY);";
-$dbh->do($query)
-    or die "Couldn't do statement: " . $dbh->errstr;
+# $query = "CREATE TEMPORARY TABLE tempmap (rid int  PRIMARY KEY);";
+# $dbh->do($query)
+#     or die "Couldn't do statement: " . $dbh->errstr;
 
-if ( $run_conf{BACKEND} eq "mysql" ) {
-    $dbh->do('ALTER TABLE tempmap DISABLE KEYS;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-}
+# if ( $run_conf{BACKEND} eq "mysql" ) {
+#     $dbh->do('ALTER TABLE tempmap DISABLE KEYS;')
+#         or die "Couldn't do statement: " . $dbh->errstr;
+# }
 
-$query = "INSERT INTO tempmap(rid) SELECT DISTINCT readid FROM map;";
-$sth   = $dbh->do($query)
-    or die "Couldn't do statement: " . $dbh->errstr;
+# $query = "INSERT INTO tempmap(rid) SELECT DISTINCT readid FROM map;";
+# $sth   = $dbh->do($query)
+#     or die "Couldn't do statement: " . $dbh->errstr;
 
-if ( $run_conf{BACKEND} eq "mysql" ) {
-    $dbh->do('ALTER TABLE tempmap ENABLE KEYS;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-}
+# if ( $run_conf{BACKEND} eq "mysql" ) {
+#     $dbh->do('ALTER TABLE tempmap ENABLE KEYS;')
+#         or die "Couldn't do statement: " . $dbh->errstr;
+# }
 
 # print read leb files
 $clusters_processed = 0;
-$query = "select cid FROM clusters ORDER BY cid;";
-$sth2  = $dbh->prepare($query);
-$sth2->execute();
+# $query              = "select cid FROM clusters ORDER BY cid;";
+# $sth2               = $dbh->prepare($query);
+# $sth2->execute();
 $clusteridold = -1;
 
 $query = qq{
-    SELECT COUNT(*)
-    FROM clusterlnk
-        LEFT OUTER JOIN replnk ON clusterlnk.repeatid=replnk.rid
-    WHERE clusterid=?
-        AND clusterlnk.repeatid IN (SELECT rid FROM tempmap)
-    };
-my $count_trs_in_cluster_sth = $dbh->prepare($query);
-$query = qq{
     SELECT repeatid,clusterid,profile,profilerc,patsize,copynum
-    FROM clusterlnk
-        LEFT OUTER JOIN replnk ON clusterlnk.repeatid=replnk.rid
-    WHERE clusterid=?
-        AND clusterlnk.repeatid IN (SELECT rid FROM tempmap)
+    FROM clusterlnk INNER JOIN replnk ON clusterlnk.repeatid=replnk.rid
+        AND clusterlnk.repeatid IN (SELECT DISTINCT readid FROM map)
+    ORDER BY clusterid
     };
 $sth = $dbh->prepare($query);
-while ( my @data2 = $sth2->fetchrow_array() ) {
-    $clusterid = $data2[0];
-
-    print "$clusters_processed\n";
-
-#$query = "SELECT repeatid,clusterid,profile,profilerc,patsize,copynum FROM clusterlnk LEFT OUTER JOIN replnk ON clusterlnk.repeatid=replnk.rid INNER JOIN tempmap on clusterlnk.repeatid=tempmap.rid ORDER BY clusterid;";
-    $count_trs_in_cluster_sth->execute($clusterid);
-    ($num) = $count_trs_in_cluster_sth->fetchrow_array();
-
-    if ( $num > 0 ) {
-        $sth->execute($clusterid);
+$sth->execute();
+my $myfile;
+while ( my @data2 = $sth->fetchrow_array() ) {
+    $clusterid = $data2[1];
+    if ($clusterid != $clusteridold) {
+        unless ($clusteridold == -1) {
+            close($myfile);
+            $clusters_processed++;
+            print "$clusters_processed\n";
+        }
         # TODO Change this to not produce one file per cluster
         $rightname = "reads.${clusterid}.leb36";
-        close(MYFILE);
-        open( MYFILE, ">$folder/$rightname" )
+        open( $myfile, ">$folder/$rightname" )
             or die "\nCannot open file '$folder/$rightname'!\n";
-
-        $i = 0;
-        while ( my @data = $sth->fetchrow_array() ) {
-            $repid = $data[0];
-            print "$clusterid / $repid\n";
-
-            {
-                my $copies = sprintf( "%.2lf", $data[5] );
-                my $pline
-                    = $repid . " "
-                    . $data[4] . " "
-                    . $copies . " "
-                    . ( length( $data[2] ) / 2 ) . " "
-                    . ( length( $data[3] ) / 2 ) . " "
-                    . $data[2] . " "
-                    . $data[3]
-                    . " 0 0 0 0 |\n";
-                print MYFILE $pline;
-            }
-
-            $i++;
-        }
-        $sth->finish;
     }
 
-    $count_trs_in_cluster_sth->finish;
-    $clusteridold = $clusterid;
-    $clusters_processed++;
-}
-$sth2->finish;
 
-close(MYFILE);
+#$query = "SELECT repeatid,clusterid,profile,profilerc,patsize,copynum FROM clusterlnk LEFT OUTER JOIN replnk ON clusterlnk.repeatid=replnk.rid INNER JOIN tempmap on clusterlnk.repeatid=tempmap.rid ORDER BY clusterid;";
+
+
+
+    # $i = 0;
+    # while ( my @data = $sth->fetchrow_array() ) {
+    $repid = $data2[0];
+    print "$clusterid / $repid\n";
+
+    {
+        my $copies = sprintf( "%.2lf", $data2[5] );
+        my $pline
+            = $repid . " "
+            . $data2[4] . " "
+            . $copies . " "
+            . ( length( $data2[2] ) / 2 ) . " "
+            . ( length( $data2[3] ) / 2 ) . " "
+            . $data2[2] . " "
+            . $data2[3]
+            . " 0 0 0 0 |\n";
+        print $myfile $pline;
+    }
+
+        # $i++;
+    # }
+    # $sth->finish;
+
+    # close($myfile);
+    # Shouldn't happen (?): if this cluster happens to not be in
+    # the clusterlnk table, unlink the file we made.
+    # if ( $sth->rows == 0 ) {
+    #     unlink("$folder/$rightname");
+    # }
+    $clusteridold = $clusterid;
+}
+$sth->finish;
+close($myfile);
 
 print STDERR
     "Processing complete -- outputed $clusters_processed read leb files.\n\n";
@@ -324,7 +322,7 @@ my @tarballs = grep( /reads\.(\d+)\.(?:leb36)$/, readdir(DIR) );
 closedir(DIR);
 my $tarball_count = @tarballs;
 
-if ($tarball_count == 0) {
+if ( $tarball_count == 0 ) {
     warn strftime( "\n\nend: %F %T\n\n", localtime );
     warn "No files to process. Exiting...\n";
     exit 0;
@@ -391,6 +389,7 @@ if ( $run_conf{BACKEND} eq "mysql" ) {
 }
 elsif ( $run_conf{BACKEND} eq "sqlite" ) {
     $dbh->do("PRAGMA foreign_keys = OFF");
+
     # warn "\nTurning off AutoCommit\n";
     $dbh->{AutoCommit} = 0;
 }
@@ -445,7 +444,7 @@ foreach (@tarballs) {
     }
 
     open( my $fh, "$folder/$_" ) or die;
-    while (my $line = <$fh>) {
+    while ( my $line = <$fh> ) {
 
         if ( $line =~ /-(\d+)(['"]),(\d+),(\d+\.\d+)/i ) {
 
@@ -482,7 +481,7 @@ foreach (@tarballs) {
             #$sth->execute($1,$id);
 
             $pcd++;
-            warn "Inserting... $id, $i\n";
+            # warn "Inserting... $id, $i\n";
             if ( $run_conf{BACKEND} eq "mysql" ) {
                 print $TEMPFILE "$id,$1\n";
 
@@ -513,11 +512,18 @@ if ( $run_conf{BACKEND} eq "mysql" ) {
         or die "Couldn't do statement: " . $dbh->errstr;
 }
 
+$dbh->commit;
+
 my $updfromtable = 0;
+
 # $query = "UPDATE clustemp, clusters SET clusters.profdensity=clustemp.pd WHERE clusters.cid = clustemp.cid";
 $query = q{
     UPDATE clusters SET profdensity=(
         SELECT pd FROM clustemp t2
+        WHERE clusters.cid = t2.cid
+    )
+    WHERE EXISTS (
+        SELECT * FROM clustemp t2
         WHERE clusters.cid = t2.cid
     )};
 $updfromtable = $dbh->do($query)
@@ -555,15 +561,16 @@ while ( my ( $key, $value ) = each(%RHASH) ) {
 
     my @pieces = split( /,/, $value );
     my $ties = scalar(@pieces) - 1;
-    if ($ENV{DEBUG}) {
-        warn "$key => $value (". $SHASH{$key}. "), ties: $ties\n";
+    if ( $ENV{DEBUG} ) {
+        warn "$key => $value (" . $SHASH{$key} . "), ties: $ties\n";
     }
     foreach my $ps (@pieces) {
 
         $j++;
 
         if ( $run_conf{BACKEND} eq "mysql" ) {
-            print $TEMPFILE $ps, ",", $key, ",", $SHASH{$key}, ",", $ties, "\n";
+            print $TEMPFILE $ps, ",", $key, ",", $SHASH{$key}, ",", $ties,
+                "\n";
             if ( $j % $RECORDS_PER_INFILE_INSERT == 0 ) {
                 close($TEMPFILE);
                 $rankins += $sth->execute();
@@ -571,7 +578,7 @@ while ( my ( $key, $value ) = each(%RHASH) ) {
             }
         }
         elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-            $sth->execute($ps, $key, $SHASH{$key}, $ties);
+            $sth->execute( $ps, $key, $SHASH{$key}, $ties );
             $rankins++;
         }
     }
@@ -601,6 +608,7 @@ $dbh->do($query)
     or die "Couldn't do statement: " . $dbh->errstr;
 
 if ( $run_conf{BACKEND} eq "mysql" ) {
+
     # enable keys in rank, set stats, print msg
     $dbh->do('ALTER TABLE rank ENABLE KEYS;')
         or die "Couldn't do statement: " . $dbh->errstr;
@@ -617,17 +625,16 @@ $query = q{Select refid,readid,sid,score
     ORDER BY readid, score};
 $sth = $dbh->prepare($query);
 $sth->execute();
-$i   = 0;
+$i = 0;
 my $count    = 0;
 my $oldseq   = -1;
 my $oldref   = -1;
 my $oldread  = -1;
 my $oldscore = -1.0;
 
-
 if ( $run_conf{BACKEND} eq "sqlite" ) {
     $query = q{INSERT INTO ranktemp VALUES(?, ?)};
-    $sth2 = $dbh->prepare($query);
+    $sth2  = $dbh->prepare($query);
 }
 
 while ( my @data = $sth->fetchrow_array() ) {
@@ -638,7 +645,7 @@ while ( my @data = $sth->fetchrow_array() ) {
             print $TEMPFILE $oldref, ",", $oldread, "\n";
         }
         elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-            $sth2->execute($oldref, $oldread);
+            $sth2->execute( $oldref, $oldread );
         }
 
         $count++;
@@ -655,11 +662,12 @@ $dbh->commit;
 print STDERR "Prunning complete. Pruned $count rank records.\n";
 
 print STDERR "Prunning (one TR/same read) from rank table...\n";
+
 # readid added for tie resolution to keep rank and rankflank entries more in sync
 $query = q{Select refid,readid,sid,score
     FROM rank INNER JOIN
         replnk ON rank.readid=replnk.rid
-    ORDER BY refid, sid, score, readid}; 
+    ORDER BY refid, sid, score, readid};
 $sth = $dbh->prepare($query);
 $sth->execute();
 $i       = 0;
@@ -668,6 +676,7 @@ $oldseq  = -1;
 $oldref  = -1;
 $oldread = -1;
 while ( my @data = $sth->fetchrow_array() ) {
+
     if ( $data[0] == $oldref && $data[2] == $oldseq ) {
 
         # delete old one
@@ -675,7 +684,7 @@ while ( my @data = $sth->fetchrow_array() ) {
             print $TEMPFILE $oldref, ",", $oldread, "\n";
         }
         elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-            $sth2->execute($oldref, $oldread);
+            $sth2->execute( $oldref, $oldread );
         }
 
         $count++;
@@ -690,8 +699,8 @@ $sth->finish;
 $dbh->commit;
 warn "Prunning complete. Pruned $count rank records.\n";
 
-
 if ( $run_conf{BACKEND} eq "mysql" ) {
+
     # load the file into tempfile
     close($TEMPFILE);
     $sth
@@ -700,16 +709,19 @@ if ( $run_conf{BACKEND} eq "mysql" ) {
         ) or die "Couldn't do statement: " . $dbh->errstr;
     $sth = $dbh->do('ALTER TABLE ranktemp ENABLE KEYS;')
         or die "Couldn't do statement: " . $dbh->errstr;
+
     # delete from rank based on temptable entries
     $query = q{DELETE FROM t1
     USING rank t1 INNER JOIN
         ranktemp t2 ON (
             t1.refid = t2.refid AND t1.readid = t2.readid
         )};
+
     # cleanup temp file
     unlink("$tmp/ranktemp_$DBSUFFIX.txt");
 }
-elsif ($run_conf{BACKEND} eq "sqlite") {
+elsif ( $run_conf{BACKEND} eq "sqlite" ) {
+
     # delete from rank based on temptable entries
     $query = qq{
         DELETE FROM rank
@@ -724,7 +736,6 @@ my $delfromtable = 0;
 $sth          = $dbh->prepare($query);
 $delfromtable = $sth->execute();
 
-
 # set old db settings
 if ( $run_conf{BACKEND} eq "mysql" ) {
     $sth = $dbh->do('SET AUTOCOMMIT = 1;')
@@ -736,7 +747,7 @@ if ( $run_conf{BACKEND} eq "mysql" ) {
     $sth = $dbh->do('SET UNIQUE_CHECKS = 1;')
         or die "Couldn't do statement: " . $dbh->errstr;
 }
-elsif ($run_conf{BACKEND} eq "sqlite") {
+elsif ( $run_conf{BACKEND} eq "sqlite" ) {
     $dbh->do("PRAGMA foreign_keys = ON");
     $dbh->{AutoCommit} = 1;
 }
