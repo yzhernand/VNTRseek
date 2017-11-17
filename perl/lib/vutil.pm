@@ -323,10 +323,16 @@ sub get_dbh {
       sqlite_see_if_its_a_number => 1,
     })
     or croak "Could not connect to database: $DBI::errstr";
+    # 800MB cache
+    $dbh->do("PRAGMA cache_size = 800000");
   }
   else {
     $dbh = DBI->connect( "DBI:mysql:VNTRPIPE_$dbsuffix;mysql_local_infile=1;host=$VSCNF_FILE{HOST}",
-    "$VSCNF_FILE{LOGIN}", "$VSCNF_FILE{PASS}" )
+    "$VSCNF_FILE{LOGIN}", "$VSCNF_FILE{PASS}", {
+      AutoCommit => 1,
+      RaiseError => 1,
+      mysql_server_prepare => 1
+    } )
       or croak "Could not connect to database: $DBI::errstr";
   }
 

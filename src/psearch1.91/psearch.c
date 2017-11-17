@@ -798,8 +798,8 @@ int main(int argc, char** argv)
 
 
   /* 0 for maxerror only allowed for ref-read, not implemented for other mode */
-  if (0==MAXERRORS && OPTION == 'R') {
-        fprintf(stderr,"\nERROR: 0 for maxerror only allowed for ref-read, not implemented for other mode.");
+  if (MAXERRORS!=0 && OPTION == 'R') {
+        fprintf(stderr,"\nERROR: maxerror must be 0 because it will be dynamically generated based on flank length.");
         exit(1);
   }
 

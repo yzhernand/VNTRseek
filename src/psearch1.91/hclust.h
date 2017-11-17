@@ -570,7 +570,12 @@ for (nrotf2=readprof->rotlist->head; nrotf2!=NULL; nrotf2=nrotf2->next)
 	/* refs vs refs */
         } else {
 
+                  int MAXEL1,MAXER1;
 
+           /* Dec 5, 2014: Yozen asked to  make ref-ref scoring just like regular pipeline runs */
+                   MAXEL1 =  min( 8, (int)(0.4 * read_ptr->leftlen + .01));
+                   MAXER1 =  min( 8, (int)(0.4 * read_ptr->rightlen + .01));
+           
                    lerr = Edit_Distance_multiple_word_NoEndPenaltySeq1(ref_ptr->left,read_ptr->left,ref_ptr->leftlen,read_ptr->leftlen);
                    rerr = Edit_Distance_multiple_word_NoEndPenaltySeq1(ref_ptr->right,read_ptr->right,ref_ptr->rightlen,read_ptr->rightlen);
 
