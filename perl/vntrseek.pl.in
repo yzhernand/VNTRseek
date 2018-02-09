@@ -51,14 +51,14 @@ my $install_dir = "$FindBin::RealBin";
 use lib "$FindBin::RealBin/lib";    # must be same as install dir!
 
 use vutil
-    qw(get_config get_credentials set_config set_statistics set_credentials write_mysql write_sqlite get_dbh stats_set stats_get set_datetime print_config create_blank_file);
+    qw(get_config set_config set_statistics set_credentials write_mysql write_sqlite get_dbh stats_get set_datetime print_config create_blank_file);
 
 my $DOALLSTEPS = 0
     ; # set to 0 to do one step at a time (recommended for test run), 1 to run though all steps (THIS IS OTIONAL AS SPECIFYING END STEP IS POSSIBLE)
 
 # TRF options
 my $TRF_EXECUTABLE = '@TRFBin@';
-my $TRF_EXE        = "./$TRF_EXECUTABLE";
+my $TRF_EXE        = "$install_dir/$TRF_EXECUTABLE";
 
 my $MATCH    = 2;
 my $MISMATCH = 5;
@@ -159,7 +159,7 @@ my $MSDIR = $ENV{HOME} . "/". $opts{'DBSUFFIX'} . ".";
 my $config_file = $MSDIR . "vs.cnf";
 
 # set variables from vs.cnf
-my %conf_vars = get_config($config_file);
+my %conf_vars = get_config($opts{'DBSUFFIX'}, $config_file);
 for my $k (keys %conf_vars) {
     $opts{$k} = $conf_vars{$k}
         if (!exists $opts{$k});
@@ -169,19 +169,11 @@ if($ENV{DEBUG}) {
     warn Dumper(\%opts);
 }
 
+# Send config back to vutil lib and validate, after including CLI options
 set_config(%opts);
+# write out the config file
+print_config($MSDIR);
 
-# (   $SERVER, $TMPDIR, $html_dir, $opts{FASTA_DIR}, $output_root,
-#     $reference_file, $reference_seq, $reference_indist
-# ) = get_config($MSDIR);
-
-# # set more variables from vs.cnf
-# (   $NPROCESSES,           $strip_454_keytags,
-#     $is_paired_reads,      $reference_indist_produce,
-#     $MIN_SUPPORT_REQUIRED, $MIN_FLANK_REQUIRED,
-#     $MAX_FLANK_CONSIDERED, $REFS_TOTAL,
-#     $KEEPPCRDUPS
-# ) = get_config_vars($MSDIR);
 # print Dumper(\%opts);
 # print Dumper(@ARGV);
 my $STEP = shift;
@@ -197,24 +189,6 @@ if (   (@ARGV)
 }
 
 my $timestart;
-
-# set these mysql credentials from vs.cnf
-# ( $LOGIN, $PASS, $HOST ) = get_credentials($MSDIR);
-
-# set_config( $SERVER, $TMPDIR, $html_dir, $opts{FASTA_DIR}, $output_root,
-#     $reference_file, $reference_seq, $reference_indist );
-# set_config_vars(
-#     $NPROCESSES,           $strip_454_keytags,
-#     $is_paired_reads,      $reference_indist_produce,
-#     $MIN_SUPPORT_REQUIRED, $MIN_FLANK_REQUIRED,
-#     $MAX_FLANK_CONSIDERED, $REFS_TOTAL,
-#     $KEEPPCRDUPS
-# );
-# set_credentials( $LOGIN, $PASS, $HOST );
-
-# write out the config file
-print_config($MSDIR);
-
 my $DBNAME     = "VNTRPIPE_$opts{DBSUFFIX}";
 my $HTTPSERVER = "$opts{SERVER}/vntrview";
 
@@ -245,114 +219,8 @@ my $TRF2PROCLU_EXE = 'trf2proclu-ngs.exe';
 my $TRF2PROCLU_PARAM
     = "'./$TRF2PROCLU_EXE' -f 1 -m $MATCH -s $MISMATCH -i $INDEL -p $MIN_PERIOD_REQUIRED -l $opts{MIN_FLANK_REQUIRED}";
 
-unless ( $opts{SERVER} ) {
-    die("Please set machine name (SERVER) variable on the command line or in the $config_file.\n"
-    );
-}
-
-if ( $opts{BACKEND} ne "sqlite" && !($opts{LOGIN}) ) {
-    die("Please set  mysql login (LOGIN) variable on the command line or in the $config_file.\n"
-    );
-}
-
-if ( $opts{BACKEND} ne "sqlite" && !($opts{PASS}) ) {
-    die("Please set mysql pass (PASS) variable on the command line or in the $config_file.\n"
-    );
-}
-
-if ( $opts{BACKEND} ne "sqlite" && !($opts{HOST}) ) {
-    die("Please set mysql host (HOST) variable on the command line or in the $config_file.\n"
-    );
-}
-
-if ( $opts{NPROCESSES} <= 0 ) {
-    die("Please set number of processes to be used by the pipeline (NPROCESSES) variable on the command line or in the $config_file.\n "
-    );
-}
-
-if ( $opts{MIN_FLANK_REQUIRED} <= 0 ) {
-    die("Please set min flank required to be used by the pipeline (MIN_FLANK_REQUIRED) variable on the command line or in the $config_file.\n"
-    );
-}
-
-if ( $opts{MAX_FLANK_CONSIDERED} <= 0 ) {
-    die("Please set max flank required to be used by the pipeline (MAX_FLANK_CONSIDERED) variable on the command line or in the $config_file.\n"
-    );
-}
-
-if ( $opts{MIN_SUPPORT_REQUIRED} <= 0 ) {
-    die("Please set min support required to be used by the pipeline (MIN_SUPPORT_REQUIRED) variable on the command line or in the $config_file.\n"
-    );
-}
-
 if ( $DOALLSTEPS < 0 ) {
-    die("Please set doallsteps (DOALLSTEPS) variable.\n");
-}
-
-if ( $opts{STRIP_454_KEYTAGS} < 0 ) {
-    die("Please set strip_454_keytags (strip_454_keytags) variable on the command line or in the $config_file.\n"
-    );
-}
-
-if ( $opts{REFERENCE_INDIST_PRODUCE} < 0 ) {
-    die("Please set reference_indist_produce to be used by the pipeline (reference_indist_produce) variable on the command line or in the $config_file.\n"
-    );
-}
-
-if ( $opts{IS_PAIRED_READS} < 0 ) {
-    die("Please set is_paired_reads (is_paired_reads) variable on the command line or in the $config_file.\n"
-    );
-}
-
-if ( $opts{REFS_TOTAL} < 0 ) {
-    die("Please set refs total (REFS_TOTAL) variable on the command line or in the $config_file.\n"
-    );
-}
-
-if ( "" eq $TRF_EXECUTABLE ) {
-    die("Please set trf executable (TRF_EXECUTABLE) variable.\n");
-}
-
-if ( "" eq $install_dir ) {
-    die("Please set install directory (install_dir) variable.\n");
-}
-
-if ( "" eq $opts{HTML_DIR} ) {
-    die("Please set html directory (html_dir) variable on the command line or in the $config_file. ($opts{HTML_DIR})\n"
-    );
-}
-if ( !( -e $opts{HTML_DIR} ) && !mkdir("$opts{HTML_DIR}") ) {
-    die("Could not create html_dir directory ($opts{HTML_DIR}).\n");
-}
-
-unless ( exists $opts{FASTA_DIR} && $opts{FASTA_DIR} ) {
-    die("Please set fasta directory (fasta_dir) variable on the command line or in the $config_file.\n"
-    );
-}
-
-if ( "" eq $opts{OUTPUT_ROOT} ) {
-    die("Please set output directory (output_root) variable on the command line or in the $config_file.\n"
-    );
-}
-
-if ( "" eq $opts{REFERENCE_FILE} ) {
-    die("Please set reference .leb36 file (reference_file) variable on the command line or in the $config_file.\n"
-    );
-}
-
-if ( "" eq $opts{REFERENCE_SEQ} ) {
-    die("Please set reference .seq file (reference_seq) variable on the command line or in the $config_file.\n"
-    );
-}
-
-if ( "" eq $opts{REFERENCE_INDIST} ) {
-    die("Please set reference .indist file (reference_indist) variable on the command line or in the $config_file.\n"
-    );
-}
-
-if ( "" eq $opts{TMPDIR} ) {
-    die("Please set temporary directory (TMPDIR) variable on the command line or in the $config_file.\n"
-    );
+  die("Please set doallsteps (DOALLSTEPS) variable.\n");
 }
 
 # check if required files and directories present and have correct permissions
@@ -367,17 +235,7 @@ unless ( -e "refflankalign.exe" ) {
     die("File 'refflankalign.exe' not found!");
 }
 unless ( -e "pcr_dup.exe" )   { die("File 'pcr_dup.exe' not found!"); }
-unless ( -e $opts{REFERENCE_FILE} ) { die("File '$opts{REFERENCE_FILE}' not found!"); }
-unless ( -e $opts{REFERENCE_SEQ} )  { die("File '$opts{REFERENCE_SEQ}' not found!"); }
-if ( !( -e $opts{REFERENCE_INDIST} ) && !$opts{REFERENCE_INDIST_PRODUCE} ) {
-    die("File '$opts{REFERENCE_INDIST}' not found!");
-}
 unless ( -e $install_dir )  { die("Directory '$install_dir' not found!"); }
-unless ( -e $opts{HTML_DIR} )     { die("Directory '$opts{HTML_DIR}' not found!"); }
-unless ( -e $opts{FASTA_DIR} ) { die("Directory '$opts{FASTA_DIR}' not found!"); }
-if ( !-e $opts{OUTPUT_ROOT} && !mkdir($opts{OUTPUT_ROOT}) ) { die("Error creating output root ($opts{OUTPUT_ROOT}). Please check the path or manually create this directory and try again."); }
-unless ( -e $opts{OUTPUT_ROOT} )  { die("Directory '$opts{OUTPUT_ROOT}' not found!"); }
-unless ( -e "$opts{TMPDIR}" ) { die("Temporary directory '$opts{TMPDIR}' not found!"); }
 
 unless ( -x $TRF_EXECUTABLE ) {
     die("File '$TRF_EXECUTABLE' not executable!");
@@ -399,15 +257,6 @@ unless ( -x "pcr_dup.exe" ) { die("File 'pcr_dup.exe' not executable!"); }
 unless ( -x $install_dir ) {
     die("Directory '$install_dir' not executable!");
 }
-unless ( -x $opts{HTML_DIR} ) { die("Directory '$opts{HTML_DIR}' not executable!"); }
-unless ( -x $opts{OUTPUT_ROOT} ) {
-    die("Directory '$opts{OUTPUT_ROOT}' not executable!");
-}
-unless ( -x "$opts{TMPDIR}" ) { die("Directory '$opts{TMPDIR}' not executable!"); }
-
-unless ( -w $opts{HTML_DIR} )    { die("Directory '$opts{HTML_DIR}' not writable!"); }
-unless ( -w $opts{OUTPUT_ROOT} ) { die("Directory '$opts{OUTPUT_ROOT}' not writable!"); }
-unless ( -w "$opts{TMPDIR}" )    { die("Directory '$opts{TMPDIR}' not writable!"); }
 
 #unless (-x "$opts{HTML_DIR}/aln.exe") { die("File '$opts{HTML_DIR}/aln.exe' not executable!"); }
 #unless (-x "$opts{HTML_DIR}/malign") { die("File '$opts{HTML_DIR}/malign' not executable!"); }
@@ -424,14 +273,14 @@ sub SetError {
 
     my $argc = @_;
     if ( $argc < 3 ) {
-        die "stats_set: expects 3 parameters, passed $argc !\n";
+        die "SetError: expects 3 parameters, passed $argc !\n";
     }
 
     my $VALUE1 = $_[0];
     my $VALUE2 = $_[1];
     my $VALUE3 = $_[2];
 
-    set_statistics($opts{DBSUFFIX}, (
+    set_statistics((
         ERROR_STEP => $VALUE1,
         ERROR_DESC => $VALUE2,
         ERROR_CODE => $VALUE3,
@@ -475,14 +324,14 @@ sub ClearError {
         my $set_step = min($to, 20);
         $set_step = max($to, 0);
         my %clear_stats = map {$_ => undef} @stats[$set_step .. 20];
-        set_statistics($opts{DBSUFFIX}, %clear_stats);
+        set_statistics(%clear_stats);
         # Fill in the previous step with some dummy date/time if needed
         if (stats_get( $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, $stats[$set_step-1] ) eq "" ) {
-            set_datetime($opts{DBSUFFIX}, $stats[$set_step-1]);
+            set_datetime($stats[$set_step-1]);
         }
     }
 
-    set_statistics($opts{DBSUFFIX}, (
+    set_statistics((
         ERROR_STEP => 0,
         ERROR_DESC => "",
         ERROR_CODE => 0,
@@ -608,42 +457,38 @@ if ( $STEP == 0 ) {
 
     $timestart = time();
 
-    print STDERR "\n\nExecuting step #$STEP (creating MySQL database)...";
+    print STDERR "Executing step #$STEP (creating MySQL database)...\n";
 
-    if ( !mkdir("$output_folder") ) {
+    if ( !-e "$output_folder" && !mkdir("$output_folder") ) {
         warn "\nWarning: Failed to create data directory!\n";
     }
 
-    my $exstring;
 
     if($opts{BACKEND} eq "mysql") {
-        write_mysql( $DBNAME, $opts{TMPDIR} );
+        my $exstring;
+        write_mysql();
         $exstring = "mysql -u $opts{LOGIN} --password=$opts{PASS} -h $opts{HOST} < $opts{TMPDIR}/${DBNAME}.sql";
         system($exstring);
         $exstring = "rm -f $opts{TMPDIR}/${DBNAME}.sql";
         system($exstring);
     }
     else {
-        write_sqlite($opts{DBSUFFIX}, $opts{OUTPUT_ROOT}, $config_file);
+        write_sqlite();
     }
 
-
-    if ( !mkdir("$opts{HTML_DIR}") ) {
-        warn "\nWarning: Failed to create html directory!\n";
-    }
-    if ( !mkdir("$read_profiles_folder") ) {
+    if ( !-e "$read_profiles_folder" && !mkdir("$read_profiles_folder") ) {
         warn "\nWarning: Failed to create output directory!\n";
     }
 
-    set_statistics($opts{DBSUFFIX},  (
-        "MAP_ROOT" =>             $install_dir,
-        "N_MIN_SUPPORT" =>        $opts{MIN_SUPPORT_REQUIRED},
-        "MIN_FLANK_REQUIRED" =>   $opts{MIN_FLANK_REQUIRED},
+    set_statistics(
+        "MAP_ROOT"             => $install_dir,
+        "N_MIN_SUPPORT"        => $opts{MIN_SUPPORT_REQUIRED},
+        "MIN_FLANK_REQUIRED"   => $opts{MIN_FLANK_REQUIRED},
         "MAX_FLANK_CONSIDERED" => $opts{MAX_FLANK_CONSIDERED},
-        "TIME_MYSQLCREATE" => time() - $timestart,
-        )
+        "TIME_MYSQLCREATE"     => time() - $timestart,
     );
-    set_datetime($opts{DBSUFFIX}, "DATE_MYSQLCREATE");
+
+    set_datetime("DATE_MYSQLCREATE");
 
     warn "done!\n";
 
@@ -677,13 +522,13 @@ if ( $STEP == 1 ) {
         }
     }
 
-    set_statistics($opts{DBSUFFIX},(
+    set_statistics(
         "PARAM_TRF" =>       $TRF_PARAM,
         "FOLDER_FASTA" =>    $opts{FASTA_DIR},
         "FOLDER_PROFILES" => $read_profiles_folder,
         "TIME_TRF" => time() - $timestart,
-    ));
-    set_datetime($opts{DBSUFFIX}, "DATE_TRF");
+    );
+    set_datetime("DATE_TRF");
     print STDERR "done!\n";
 
     if    ( $STEPEND == $STEP ) { $STEP = 100; }
@@ -747,13 +592,13 @@ if ( $STEP == 2 ) {
         }
     }
 
-    set_statistics($opts{DBSUFFIX}, (
+    set_statistics((
         "FOLDER_REFERENCE" =>   $reference_folder,
         "FILE_REFERENCE_LEB" => $opts{REFERENCE_FILE},
         "FILE_REFERENCE_SEQ" => $opts{REFERENCE_SEQ},
         "TIME_RENUMB" => time() - $timestart,
     ));
-    set_datetime($opts{DBSUFFIX}, "DATE_RENUMB");
+    set_datetime("DATE_RENUMB");
 
     print STDERR "done!\n";
 
@@ -811,7 +656,9 @@ if ( $STEP == 3 ) {
     if ( !mkdir("$read_profiles_folder_clean") ) {
         warn "\nWarning: Failed to create output directory!\n";
     }
+    # END TODO
 
+    # Run redund.exe on read TRs
     system(
         "./redund.exe $read_profiles_folder/ $read_profiles_folder_clean/allreads.leb36 -i"
     );
@@ -875,11 +722,11 @@ if ( $STEP == 3 ) {
         }
     }
 
-    set_statistics($opts{DBSUFFIX}, (
+    set_statistics((
         "FOLDER_PROFILES_CLEAN" => $read_profiles_folder_clean,
         "TIME_REDUND" =>           time() - $timestart,
     ));
-    set_datetime($opts{DBSUFFIX}, "DATE_REDUND");
+    set_datetime("DATE_REDUND");
     print STDERR "done!\n";
 
     if    ( $STEPEND == $STEP ) { $STEP = 100; }
@@ -921,6 +768,9 @@ if ( $STEP == 4 ) {
 #$exstring = "./run_proclu.pl 1 $read_profiles_folder_clean $reference_folder \"$CLUST_PARAMS\" $opts{NPROCESSES} '$PROCLU_EXECUTABLE' " . max( 4, int(0.4 * $opts{MIN_FLANK_REQUIRED} + .01)) . " $opts{MAX_FLANK_CONSIDERED}";
 
 # 0 for maxerror, means psearch will pick maxerror based on individual flanklength
+    # TODO Maybe rewrite run_proclu and psearch to use SQLite db.
+    # psearch output can still be files but this step will then collect them and
+    # insert into the db. (Maybe merge in next step's `join_clusters.exe`)
     $exstring
         = "./run_proclu.pl 1 $read_profiles_folder_clean $reference_folder \"$CLUST_PARAMS\" $opts{NPROCESSES} '$PROCLU_EXECUTABLE' "
         . 0
@@ -978,12 +828,12 @@ if ( $STEP == 4 ) {
         }
     }
 
-    set_statistics($opts{DBSUFFIX}, (
+    set_statistics((
         "PARAM_PROCLU" => $CLUST_PARAMS,
         "TIME_PROCLU" => time() - $timestart,
     ));
 
-    set_datetime($opts{DBSUFFIX}, "DATE_PROCLU");
+    set_datetime("DATE_PROCLU");
     print STDERR "done!\n";
 
     if    ( $STEPEND == $STEP ) { $STEP = 100; }
@@ -1014,10 +864,10 @@ if ( $STEP == 5 ) {
         }
     }
 
-    set_statistics($opts{DBSUFFIX}, (
+    set_statistics((
         "TIME_JOINCLUST" => time() - $timestart,
     ) );
-    set_datetime($opts{DBSUFFIX}, "DATE_JOINCLUST");
+    set_datetime("DATE_JOINCLUST");
     print STDERR "done!\n";
 
     if    ( $STEPEND == $STEP ) { $STEP = 100; }
@@ -1040,55 +890,22 @@ if ( $STEP == 7 ) {
     print STDERR
         "\n\nExecuting step #$STEP (inserting REFERENCE flanks into database)...";
 
-    # TODO Change so that reference seq file does not need to be in install dir
-    # TODO Change this to a one-time process that produces an SQLite db, if it does not
-    # already exist, and populate it with the proper ref seqs.
-    my $dbh = get_dbh($opts{DBSUFFIX}, $config_file);
-    if ($opts{BACKEND} eq "sqlite") {
-        # Truncate table
-        $dbh->do("DELETE FROM fasta_ref_reps;");
-        # Same number of placeholders as fields in seq file.
-        my $cols = join(",", qw(rid
-            firstindex
-            lastindex
-            copynum
-            head
-            flankleft
-            pattern
-            sequence
-            flankright
-            conserved
-            entropy) # Need entropy col since it is NOT NULL. Set to 0 below
-        );
-        my $placeholders = join(",", ("?") x 11);
-        my $query = "INSERT INTO fasta_ref_reps ($cols) VALUES ($placeholders)";
-        my $insert_sth = $dbh->prepare($query);
-        $dbh->{AutoCommit} = 0;
-        open my $refset, "<", "$install_dir/$opts{REFERENCE_SEQ}";
-        # Skip header
-        <$refset>;
-        # Insert all ref TRs from refset file
-        while (my $r = <$refset>) {
-            chomp $r;
-            my @fields = split /,/, $r;
-            # 0 is for entropy column above
-            $insert_sth->execute(@fields, 0);
-        }
-        $dbh->commit();
-        $dbh->{AutoCommit} = 1;
-    }
-    elsif ($opts{BACKEND} eq "mysql") {
+    # If using SQLite, this step is already done automatically by step 0 at least
+    # once per reference set, as an initialization step. Only columns which
+    # change on every run are in the run database, and those aren't touched yet
+    if ($opts{BACKEND} eq "mysql") {
+        my $dbh = get_dbh();
         $dbh->do("TRUNCATE TABLE fasta_ref_reps;");
         $dbh->do("LOAD DATA LOCAL INFILE '$install_dir/$opts{REFERENCE_SEQ}' INTO TABLE $DBNAME.fasta_ref_reps FIELDS TERMINATED BY ',' IGNORE 1 LINES;");
         $dbh->commit;
+        $dbh->disconnect();
     }
 
-    $dbh->disconnect();
 
-    set_statistics($opts{DBSUFFIX}, (
+    set_statistics((
         "TIME_DB_INSTERT_REFS" => time() - $timestart,
     ) );
-    set_datetime($opts{DBSUFFIX}, "DATE_DB_INSTERT_REFS");
+    set_datetime("DATE_DB_INSTERT_REFS");
 
     print STDERR "done!\n";
 
@@ -1118,10 +935,10 @@ if ( $STEP == 8 ) {
         }
     }
 
-    set_statistics($opts{DBSUFFIX}, (
+    set_statistics((
         "TIME_DB_INSTERT_READS" => time() - $timestart,
     ) );
-    set_datetime($opts{DBSUFFIX}, "DATE_DB_INSTERT_READS");
+    set_datetime("DATE_DB_INSTERT_READS");
     print STDERR "done!\n";
 
     if    ( $STEPEND == $STEP ) { $STEP = 100; }
@@ -1149,10 +966,10 @@ if ( $STEP == 9 ) {
         }
     }
 
-    set_statistics($opts{DBSUFFIX}, (
+    set_statistics((
         "TIME_WRITE_FLANKS" => time() - $timestart,
     ) );
-    set_datetime($opts{DBSUFFIX}, "DATE_WRITE_FLANKS");
+    set_datetime("DATE_WRITE_FLANKS");
     print STDERR "done!\n";
 
     if    ( $STEPEND == $STEP ) { $STEP = 100; }
@@ -1193,10 +1010,10 @@ if ( $STEP == 10 ) {
         }
     }
 
-    set_statistics($opts{DBSUFFIX}, (
+    set_statistics((
         "TIME_MAP_FLANKS" => time() - $timestart,
     ) );
-    set_datetime($opts{DBSUFFIX}, "DATE_MAP_FLANKS");
+    set_datetime("DATE_MAP_FLANKS");
     print STDERR "done!\n";
 
     if    ( $STEPEND == $STEP ) { $STEP = 100; }
@@ -1322,6 +1139,9 @@ if ( $STEP == 11 ) {
     }
 
     # update DB
+    # TODO Replace this with a script which simply sets the flank comparison
+    # parameters (apparently constant at max_errors = 5 and trim_to = 50, is
+    # this ever used??)
     print STDERR "\n\n(updating database with dist/indist info)...";
     $exstring = "./vntrpipe_xml2sql.pl";
     my @exargs
@@ -1340,10 +1160,10 @@ if ( $STEP == 11 ) {
         }
     }
 
-    set_statistics($opts{DBSUFFIX}, (
+    set_statistics((
         "TIME_MAP_REFFLANKS" => time() - $timestart,
     ) );
-    set_datetime($opts{DBSUFFIX}, "DATE_MAP_REFFLANKS");
+    set_datetime("DATE_MAP_REFFLANKS");
     print STDERR "done!\n";
 
     if    ( $STEPEND == $STEP ) { $STEP = 100; }
@@ -1379,10 +1199,10 @@ if ( $STEP == 12 ) {
         }
     }
 
-    set_statistics($opts{DBSUFFIX}, (
+    set_statistics((
         "TIME_MAP_INSERT" => time() - $timestart,
     ) );
-    set_datetime($opts{DBSUFFIX}, "DATE_MAP_INSERT");
+    set_datetime("DATE_MAP_INSERT");
     print STDERR "done!\n";
 
     if    ( $STEPEND == $STEP ) { $STEP = 100; }
@@ -1416,10 +1236,10 @@ if ( $STEP == 13 ) {
     $exstring = qq(find "${edges_folder}" -type f -delete);
     system($exstring);
 
-    set_statistics($opts{DBSUFFIX}, (
+    set_statistics((
         "TIME_EDGES" => time() - $timestart,
     ) );
-    set_datetime($opts{DBSUFFIX}, "DATE_EDGES");
+    set_datetime("DATE_EDGES");
     print STDERR "done!\n";
 
     if    ( $STEPEND == $STEP ) { $STEP = 100; }
@@ -1449,10 +1269,10 @@ if ( $STEP == 14 ) {
         }
     }
 
-    set_statistics($opts{DBSUFFIX}, (
+    set_statistics((
         "TIME_INDEX_PCR" => time() - $timestart,
     ) );
-    set_datetime($opts{DBSUFFIX}, "DATE_INDEX_PCR");
+    set_datetime("DATE_INDEX_PCR");
     print STDERR "done!\n";
 
     if    ( $STEPEND == $STEP ) { $STEP = 100; }
@@ -1487,10 +1307,10 @@ if ( $STEP == 15 ) {
         }
     }
 
-    set_statistics($opts{DBSUFFIX}, (
+    set_statistics((
         "TIME_PCR_DUP" => time() - $timestart
     ));
-    set_datetime($opts{DBSUFFIX}, "DATE_PCR_DUP");
+    set_datetime("DATE_PCR_DUP");
     print STDERR "done!\n";
 
     if    ( $STEPEND == $STEP ) { $STEP = 100; }
@@ -1517,10 +1337,10 @@ if ( $STEP == 16 ) {
         }
     }
 
-    set_statistics($opts{DBSUFFIX}, (
+    set_statistics((
         "TIME_MAP_DUP" => time() - $timestart,
     ) );
-    set_datetime($opts{DBSUFFIX}, "DATE_MAP_DUP");
+    set_datetime("DATE_MAP_DUP");
     print STDERR "done!\n";
 
     if    ( $STEPEND == $STEP ) { $STEP = 100; }
@@ -1546,10 +1366,10 @@ if ( $STEP == 17 ) {
         }
     }
 
-    set_statistics($opts{DBSUFFIX}, (
+    set_statistics((
         "TIME_VNTR_PREDICT" => time() - $timestart,
     ) );
-    set_datetime($opts{DBSUFFIX}, "DATE_VNTR_PREDICT");
+    set_datetime("DATE_VNTR_PREDICT");
     print STDERR "done!\n";
 
     if    ( $STEPEND == $STEP ) { $STEP = 100; }
@@ -1571,10 +1391,10 @@ if ( $STEP == 18 ) {
 #  if ( 0 != $rc ) { SetError($STEP,"computing variability (assembly required) failed",$rc); die "command exited with value $rc"; }
 #}
 
-    set_statistics($opts{DBSUFFIX}, (
+    set_statistics((
         "TIME_ASSEMBLYREQ" => time() - $timestart,
     ) );
-    set_datetime($opts{DBSUFFIX}, "DATE_ASSEMBLYREQ");
+    set_datetime("DATE_ASSEMBLYREQ");
     print STDERR "done!\n";
 
     if    ( $STEPEND == $STEP ) { $STEP = 100; }
@@ -1685,10 +1505,10 @@ if ( $STEP == 19 ) {
     $exstring = qq(find "${read_profiles_folder_clean}/out" -type f -delete);
     system($exstring);
 
-    set_statistics($opts{DBSUFFIX}, (
+    set_statistics((
         "TIME_REPORTS" => time() - $timestart
     ) );
-    set_datetime($opts{DBSUFFIX}, "DATE_REPORTS");
+    set_datetime("DATE_REPORTS");
     print STDERR "done!\n";
 }
 

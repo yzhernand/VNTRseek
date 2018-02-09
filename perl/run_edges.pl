@@ -79,6 +79,7 @@ $exstring = "rm -f $folder -R";
 system($exstring);
 make_path($folder);
 
+# Do away with tempmap
 $dbh->do("CREATE TEMPORARY TABLE tempmap (rid int  PRIMARY KEY)")
     or die "Couldn't do statement: " . $dbh->errstr;
 
@@ -116,11 +117,13 @@ while (<$input_fh>) {                               # read file into list
 close($input_fh);
 
 $clusters_processed = 0;
+# Do away with tempmap; use WHERE clusterlnk.repeatid IN
+# (SELECT DISTINCT (-refid) FROM map)?
 $query              = qq{
-    SELECT repeatid,clusterid,profile,profilerc,patsize,copynum
+    SELECT repeatid,clusterid
     FROM clusterlnk
         LEFT OUTER JOIN replnk ON clusterlnk.repeatid=replnk.rid
-        INNER JOIN tempmap on clusterlnk.repeatid=tempmap.rid
+    WHERE clusterlnk.repeatid IN (SELECT DISTINCT (-refid) FROM map)
     ORDER BY clusterid
 };
 $sth = $dbh->prepare($query);

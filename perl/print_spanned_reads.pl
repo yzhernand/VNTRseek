@@ -22,11 +22,7 @@ use FindBin;
 use File::Basename;
 
 use lib "$FindBin::RealBin/lib"; 
-require "vutil.pm";
-
-use vutil ('get_credentials');
-use vutil ('write_mysql');
-use vutil ('stats_set');
+use vutil qw(get_config get_dbh set_statistics get_trunc_query);
 
 
 my $strip454 = "0";
@@ -75,22 +71,22 @@ sub dummyquals($)
 
 my $argc = @ARGV;
 
-if ($argc<4) { die "Usage: print_spanned_reads.pl dbname msdir indexfolder fastafolder\n"; }
+if ($argc<4) { die "Usage: print_spanned_reads.pl dbsuffix msdir indexfolder fastafolder\n"; }
 
 my $curdir =  getcwd;
-my $DBNAME = $ARGV[0];
+my $DBSUFFIX = $ARGV[0];
 my $MSDIR = $ARGV[1];
 my $indexfolder = $ARGV[2];
 my $fastafolder = $ARGV[3];
 
 # set these mysql credentials in vs.cnf (in installation directory)
-my ($LOGIN,$PASS,$HOST) = get_credentials($MSDIR);
+my %run_conf = get_config( $MSDIR . "vs.cnf" );
 
 my $totalReads = 0;
 
 
-my $dbh = DBI->connect("DBI:mysql:$DBNAME;host=$HOST", "$LOGIN", "$PASS"
-	           ) || die "Could not connect to database: $DBI::errstr";
+my $dbh = get_dbh( $DBSUFFIX, $MSDIR . "vs.cnf" )
+    or die "Could not connect to database: $DBI::errstr";
 my %HEADHASH = ();
 
 

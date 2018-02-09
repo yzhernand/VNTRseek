@@ -584,8 +584,9 @@ for (nrotf2=readprof->rotlist->head; nrotf2!=NULL; nrotf2=nrotf2->next)
                     doCriticalErrorAndQuit("Edit_Distance_multiple_word_NoEndPenaltySeq1 returned -1. Aborting!");
                    }
 
-
-                   flanksPasses = (min(lerr,rerr) <= MAXERRORS);
+                   //flanksPasses = (min(lerr,rerr) <= MAXERRORS);
+                   // TESTING BOTH FLANKS FOR PARAMTER SELECTION
+                   flanksPasses = (lerr<=MAXEL1 && rerr<=MAXER1);
 
 
 	 	   /* there is a possibility that reversing these might have different result, lets try it, 1.90 testing for mapping */ 
@@ -600,7 +601,9 @@ for (nrotf2=readprof->rotlist->head; nrotf2!=NULL; nrotf2=nrotf2->next)
                 	   }
 
 
-        	           flanksPasses = (min(lerr,rerr) <= MAXERRORS);
+        	           //flanksPasses = (min(lerr,rerr) <= MAXERRORS);
+                     // TESTING BOTH FLANKS FOR PARAMTER SELECTION
+                     flanksPasses = (lerr<=MAXEL1 && rerr<=MAXER1);
 
  		    } 
 

@@ -33,8 +33,7 @@ use DBI;
 use File::Basename;
 # use File::Temp qw/ tempfile tempdir /;
 use lib "$FindBin::RealBin/lib";
-require "vutil.pm";
-use vutil qw(get_credentials get_config );
+use vutil qw(get_config get_dbh );
 
 # Get input files
 die "Usage: $0 <dbsuffix> <db backend> [new reference set name]"
@@ -44,9 +43,9 @@ my $MSDIR = $ENV{HOME} . "/${dbsuffix}.";
 my $config_loc = $MSDIR . "vs.cnf";
 
 # Connect to DB
-my %run_conf = get_config($MSDIR . "vs.cnf");
+my %run_conf = get_config($config_loc);
 my ( $login, $pass, $host ) = @run_conf{qw(LOGIN PASS HOST)};
-my $dbh = get_dbh($dbsuffix, $config_loc)
+my $dbh = get_dbh()
     or die "Could not connect to database: $DBI::errstr";
 # Retrieve from the database the list of all reads mapping to a reftr
 # my $all_reads_mapped_query = q{SELECT DISTINCT map.refid AS reftrid, SUBSTRING_INDEX(fasta_reads.head, "_", -1) AS origintrid

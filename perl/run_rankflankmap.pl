@@ -43,7 +43,6 @@ my $MSDIR     = $ARGV[4];
 
 # set these mysql credentials in vs.cnf (in installation directory)
 my %run_conf = get_config( $MSDIR . "vs.cnf" );
-my ( $LOGIN, $PASS, $HOST ) = @run_conf{qw(LOGIN PASS HOST)};
 
 my $clusters_processed = 0;
 

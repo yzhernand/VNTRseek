@@ -3,347 +3,611 @@ use strict;
 use Cwd;
 use DBI;
 use Carp;
-use Config::Simple;
 use FindBin;
 use POSIX qw(strftime);
 
-if ($ENV{DEBUG}) {
- use Data::Dumper;
+if ( $ENV{DEBUG} ) {
+    use Data::Dumper;
 }
 
 use base 'Exporter';
-our @EXPORT_OK = qw(read_config_file get_config get_credentials set_config set_credentials get_dbh write_mysql write_sqlite stats_set set_statistics get_statistics stats_get set_datetime print_config trim create_blank_file get_trunc_query);
+our @EXPORT_OK
+    = qw(read_config_file get_config set_config set_credentials get_dbh write_mysql make_refseq_db load_profiles_if_not_exists run_redund write_sqlite set_statistics get_statistics stats_get set_datetime print_config trim create_blank_file get_trunc_query);
 
 # vutil.pm
 # author: Yevgeniy Gelfand
 # create date: Oct 30, 2010
-# function: create mysql database for vntr pipleline, 
+# function: create mysql database for vntr pipleline,
 # provide functions for database management
 
 my %VSCNF_FILE = ();
-my $VSREAD = 0;
+my $VSREAD     = 0;
 
 ################################################################
-sub trim($)
-{
-        my $string = shift;
-        $string =~ s/^\s+//;
-        $string =~ s/\s+$//;
-        return $string;
+sub trim($) {
+    my $string = shift;
+    $string =~ s/^\s+//;
+    $string =~ s/\s+$//;
+    return $string;
 }
 
 sub create_blank_file {
-  my $filename = shift or croak("Error: filename is a required argument\n");
-  open my $blank_file, ">", $filename or croak("Error creating blank file $filename: $!");
-  close $blank_file or croak("Error closing blank file $filename: $!");
-}
-
-################################################################
-sub read_config_file_configsimple {
-  my $output_folder = shift
-    or croak "Error: function expects 1 parameter (got none)\n";
-  my $config_ref;
-  carp "$output_folder/vs.cnf";
-  my $cfg = new Config::Simple( syntax => "ini" );
-  $cfg->read("$output_folder/vs.cnf");
-  $config_ref = $cfg->get_block('default');
-  $cfg->write("$output_folder/vs.cnf.bak");
-  return $config_ref;
+    my $filename = shift or croak("Error: filename is a required argument\n");
+    open my $blank_file, ">", $filename
+        or croak("Error creating blank file $filename: $!");
+    close $blank_file or croak("Error closing blank file $filename: $!");
 }
 
 ################################################################
 sub read_config_file {
 
- # Get file location
- unless (@_) { die "read_config_file: expects 1 parameters.\n"; }
- my $file_loc = shift;
- 
- # read global config
- if (open(my $cnf, "<", "$file_loc")) {
+    # Get file location
+    unless (@_) { die "read_config_file: expects 1 parameters.\n"; }
+    my $file_loc = shift;
 
-  while (<$cnf>) {
-   chomp;
-   
-   # skip start comments
-   if (/^\#/) { next; }
-   
-   if ( /(.+)=(.*)/ ) {
-     my $key = trim($1);
-     my $val = trim($2);
-     $val =~ s/\s*\#.*//; # strip end comments
-     $VSCNF_FILE{uc($key)}=$val; 
-     #print $key."=".$val."\n";
-   }
-  }
+    if ( $ENV{DEBUG} ) {
+        warn "Reading configuration file: $file_loc\n";
+    }
 
-  close($cnf);
-  return 1;
+    # read global config
+    if ( open( my $cnf, "<", "$file_loc" ) ) {
 
- } else {
-  return 0;
- }
+        while (<$cnf>) {
+            chomp;
+
+            # skip start comments
+            if (/^\#/) { next; }
+
+            if (/(.+)=(.*)/) {
+                my $key = trim($1);
+                my $val = trim($2);
+                $val =~ s/\s*\#.*//;    # strip end comments
+                $VSCNF_FILE{ uc($key) } = $val;
+
+                #print $key."=".$val."\n";
+            }
+        }
+
+        close($cnf);
+        return 1;
+
+    }
+    else {
+        return 0;
+    }
 
 }
 
 ################################################################
 sub get_config {
-  croak "Error: function expects 1 parameter (got none)\n"
-    unless (@_ == 1);
-  my $installdir = "$FindBin::RealBin";
-  unless ($VSREAD) {
-    # Must read global file first. Sets up the defaults.
-    warn "Could not read global config\n"
-      unless read_config_file("$installdir/vs.cnf");
-    my $config_loc = shift;
-    warn "Could not read run config (harmless if this is a new run)\n"
-      unless read_config_file($config_loc);
-    # Set VSREAD;
-    $VSREAD = 1;
-  }
+    croak "Error: function expects 2 parameters\n"
+        unless ( @_ == 2 );
 
-  return %VSCNF_FILE;
+    my ( $dbsuffix, $config_loc ) = @_;
+    my $installdir = "$FindBin::RealBin";
+    unless ($VSREAD) {
+
+        # Must read global file first. Sets up the defaults.
+        warn "Could not read global config\n"
+            unless read_config_file("$installdir/vs.cnf");
+        warn "Could not read run config (harmless if this is a new run)\n"
+            unless read_config_file($config_loc);
+
+        # Set VSREAD;
+        $VSREAD = 1;
+        $VSCNF_FILE{DBSUFFIX} = $dbsuffix;
+    }
+
+    return %VSCNF_FILE;
 }
 
 ################################################################
 sub set_config {
-  # TODO Option validation (trusting caller sends hash with valid options)
-  my %in_hash = @_;
+    my %in_hash = @_;
 
-  %VSCNF_FILE = %in_hash;
-}
+    # Validation
+    unless ( $in_hash{SERVER} ) {
+        croak(
+            "Please set machine name (SERVER) variable on the command line or in the configuration file.\n"
+        );
+    }
 
-################################################################
-sub get_credentials {
+    if ( $in_hash{BACKEND} ne "sqlite" && !( $in_hash{LOGIN} ) ) {
+        croak(
+            "Please set  mysql login (LOGIN) variable on the command line or in the configuration file.\n"
+        );
+    }
 
- my $LOGIN = "";
- my $PASS = "";
- my $HOST = "";
+    if ( $in_hash{BACKEND} ne "sqlite" && !( $in_hash{PASS} ) ) {
+        croak(
+            "Please set mysql pass (PASS) variable on the command line or in the configuration file.\n"
+        );
+    }
 
- my $argc = @_;
- if ($argc <1) { die "get_credentials: expects 1 parameters, passed $argc !\n"; }
+    if ( $in_hash{BACKEND} ne "sqlite" && !( $in_hash{HOST} ) ) {
+        croak(
+            "Please set mysql host (HOST) variable on the command line or in the configuration file.\n"
+        );
+    }
 
- my $startdir = $_[0];
+    if ( $in_hash{NPROCESSES} <= 0 ) {
+        croak(
+            "Please set number of processes to be used by the pipeline (NPROCESSES) variable on the command line or in the configuration file.\n "
+        );
+    }
 
- if (!$VSREAD) { read_config_file($startdir . "vs.cnf"); }
- 
- if (defined $VSCNF_FILE{"LOGIN"}) { $LOGIN = $VSCNF_FILE{"LOGIN"}; } 
- if (defined $VSCNF_FILE{"PASS"})  { $PASS = $VSCNF_FILE{"PASS"}; } 
- if (defined $VSCNF_FILE{"HOST"})  { $HOST = $VSCNF_FILE{"HOST"}; } 
- 
- return ($LOGIN, $PASS, $HOST);
+    if ( $in_hash{MIN_FLANK_REQUIRED} <= 0 ) {
+        croak(
+            "Please set min flank required to be used by the pipeline (MIN_FLANK_REQUIRED) variable on the command line or in the configuration file.\n"
+        );
+    }
+
+    if ( $in_hash{MAX_FLANK_CONSIDERED} <= 0 ) {
+        croak(
+            "Please set max flank required to be used by the pipeline (MAX_FLANK_CONSIDERED) variable on the command line or in the configuration file.\n"
+        );
+    }
+
+    if ( $in_hash{MIN_SUPPORT_REQUIRED} <= 0 ) {
+        croak(
+            "Please set min support required to be used by the pipeline (MIN_SUPPORT_REQUIRED) variable on the command line or in the configuration file.\n"
+        );
+    }
+
+    if ( $in_hash{STRIP_454_KEYTAGS} < 0 ) {
+        croak(
+            "Please set strip_454_keytags (strip_454_keytags) variable on the command line or in the configuration file.\n"
+        );
+    }
+
+    if ( $in_hash{REFERENCE_INDIST_PRODUCE} < 0 ) {
+        croak(
+            "Please set reference_indist_produce to be used by the pipeline (reference_indist_produce) variable on the command line or in the configuration file.\n"
+        );
+    }
+
+    if ( $in_hash{IS_PAIRED_READS} < 0 ) {
+        croak(
+            "Please set is_paired_reads (is_paired_reads) variable on the command line or in the configuration file.\n"
+        );
+    }
+
+    if ( $in_hash{REFS_TOTAL} < 0 ) {
+        croak(
+            "Please set refs total (REFS_TOTAL) variable on the command line or in the configuration file.\n"
+        );
+    }
+
+    if ( "" eq $in_hash{HTML_DIR} ) {
+        croak(
+            "Please set html directory (html_dir) variable on the command line or in the configuration file. ($in_hash{HTML_DIR})\n"
+        );
+    }
+    if ( !( -e $in_hash{HTML_DIR} ) && !mkdir("$in_hash{HTML_DIR}") ) {
+        croak("Could not create html_dir directory ($in_hash{HTML_DIR}).\n");
+    }
+
+    unless ( exists $in_hash{FASTA_DIR} && $in_hash{FASTA_DIR} ) {
+        croak(
+            "Please set fasta directory (fasta_dir) variable on the command line or in the configuration file.\n"
+        );
+    }
+
+    if ( "" eq $in_hash{OUTPUT_ROOT} ) {
+        croak(
+            "Please set output directory (output_root) variable on the command line or in the configuration file.\n"
+        );
+    }
+
+    if ( "" eq $in_hash{REFERENCE_FILE} ) {
+        croak(
+            "Please set reference .leb36 file (reference_file) variable on the command line or in the configuration file.\n"
+        );
+    }
+
+    if ( "" eq $in_hash{REFERENCE_SEQ} ) {
+        croak(
+            "Please set reference .seq file (reference_seq) variable on the command line or in the configuration file.\n"
+        );
+    }
+
+    if ( "" eq $in_hash{REFERENCE_INDIST} ) {
+        croak(
+            "Please set reference .indist file (reference_indist) variable on the command line or in the configuration file.\n"
+        );
+    }
+
+    if ( "" eq $in_hash{TMPDIR} ) {
+        croak(
+            "Please set temporary directory (TMPDIR) variable on the command line or in the configuration file.\n"
+        );
+    }
+
+    unless ( -e $in_hash{REFERENCE_FILE} ) {
+        die("File '$in_hash{REFERENCE_FILE}' not found!");
+    }
+    unless ( -e $in_hash{REFERENCE_SEQ} ) {
+        die("File '$in_hash{REFERENCE_SEQ}' not found!");
+    }
+    if (   !( -e $in_hash{REFERENCE_INDIST} )
+        && !$in_hash{REFERENCE_INDIST_PRODUCE} )
+    {
+        die("File '$in_hash{REFERENCE_INDIST}' not found!");
+    }
+    unless ( -e $in_hash{FASTA_DIR} ) {
+        die("Directory '$in_hash{FASTA_DIR}' not found!");
+    }
+    if ( !-e $in_hash{OUTPUT_ROOT} && !mkdir( $in_hash{OUTPUT_ROOT} ) ) {
+        die("Error creating output root ($in_hash{OUTPUT_ROOT}). Please check the path or manually create this directory and try again."
+        );
+    }
+    unless ( -e $in_hash{OUTPUT_ROOT} ) {
+        die("Directory '$in_hash{OUTPUT_ROOT}' not found!");
+    }
+    unless ( -e $in_hash{TMPDIR} ) {
+        die("Temporary directory '$in_hash{TMPDIR}' not found!");
+    }
+    unless ( -x $in_hash{HTML_DIR} ) {
+        die("Directory '$in_hash{HTML_DIR}' not executable!");
+    }
+    unless ( -x $in_hash{OUTPUT_ROOT} ) {
+        die("Directory '$in_hash{OUTPUT_ROOT}' not executable!");
+    }
+    unless ( -x $in_hash{TMPDIR} ) {
+        die("Directory '$in_hash{TMPDIR}' not executable!");
+    }
+
+    unless ( -w $in_hash{HTML_DIR} ) {
+        die("Directory '$in_hash{HTML_DIR}' not writable!");
+    }
+    unless ( -w $in_hash{OUTPUT_ROOT} ) {
+        die("Directory '$in_hash{OUTPUT_ROOT}' not writable!");
+    }
+    unless ( -w $in_hash{TMPDIR} ) {
+        die("Directory '$in_hash{TMPDIR}' not writable!");
+    }
+
+    %VSCNF_FILE = %in_hash;
+    $VSREAD     = 1;
 }
 
 ################################################################
 sub set_credentials {
 
- my $argc = @_;
- if ($argc <3) { die "set_credentials: expects 3 parameters, passed $argc !\n"; }
+    my $argc = @_;
+    if ( $argc < 3 ) {
+        die "set_credentials: expects 3 parameters, passed $argc !\n";
+    }
 
- $VSCNF_FILE{"LOGIN"}=$_[0]; 
- $VSCNF_FILE{"PASS"}=$_[1]; 
- $VSCNF_FILE{"HOST"}=$_[2]; 
-}
-
-################################################################
-
-sub stats_set {
-
- my $argc = @_;
- if ($argc <6) { die "stats_set: expects 6 parameters, passed $argc !\n"; }
-
- my $DBNAME = $_[0];
- my $LOGIN = $_[1];
- my $PASS = $_[2];
- my $HOST = $_[3];
- my $NAME = $_[4];
- my $VALUE = $_[5];
-
- my $dbh = get_dbh($DBNAME, $ENV{HOME} . "/". $VSCNF_FILE{DBSUFFIX} . ".vs.cnf");
-
- my $sth = $dbh->prepare("UPDATE stats SET $NAME=?")
-                or die "Couldn't prepare statement: " . $dbh->errstr;
-
- $sth->execute($VALUE)             # Execute the query
-            or die "Couldn't execute statement: " . $sth->errstr;
-
- $sth->finish;
- $dbh->disconnect();
-
- return 0;
+    $VSCNF_FILE{"LOGIN"} = $_[0];
+    $VSCNF_FILE{"PASS"}  = $_[1];
+    $VSCNF_FILE{"HOST"}  = $_[2];
 }
 
 ####################################
 sub set_statistics {
 
-  my $argc = @_;
-  if ( $argc < 2 ) {
-      die "set_statistics: expects at least 2 parameters, passed $argc !\n";
-  }
-
-  my $DBSUFFIX = shift;
-  my %stats = @_;
-  my $dbh = get_dbh($DBSUFFIX, $ENV{HOME} . "/". $DBSUFFIX . ".vs.cnf");
-  my ($sql_clause, @sql_qual, @sql_bind);
-  if ($ENV{DEBUG}) {
-    warn Dumper(\%stats) . "\n";
-  }
-
-  while (my ($key, $val) = each %stats){
-    if ($ENV{DEBUG}) {
-      warn "Setting stat: $key to $val\n";
+    my $argc = @_;
+    if ( $argc < 2 ) {
+        die "set_statistics: expects at least 2 parameters, passed $argc !\n";
     }
-    push @sql_qual, "$key=?";
-    push @sql_bind, $val;
-  }
 
-  $sql_clause = join ",", @sql_qual;
-  my $sth = $dbh->prepare("UPDATE stats SET $sql_clause")
-    or croak "Couldn't prepare statement: " . $dbh->errstr;
+    my %stats = @_;
+    my $dbh   = get_dbh( $VSCNF_FILE{DBSUFFIX},
+        $ENV{HOME} . "/" . $VSCNF_FILE{DBSUFFIX} . ".vs.cnf" );
+    my ( $sql_clause, @sql_qual, @sql_bind );
+    if ( $ENV{DEBUG} ) {
+        warn Dumper( \%stats ) . "\n";
+    }
 
-  $sth->execute(@sql_bind)             # Execute the query
-    or croak "Couldn't execute statement: " . $sth->errstr;
+    while ( my ( $key, $val ) = each %stats ) {
+        if ( $ENV{DEBUG} ) {
+            warn "Setting stat: $key to $val\n";
+        }
+        push @sql_qual, "$key=?";
+        push @sql_bind, $val;
+    }
 
-  $dbh->disconnect();
+    $sql_clause = join ",", @sql_qual;
+    my $sth = $dbh->prepare("UPDATE stats SET $sql_clause")
+        or croak "Couldn't prepare statement: " . $dbh->errstr;
+
+    $sth->execute(@sql_bind)    # Execute the query
+        or croak "Couldn't execute statement: " . $sth->errstr;
+
+    $dbh->disconnect();
 }
 
 ################################################################
 
 sub set_datetime {
 
-  my $argc = @_;
-  if ( $argc < 2 ) {
-      die "set_datetime: expects 2 parameter, passed $argc !\n";
-  }
+    my $argc = @_;
+    if ( $argc < 1 ) {
+        die "set_datetime: expects 1 parameter, passed $argc !\n";
+    }
 
-  my $DBSUFFIX = shift;
-  my $NAME = shift;
-  my $VALUE = strftime( "%F %T", localtime );
+    my $NAME = shift;
+    my $VALUE = strftime( "%F %T", localtime );
 
-  return set_statistics( $DBSUFFIX, $NAME, $VALUE );
+    return set_statistics( $NAME, $VALUE );
 }
 
 ####################################
 sub get_statistics {
 
-  my $argc = @_;
-  if ( $argc < 2 ) {
-      die "get_statistics: expects at least 2 parameters, passed $argc !\n";
-  }
+    my $argc = @_;
+    if ( $argc < 2 ) {
+        die "get_statistics: expects at least 2 parameters, passed $argc !\n";
+    }
 
-  my $DBSUFFIX = shift;
-  my @stats = @_;
-  my $dbh = get_dbh($DBSUFFIX, $ENV{HOME} . "/". $DBSUFFIX . ".vs.cnf");
-  my $sql_clause;
-  if ($ENV{DEBUG}) {
-    warn Dumper(\@stats) . "\n";
-  }
+    my $DBSUFFIX = shift;
+    my @stats    = @_;
+    my $dbh = get_dbh( $DBSUFFIX, $ENV{HOME} . "/" . $DBSUFFIX . ".vs.cnf" );
+    my $sql_clause;
+    if ( $ENV{DEBUG} ) {
+        warn Dumper( \@stats ) . "\n";
+    }
 
-  $sql_clause = join ", ", @stats;
-  if ($ENV{DEBUG}) {
-    warn "Setting stats: " . $sql_clause . "\n";
-  }
+    $sql_clause = join ", ", @stats;
+    if ( $ENV{DEBUG} ) {
+        warn "Setting stats: " . $sql_clause . "\n";
+    }
 
-  my $sql_res = $dbh->selectrow_hashref("SELECT $sql_clause FROM stats")
-    or croak "Couldn't execute statement: " . $dbh->errstr;
+    my $sql_res = $dbh->selectrow_hashref("SELECT $sql_clause FROM stats")
+        or croak "Couldn't execute statement: " . $dbh->errstr;
 
-  $dbh->disconnect();
-  return $sql_res;
+    $dbh->disconnect();
+    return $sql_res;
 }
 
 ################################################################
 
 sub stats_get {
 
- my $argc = @_;
- if ($argc <5) { die "stats_set: expects 5 parameters, passed $argc !\n"; }
+    my $argc = @_;
+    if ( $argc < 5 ) {
+        die "stats_set: expects 5 parameters, passed $argc !\n";
+    }
 
- my $DBSUFFIX = $_[0];
- my $LOGIN = $_[1];
- my $PASS = $_[2];
- my $HOST = $_[3];
- my $NAME = $_[4];
- my $VALUE = undef;
+    my $DBSUFFIX = $_[0];
+    my $LOGIN    = $_[1];
+    my $PASS     = $_[2];
+    my $HOST     = $_[3];
+    my $NAME     = $_[4];
+    my $VALUE    = undef;
 
- my $dbh = get_dbh($DBSUFFIX, $ENV{HOME} . "/". $DBSUFFIX . ".vs.cnf"); 
+    my $dbh = get_dbh( $DBSUFFIX, $ENV{HOME} . "/" . $DBSUFFIX . ".vs.cnf" );
 
- # check if database exists first, return undef if not
- unless ($dbh) {
-  return undef;
- }
+    # check if database exists first, return undef if not
+    unless ($dbh) {
+        return undef;
+    }
 
- # get the namve/value pair
- my $sth = $dbh->prepare("SELECT $NAME FROM stats;")
-                or die "Couldn't prepare statement: " . $dbh->errstr;
+    # get the namve/value pair
+    my $sth = $dbh->prepare("SELECT $NAME FROM stats;")
+        or die "Couldn't prepare statement: " . $dbh->errstr;
 
- $sth->execute()             # Execute the query
-            or die "Couldn't execute statement: " . $sth->errstr;
+    $sth->execute()    # Execute the query
+        or die "Couldn't execute statement: " . $sth->errstr;
 
- my @data = $sth->fetchrow_array();
+    my @data = $sth->fetchrow_array();
 
- unless (@data) {
-            print STDERR "No field in database  stats.`$NAME'. Aborting!\n\n";
-            exit(1);
-  }
+    unless (@data) {
+        print STDERR "No field in database  stats.`$NAME'. Aborting!\n\n";
+        exit(1);
+    }
 
- $VALUE = $data[0];
- $sth->finish;
+    $VALUE = $data[0];
+    $sth->finish;
 
- if (!defined $VALUE) { $VALUE=""; }
- if ($ENV{DEBUG}) {
-  warn "$NAME stat is $VALUE\n";
- }
+    if ( !defined $VALUE ) { $VALUE = ""; }
+    if ( $ENV{DEBUG} ) {
+        warn "$NAME stat is $VALUE\n";
+    }
 
- $dbh->disconnect();
+    $dbh->disconnect();
 
- return $VALUE;
+    return $VALUE;
 }
-
 
 ################################################################
 
 sub get_dbh {
-  unless (@_ == 2) {
-    carp "get_dbh requires 2 parameters: database suffix and the config file location.";
-    return undef;
-  }
-
-  my ($dbsuffix, $config_loc) = @_;
-  read_config_file($config_loc)
-    unless ($VSREAD);
-
-  my $dbh;
-  if ($VSCNF_FILE{BACKEND} eq "sqlite") {
-    my $dbfile = "$VSCNF_FILE{OUTPUT_ROOT}/vntr_$dbsuffix/$dbsuffix.db";
-    if ($ENV{DEBUG}) {
-      warn "Using SQLite db at: $dbfile\n";
+    unless ($VSREAD) {
+        carp
+            "Error: must call `get_config(dbsuffix, config_loc)` before this function.\n";
     }
-    $dbh = DBI->connect("DBI:SQLite:dbname=$dbfile", undef, undef, {
-      AutoCommit => 1,
-      RaiseError => 1,
-      sqlite_see_if_its_a_number => 1,
-    })
-    or croak "Could not connect to database: $DBI::errstr";
-    # 800MB cache
-    $dbh->do("PRAGMA cache_size = 800000");
-  }
-  else {
-    $dbh = DBI->connect( "DBI:mysql:VNTRPIPE_$dbsuffix;mysql_local_infile=1;host=$VSCNF_FILE{HOST}",
-    "$VSCNF_FILE{LOGIN}", "$VSCNF_FILE{PASS}", {
-      AutoCommit => 1,
-      RaiseError => 1,
-      mysql_server_prepare => 1
-    } )
-      or croak "Could not connect to database: $DBI::errstr";
-  }
 
-  return $dbh;
+    # Might use in the future, connection options
+    my %opts = @_;
+
+    my $dbh;
+    if ( $VSCNF_FILE{BACKEND} eq "sqlite" ) {
+        my $dbfile
+            = "$VSCNF_FILE{OUTPUT_ROOT}/vntr_$VSCNF_FILE{DBSUFFIX}/$VSCNF_FILE{DBSUFFIX}.db";
+
+# First we check if the reference sequences DB has been initialized yet, and if not,
+# set it up. Then continue with grabbing the main DB, and attach the refseq db
+# to the connection.
+# REDO_REFDB option not yet implemented
+        my $redo = exists $VSCNF_FILE{REDO_REFDB};
+        make_refseq_db( $VSCNF_FILE{REFERENCE_SEQ}, $redo );
+
+# TODO First connect to a temp location, backup database to that location
+# then return handle to that location. This is primarily for running on clusters.
+        $dbh = DBI->connect(
+            "DBI:SQLite:dbname=$dbfile",
+            undef, undef,
+            {   AutoCommit                 => 1,
+                RaiseError                 => 1,
+                sqlite_see_if_its_a_number => 1,
+            }
+        ) or croak "Could not connect to database: $DBI::errstr";
+
+        # 800MB cache
+        $dbh->do("PRAGMA cache_size = 800000");
+
+        # Attach reference set database
+        my $refdbfile = $VSCNF_FILE{REFERENCE_SEQ} =~ s/.seq$/.db/r;
+        if ( $ENV{DEBUG} ) {
+            warn "Attaching refseq db at $refdbfile\n";
+        }
+        $dbh->do(qq{ATTACH DATABASE "$refdbfile" AS refdb})
+            or croak "Could not attach refseq db: $DBI::errstr";
+    }
+    else {
+        $dbh = DBI->connect(
+            "DBI:mysql:VNTRPIPE_$VSCNF_FILE{DBSUFFIX};mysql_local_infile=1;host=$VSCNF_FILE{HOST}",
+            "$VSCNF_FILE{LOGIN}",
+            "$VSCNF_FILE{PASS}",
+            {   AutoCommit           => 1,
+                RaiseError           => 1,
+                mysql_server_prepare => 1
+            }
+        ) or croak "Could not connect to database: $DBI::errstr";
+    }
+
+    return $dbh;
+}
+
+####################################
+sub make_refseq_db {
+
+    # TODO DBI error checking
+    my $reffile   = shift;
+    my $redo      = shift;
+    my $refdbfile = $reffile =~ s/.(seq|leb36)$/.db/r;
+    my $dbh       = DBI->connect(
+        "DBI:SQLite:dbname=$refdbfile",
+        undef, undef,
+        {   AutoCommit                 => 1,
+            RaiseError                 => 1,
+            sqlite_see_if_its_a_number => 1,
+        }
+    ) or die "Could not connect to database: $DBI::errstr";
+
+    if ( $ENV{DEBUG} ) {
+        warn "Connecting to SQLite db at $refdbfile\n";
+    }
+
+    # Create the table in this new db.
+    my $create_fasta_ref_reps_q = q{CREATE TABLE IF NOT EXISTS `fasta_ref_reps` (
+    `rid` integer NOT NULL,
+    `firstindex` integer NOT NULL,
+    `lastindex` integer NOT NULL,
+    `copynum` float NOT NULL,
+    `head` varchar(100) DEFAULT NULL,
+    `flankleft` text COLLATE BINARY,
+    `pattern` text NOT NULL,
+    `sequence` text NOT NULL,
+    `flankright` text COLLATE BINARY,
+    `conserved` float DEFAULT NULL,
+    `comment` varchar(500) DEFAULT NULL,
+    `is_singleton` integer NOT NULL DEFAULT '0',
+    `is_dist` integer NOT NULL DEFAULT '0',
+    `is_indist` integer NOT NULL DEFAULT '0',
+    PRIMARY KEY (`rid`),
+    UNIQUE (`rid`,`comment`))};
+    my $fasta_ref_reps_index_q = q{CREATE INDEX IF NOT EXISTS
+        "idx_fasta_ref_reps_head" ON "fasta_ref_reps" (`head`)};
+    $dbh->do($create_fasta_ref_reps_q);
+    $dbh->do($fasta_ref_reps_index_q);
+
+    # If the table does not exist, or we are forcing a redo, load
+    # the profiles into the db.
+    my ($num_rows)
+        = $dbh->selectrow_array(q{SELECT COUNT(*) FROM fasta_ref_reps});
+
+    if ( $num_rows == 0 || defined $redo ) {
+        warn "Creating reference sequence database...\n";
+        $dbh->do(q{DROP TABLE fasta_ref_reps});
+        $dbh->do($create_fasta_ref_reps_q);
+        $dbh->do($fasta_ref_reps_index_q);
+
+        # Read in ref file and create a virtual table out of it
+        $dbh->sqlite_create_module(
+            perl => "DBD::SQLite::VirtualTable::PerlData" );
+
+        our $seq_rows = [];
+
+        # my $installdir = "$FindBin::RealBin";
+        open my $refset, "<", $refdbfile =~ s/.db$/.seq/r
+            or croak "Error opening reference sequences file: $!\n";
+
+        $dbh->begin_work;
+
+        # Skip header
+        <$refset>;
+
+        # Insert all ref TRs from refset file
+        while ( my $r = <$refset> ) {
+            chomp $r;
+            my @fields = split /,/, $r;
+            push @$seq_rows, \@fields;
+        }
+
+        if ( $ENV{DEBUG} ) {
+            warn "Read " . scalar(@$seq_rows) . " lines from refseq file\n";
+        }
+
+        close $refset;
+
+        # Create a virtual tables for the inputs
+        $dbh->do(
+            q{CREATE VIRTUAL TABLE temp.seqtab
+            USING perl(rid integer,
+                firstindex integer,
+                lastindex integer,
+                copynum float,
+                head varchar(100),
+                flankleft text,
+                pattern text,
+                sequence text,
+                flankright text,
+                conserved float,
+            arrayrefs="vutil::seq_rows")}
+        );
+
+        my $cols = join(
+            ",", qw(rid
+                firstindex
+                lastindex
+                copynum
+                head
+                flankleft
+                pattern
+                sequence
+                flankright
+                conserved)
+        );
+
+        my $num_rows = $dbh->do(
+            qq{INSERT INTO fasta_ref_reps ($cols)
+            SELECT * FROM temp.seqtab}
+        );
+
+        if ( $num_rows != @$seq_rows ) {
+            $dbh->rollback;
+            $dbh->disconnect;
+
+            # unlink($refdbfile);
+            croak
+                "Error inserting reference sequences into $refdbfile: inserted $num_rows but read "
+                . scalar(@$seq_rows)
+                . " lines from file. Aborting...";
+        }
+
+        $dbh->commit;
+    }
+    $dbh->disconnect;
 }
 
 ####################################
 sub get_trunc_query {
     die "Error: need table name for truncate query\n"
         unless @_ == 2;
-    my ($backend, $table) = @_;
+    my ( $backend, $table ) = @_;
     my $trunc_query;
     if ( $backend eq "sqlite" ) {
         $trunc_query = qq{DELETE FROM $table};
@@ -356,54 +620,314 @@ sub get_trunc_query {
 }
 
 ################################################################
+# Use this to load reference set db with profiles (leb36 file)
+sub load_profiles_if_not_exists {
+    my ( $prof_file, $redo ) = @_;
+    my $dbfile = $prof_file =~ s/.(seq|leb36)$/.db/r;
+    my $dbh    = DBI->connect(
+        "DBI:SQLite:dbname=$dbfile",
+        undef, undef,
+        {   AutoCommit                 => 1,
+            RaiseError                 => 1,
+            sqlite_see_if_its_a_number => 1,
+        }
+    ) or die "Could not connect to database: $DBI::errstr";
 
+    # By default, set redund flag to 1 so we can set
+    # non-redundant trs to 0 later;
+    my $create_ref_profiles_q = q{CREATE TABLE IF NOT EXISTS `ref_profiles` (
+    `rid` integer NOT NULL,
+    `proflen` integer NOT NULL,
+    `proflenrc` integer NOT NULL,
+    `profile` text NOT NULL,
+    `profilerc` text NOT NULL,
+    `nA` integer NOT NULL,
+    `nC` integer NOT NULL,
+    `nG` integer NOT NULL,
+    `nT` integer NOT NULL,
+    `redund` integer NOT NULL default 1,
+    `minrepidx` integer default 0,
+    PRIMARY KEY (`rid`))};
+    $dbh->do($create_ref_profiles_q);
+
+    # If the table does not exist, or we are forcing a redo, load
+    # the profiles into the db.
+    my ($num_rows)
+        = $dbh->selectrow_array(q{SELECT COUNT(*) FROM ref_profiles});
+    if ( $num_rows == 0 || defined $redo ) {
+        $dbh->begin_work();
+        $dbh->do(q{DROP TABLE `ref_profiles`});
+        $dbh->do($create_ref_profiles_q);
+
+        # Read in ref leb36 file and create a virtual table out of it
+        $dbh->sqlite_create_module(
+            perl => "DBD::SQLite::VirtualTable::PerlData" );
+
+        our $leb36_rows = [];
+        open my $refleb36, "<", "$prof_file"
+            or die "Error opening reference profiles file: $!\n";
+
+        while ( my $r = <$refleb36> ) {
+            chomp $r;
+            my @fields = split /\s+/, $r;
+            push @$leb36_rows, [ @fields[ 0, 3 .. 11 ] ];
+        }
+
+        if ( $ENV{DEBUG} ) {
+            warn "Read " . scalar(@$leb36_rows) . " lines from refleb file\n";
+        }
+
+        close $refleb36;
+
+        $dbh->do(
+            q{CREATE VIRTUAL TABLE temp.leb36tab
+            USING perl(rid integer,
+                proflen integer,
+                proflenrc integer,
+                profile text,
+                profilerc text,
+                nA integer,
+                nC integer,
+                nG integer,
+                nT integer,
+            arrayrefs="vutil::leb36_rows")}
+        );
+
+        my $cols = join(
+            ",", qw(rid
+                proflen
+                proflenrc
+                profile
+                profilerc
+                nA
+                nC
+                nG
+                nT)
+        );
+
+        # Insert all ref TRs from refleb36 file
+        my $num_rows = $dbh->do(
+            qq{INSERT INTO ref_profiles ($cols)
+            SELECT * FROM temp.leb36tab}
+        );
+
+        if ( $num_rows != @$leb36_rows ) {
+            $dbh->rollback;
+            $dbh->disconnect;
+            die
+                "Error inserting reference profiles into database: inserted $num_rows but read "
+                . scalar(@$leb36_rows)
+                . " lines from file. Aborting...";
+        }
+
+        $dbh->do(q{DROP TABLE temp.leb36tab});
+        $dbh->commit;
+        $dbh->disconnect;
+        return 1;
+    }
+
+    $dbh->disconnect;
+    return 0;
+}
+
+################################################################
+##############################
+# Use database to produce the profiles needed to run redund.exe
+# and update database on redundant TRs.
+sub run_redund {
+
+    # First, create a temporary directory and copy the filtered set there
+    my $tmpdir      = File::Temp->newdir();
+    my $tmpdir_name = $tmpdir->dirname;
+    my ( $input_refset, $output_basename, $keep_files ) = @_;
+    my $dbfile = $input_refset =~ s/.(seq|leb36)$/.db/r;
+
+    # # Add - sign if negating for ref set and set new input to same
+    # # file path as the final output
+    # if ($use_as_ref) {
+    #     my $cmd = q(awk '{print "-"$0}')
+    #         . qq{ $input_refset > $tmpdir_name/$output_basename};
+
+    #     # warn "awk command: $cmd\n";
+    #     system($cmd);
+    #     $input_refset = "$tmpdir_name/$output_basename";
+
+    #     # warn "New input: $input_refset\n";
+    # }
+
+    #=<<Run redund.exe on the input leb36 files.>>
+    # First run sorts by minimum representation
+    my $tmp_file = File::Temp->new( SUFFIX => ".leb36", DIR => $tmpdir_name );
+    my $installdir = "$FindBin::RealBin";
+    system("$installdir/redund.exe $input_refset $tmp_file -s -i");
+    if ( $? == -1 ) { die "command failed: $!\n"; }
+    else {
+        my $rc = ( $? >> 8 );
+        if ( 0 != $rc ) { die "command exited with value $rc"; }
+    }
+
+    # Second run eliminates redundancies
+    system(
+        "$installdir/redund.exe $tmp_file $tmpdir_name/$output_basename -n -i"
+    );
+    if ( $? == -1 ) { die "command failed: $!\n"; }
+    else {
+        my $rc = ( $? >> 8 );
+        if ( 0 != $rc ) { die "command exited with value $rc"; }
+    }
+
+    #=<<Mark all TRs in file as non-redundant>>
+    my $rotindex_fn = "$tmpdir_name/$output_basename.rotindex";
+    open my $set_fh, "<", $rotindex_fn;
+
+    my @unique_trs;
+    while ( my $entry = <$set_fh> ) {
+        $entry =~ /(\d+)['"]/;
+        my $trid = $1;
+        push @unique_trs, $trid;
+    }
+    close $set_fh;
+
+    # warn Dumper($unique_trs) ."\n";
+
+    warn "Marking non-redundant TRs in database.\n";
+    my $dbh = DBI->connect(
+        "DBI:SQLite:dbname=$dbfile",
+        undef, undef,
+        {   AutoCommit                 => 1,
+            RaiseError                 => 1,
+            sqlite_see_if_its_a_number => 1,
+        }
+    ) or die "Could not connect to database: $DBI::errstr";
+    $dbh->begin_work();
+    $dbh->do(
+        q{CREATE TEMPORARY TABLE temp.unique_trs
+        (`rid` integer PRIMARY KEY)}
+    ) or die "Couldn't do statement: " . $dbh->errstr;
+
+    my $insert_sth
+        = $dbh->prepare(q{INSERT INTO temp.unique_trs (rid) VALUES (?)});
+    for my $rid (@unique_trs) {
+        $insert_sth->execute($rid);
+    }
+
+    # Update the ref_profiles table
+    my $update_redund = q{UPDATE ref_profiles SET redund=0
+        WHERE EXISTS (
+        SELECT rid FROM temp.unique_trs t2
+        WHERE ref_profiles.rid = t2.rid
+    )};
+    my $unique_tr_count = $dbh->do($update_redund)
+        or die "Couldn't do statement: " . $dbh->errstr;
+    $dbh->commit;
+
+    $dbh->do(
+        q{CREATE TABLE IF NOT EXISTS `files` (
+        `rotindex` BLOB
+        )}
+    );
+
+    #=<<Set minimum representation>>
+    # Attach database created by redund.exe
+    warn "Getting sort order of TRs by minimum representation.\n";
+    my $minreporder_db = "$tmp_file.db";
+    $dbh->do(qq{ATTACH DATABASE "$minreporder_db" AS minrep})
+        or carp "Couldn't do statement: $DBI::errstr\n";
+    if ( $ENV{DEBUG} ) {
+        warn "Connecting to SQLite db at $minreporder_db\n";
+    }
+    # print "Press enter to continue...";
+    # my $dummy = <STDIN>;
+
+    $dbh->begin_work();
+    # Copy the CREATE TABLE query for the minreporder table
+    # and create the same table in the ref set db, copying
+    # over the data
+    my ($minrep_sql) = $dbh->selectrow_array(q{SELECT sql FROM minrep.sqlite_master
+        WHERE name = 'minreporder'})
+        or carp "Couldn't do statement: $DBI::errstr\n";
+    $minrep_sql =~ s/minreporder/main.minreporder/;
+    $dbh->do($minrep_sql)
+        or carp "Couldn't do statement: $DBI::errstr\n";
+    $dbh->do(
+        q{INSERT INTO main.minreporder
+            SELECT * FROM minrep.minreporder}
+    ) or carp "Couldn't do statement: $DBI::errstr\n";
+    $dbh->commit;
+    $dbh->do(qq{DETACH minrep})
+        or carp "Couldn't do statement: $DBI::errstr\n";
+
+    # Save the rotindex file
+    warn "Saving rotindex (redundancy index) into database\n";
+    my $rotindex;
+    {
+        local $/;
+        open my $fh, '<', $rotindex_fn or die "can't open $rotindex_fn: $!";
+        $rotindex = <$fh>;
+        close $fh;
+    }
+    my $load_rotindex_sth
+        = $dbh->prepare(qq{INSERT INTO files (rotindex) VALUES (?)})
+        or die "Couldn't do statement: $DBI::errstr";
+    $load_rotindex_sth->bind_param( 1, $rotindex, DBI::SQL_BLOB );
+    $load_rotindex_sth->execute;
+
+    warn "$unique_tr_count unique TRs in filtered set\n";
+    $dbh->disconnect;
+
+    if ($keep_files) {
+        return({TMPDIR => $tmpdir, TMPFILE => $tmp_file});
+    }
+}
+
+################################################################
 sub write_sqlite {
-  unless (@_ == 3) {
-    carp "write_sqlite requires 3 parameters: database suffix, the run output directory, and the path to the run configuration file.";
-    return undef;
-  }
+    unless ($VSREAD) {
+        carp
+            "Error: must call `get_config(dbsuffix, config_loc)` before this function.\n";
+    }
 
-  my ($dbsuffix, $output_dir, $config_loc) = @_;
-  my $installdir = "$FindBin::RealBin";
-  my $exestring = "sqlite3 $output_dir/vntr_$dbsuffix/$dbsuffix.db < $installdir/sqlite_schema.sql";
-  warn "Executing: $exestring\n";
-  system($exestring);
-  # read_config_file($config_loc)
-  #   unless ($VSREAD);
-  # open my $schema_fh, "<", "$installdir/sqlite_schema.sql"
-  #   or croak "Error opening SQLite schema file '$installdir/sqlite_schema.sql': $?";
-  # my $sqlite_schema;
-  # while (<$schema_fh>) {
-  #   # chomp;
-  #   $sqlite_schema .= $_;
-  # }
-  # close $schema_fh;
+    my $installdir = "$FindBin::RealBin";
+    my $exestring
+        = "sqlite3 $VSCNF_FILE{OUTPUT_ROOT}/vntr_$VSCNF_FILE{DBSUFFIX}/$VSCNF_FILE{DBSUFFIX}.db < $installdir/sqlite_schema.sql";
+    warn "Executing: $exestring\n";
+    system($exestring);
 
-  # my $dbh = get_dbh($dbsuffix, $config_loc)
-  #   or croak "Could not connect to database: $DBI::errstr";
-  # $dbh->do($sqlite_schema)
-  #   or croak "Error creating tables in database: $DBI::errstr";
-  # $dbh->commit;
+# read_config_file($config_loc)
+#   unless ($VSREAD);
+# open my $schema_fh, "<", "$installdir/sqlite_schema.sql"
+#   or croak "Error opening SQLite schema file '$installdir/sqlite_schema.sql': $?";
+# my $sqlite_schema;
+# while (<$schema_fh>) {
+#   # chomp;
+#   $sqlite_schema .= $_;
+# }
+# close $schema_fh;
+
+    # my $dbh = get_dbh($dbsuffix, $config_loc)
+    #   or croak "Could not connect to database: $DBI::errstr";
+    # $dbh->do($sqlite_schema)
+    #   or croak "Error creating tables in database: $DBI::errstr";
+    # $dbh->commit;
 }
 
 ################################################################
 
 sub write_mysql {
+    unless ($VSREAD) {
+        carp
+            "Error: must call `get_config(dbsuffix, config_loc)` before this function.\n";
+    }
 
- my $argc = @_;
- if ($argc <2) { die "stats_set: expects 2 parameter, passed $argc !\n"; }
+    open my $sql_file, ">",
+        "$VSCNF_FILE{TMPDIR}/VNTRPIPE_$VSCNF_FILE{DBNAME}.sql"
+        or die $!;
 
- my $DBNAME = $_[0];
- my $TMP = $_[1];
+    print $sql_file
+        "CREATE database IF NOT EXISTS VNTRPIPE_$VSCNF_FILE{DBNAME};\n\n";
+    print $sql_file "USE VNTRPIPE_$VSCNF_FILE{DBNAME};\n\n";
 
-open FILE, ">$TMP/${DBNAME}.sql" or die $!;
-
-
-print FILE "CREATE database IF NOT EXISTS ${DBNAME};\n\n";
-print FILE "USE ${DBNAME};\n\n";
-
-
-print FILE <<TEST;
+    print $sql_file <<TEST;
 
 drop table IF EXISTS vntr_support;
 CREATE TABLE
@@ -699,47 +1223,73 @@ INSERT INTO stats (id) VALUES(1);
 
 TEST
 
+    close($sql_file);
 
- close(FILE);
-
- return 0;
+    return 0;
 }
 
 ################################################################
 
 sub print_config {
 
- my $argc = @_;
- if ($argc <1) { die "print_config: expects 1 parameters, passed $argc!\n"; }
+    my $argc = @_;
+    if ( $argc < 1 ) {
+        die "print_config: expects 1 parameters, passed $argc!\n";
+    }
 
- my $startdir = $_[0];
+    my $startdir = $_[0];
 
- if (!defined $VSCNF_FILE{"LOGIN"}) { $VSCNF_FILE{"LOGIN"}=""; } 
- if (!defined $VSCNF_FILE{"PASS"})  {  $VSCNF_FILE{"PASS"}=""; } 
- if (!defined $VSCNF_FILE{"HOST"})  {  $VSCNF_FILE{"HOST"}="localhost"; } 
- if (!defined $VSCNF_FILE{"NPROCESSES"})  {  $VSCNF_FILE{"NPROCESSES"}=-1; } 
- if (!defined $VSCNF_FILE{"MIN_FLANK_REQUIRED"})  {  $VSCNF_FILE{"MIN_FLANK_REQUIRED"}=-1; } 
- if (!defined $VSCNF_FILE{"MAX_FLANK_CONSIDERED"})  {  $VSCNF_FILE{"MAX_FLANK_CONSIDERED"}=-1; } 
- if (!defined $VSCNF_FILE{"MIN_SUPPORT_REQUIRED"})  {  $VSCNF_FILE{"MIN_SUPPORT_REQUIRED"}=-1; } 
+    if ( !defined $VSCNF_FILE{"LOGIN"} ) { $VSCNF_FILE{"LOGIN"} = ""; }
+    if ( !defined $VSCNF_FILE{"PASS"} )  { $VSCNF_FILE{"PASS"}  = ""; }
+    if ( !defined $VSCNF_FILE{"HOST"} ) { $VSCNF_FILE{"HOST"} = "localhost"; }
+    if ( !defined $VSCNF_FILE{"NPROCESSES"} ) {
+        $VSCNF_FILE{"NPROCESSES"} = -1;
+    }
+    if ( !defined $VSCNF_FILE{"MIN_FLANK_REQUIRED"} ) {
+        $VSCNF_FILE{"MIN_FLANK_REQUIRED"} = -1;
+    }
+    if ( !defined $VSCNF_FILE{"MAX_FLANK_CONSIDERED"} ) {
+        $VSCNF_FILE{"MAX_FLANK_CONSIDERED"} = -1;
+    }
+    if ( !defined $VSCNF_FILE{"MIN_SUPPORT_REQUIRED"} ) {
+        $VSCNF_FILE{"MIN_SUPPORT_REQUIRED"} = -1;
+    }
 
- if (!defined $VSCNF_FILE{"SERVER"})  {  $VSCNF_FILE{"SERVER"}=""; } 
- if (!defined $VSCNF_FILE{"STRIP_454_KEYTAGS"})  {  $VSCNF_FILE{"STRIP_454_KEYTAGS"}=-1; } 
- if (!defined $VSCNF_FILE{"IS_PAIRED_READS"})  {  $VSCNF_FILE{"IS_PAIRED_READS"}=-1; } 
- if (!defined $VSCNF_FILE{"HTML_DIR"})  {  $VSCNF_FILE{"HTML_DIR"}=""; } 
- if (!defined $VSCNF_FILE{"FASTA_DIR"})  {  $VSCNF_FILE{"FASTA_DIR"}=""; } 
- if (!defined $VSCNF_FILE{"OUTPUT_ROOT"})  {  $VSCNF_FILE{"OUTPUT_ROOT"}=""; } 
- if (!defined $VSCNF_FILE{"TMPDIR"})  {  $VSCNF_FILE{"TMPDIR"}=""; } 
- if (!defined $VSCNF_FILE{"REFERENCE_FILE"})  {  $VSCNF_FILE{"REFERENCE_FILE"}=""; } 
- if (!defined $VSCNF_FILE{"REFERENCE_SEQ"})  {  $VSCNF_FILE{"REFERENCE_SEQ"}=""; } 
- if (!defined $VSCNF_FILE{"REFERENCE_INDIST"})  {  $VSCNF_FILE{"REFERENCE_INDIST"}=""; } 
- if (!defined $VSCNF_FILE{"REFERENCE_INDIST_PRODUCE"})  {  $VSCNF_FILE{"REFERENCE_INDIST_PRODUCE"}=-1; } 
- if (!defined $VSCNF_FILE{"REFS_TOTAL"})  {  $VSCNF_FILE{"REFS_TOTAL"}=-1; } 
+    if ( !defined $VSCNF_FILE{"SERVER"} ) { $VSCNF_FILE{"SERVER"} = ""; }
+    if ( !defined $VSCNF_FILE{"STRIP_454_KEYTAGS"} ) {
+        $VSCNF_FILE{"STRIP_454_KEYTAGS"} = -1;
+    }
+    if ( !defined $VSCNF_FILE{"IS_PAIRED_READS"} ) {
+        $VSCNF_FILE{"IS_PAIRED_READS"} = -1;
+    }
+    if ( !defined $VSCNF_FILE{"HTML_DIR"} ) { $VSCNF_FILE{"HTML_DIR"} = ""; }
+    if ( !defined $VSCNF_FILE{"FASTA_DIR"} ) {
+        $VSCNF_FILE{"FASTA_DIR"} = "";
+    }
+    if ( !defined $VSCNF_FILE{"OUTPUT_ROOT"} ) {
+        $VSCNF_FILE{"OUTPUT_ROOT"} = "";
+    }
+    if ( !defined $VSCNF_FILE{"TMPDIR"} ) { $VSCNF_FILE{"TMPDIR"} = ""; }
+    if ( !defined $VSCNF_FILE{"REFERENCE_FILE"} ) {
+        $VSCNF_FILE{"REFERENCE_FILE"} = "";
+    }
+    if ( !defined $VSCNF_FILE{"REFERENCE_SEQ"} ) {
+        $VSCNF_FILE{"REFERENCE_SEQ"} = "";
+    }
+    if ( !defined $VSCNF_FILE{"REFERENCE_INDIST"} ) {
+        $VSCNF_FILE{"REFERENCE_INDIST"} = "";
+    }
+    if ( !defined $VSCNF_FILE{"REFERENCE_INDIST_PRODUCE"} ) {
+        $VSCNF_FILE{"REFERENCE_INDIST_PRODUCE"} = -1;
+    }
+    if ( !defined $VSCNF_FILE{"REFS_TOTAL"} ) {
+        $VSCNF_FILE{"REFS_TOTAL"} = -1;
+    }
 
+    # look in the directory the script was started in
+    if ( open( MFREAD, ">${startdir}vs.cnf" ) ) {
 
- # look in the directory the script was started in
- if (open(MFREAD,">${startdir}vs.cnf")) {
-
-print MFREAD <<CNF;
+        print MFREAD <<CNF;
 # COPY THIS FILE TO A DIFFERENT LOCATION AND SET ALL VARIABLES. 
 # DO NOT FORGET TO CHMOD THIS FILE TO PREVENT OTHER PEOPLE ON 
 # THE SYSTEM FROM LEARNING YOUR MYSQL CREDENTIALS.
@@ -833,24 +1383,19 @@ REFS_TOTAL=$VSCNF_FILE{"REFS_TOTAL"}
 
 CNF
 
-    close(MFREAD);
+        close(MFREAD);
 
-chmod 0600, "${startdir}vs.cnf";
+        chmod 0600, "${startdir}vs.cnf";
 
- } else {
+    }
+    else {
 
-   die "print_config: can't open '${startdir}vs.cnf' for writing!\n";
- }
+        die "print_config: can't open '${startdir}vs.cnf' for writing!\n";
+    }
 
 }
 
-
-
-
 ####################################################################################
 
-
-
 1;
-
 

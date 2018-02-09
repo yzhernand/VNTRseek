@@ -37,20 +37,12 @@ CREATE TABLE IF NOT EXISTS `fasta_reads` (
   `qual` varchar(8000) DEFAULT NULL,
   UNIQUE (`head`)
 );
+# sequence data moved to external db
 CREATE TABLE IF NOT EXISTS `fasta_ref_reps` (
   `rid` integer NOT NULL,
-  `firstindex` integer NOT NULL,
-  `lastindex` integer NOT NULL,
-  `copynum` float NOT NULL,
-  `head` varchar(100) DEFAULT NULL,
-  `flankleft` text COLLATE BINARY,
-  `pattern` text NOT NULL,
-  `sequence` text NOT NULL,
-  `flankright` text COLLATE BINARY,
-  `conserved` float DEFAULT NULL,
   `comment` varchar(500) DEFAULT NULL,
   `flank_disting` integer DEFAULT NULL,
-  `entropy` float NOT NULL,
+  `entropy` float NOT NULL DEFAULT '0',
   `has_support` integer DEFAULT NULL,
   `span1` integer DEFAULT NULL,
   `spanN` integer DEFAULT NULL,
@@ -228,7 +220,7 @@ CREATE TABLE IF NOT EXISTS `vntr_support` (
 CREATE INDEX IF NOT EXISTS "idx_map_read_index" ON "map" (`readid`);
 CREATE INDEX IF NOT EXISTS "idx_replnk_sid" ON "replnk" (`sid`);
 CREATE INDEX IF NOT EXISTS "idx_vntr_support_read_index" ON "vntr_support" (`representative`);
-CREATE INDEX IF NOT EXISTS "idx_fasta_ref_reps_head" ON "fasta_ref_reps" (`head`);
+--CREATE INDEX IF NOT EXISTS "idx_fasta_ref_reps_head" ON "fasta_ref_reps" (`head`);
 CREATE INDEX IF NOT EXISTS "idx_flank_connection_paramsetid" ON "flank_connection" (`paramsetid`);
 DELETE FROM stats;
 INSERT INTO stats DEFAULT VALUES;

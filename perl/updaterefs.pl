@@ -56,12 +56,6 @@ sub RC {
     return $seq;
 }
 
-my $STDBUFFER = "";
-
-close STDOUT;
-open( STDOUT, ">", \$STDBUFFER )
-    or die "Can't open STDOUT: $!";
-
 #open (VCFFILE2, ">", "${latex}.span2.vcf") or die "Can't open for reading ${latex}.vcf.";
 
 ####################################
@@ -188,84 +182,98 @@ sub print_vcf {
 
 # Get information on all VNTRs
 # "SELECT rid,alleles_sup,allele_sup_same_as_ref,is_singleton,is_dist,is_indist,firstindex,lastindex,copynum,pattern,clusterid,reserved,reserved2,head,sequence,flankleft,direction FROM fasta_ref_reps INNER JOIN clusterlnk ON fasta_ref_reps.rid=-clusterlnk.repeatid INNER JOIN clusters ON clusters.cid=clusterlnk.clusterid WHERE support_vntr>0 ORDER BY head, firstindex;"
-    my $get_trs_sth
-        = $dbh->prepare(
-        "SELECT rid,is_singleton,is_dist,firstindex,(lastindex - firstindex) + 1 AS arlen,copynum,pattern,head,sequence,flankleft,direction FROM fasta_ref_reps INNER JOIN clusterlnk ON fasta_ref_reps.rid=-clusterlnk.repeatid INNER JOIN clusters ON clusters.cid=clusterlnk.clusterid"
-            . ( ($allwithsupport) ? " " : " WHERE support_vntr>0 " )
-            . "ORDER BY head, firstindex;" )
-        or die "Couldn't prepare statement: " . $dbh->errstr;
-    $get_trs_sth->execute()
-        or die "Cannot execute: " . $get_trs_sth->errstr();
-    my ($rid,   $singleton,   $disting,     $pos1,
-        $arlen, $copiesfloat, $consenuspat, $head,
-        $seq,   $leftflank,   $refdir
+    my $allwithsupport_clause
+        = ( ($allwithsupport) ? "" : "WHERE support_vntr>0" );
+    my $get_supported_reftrs_query
+        = qq{SELECT fasta_ref_reps.rid, is_singleton, is_dist, firstindex,
+            (lastindex - firstindex) + 1 AS arlen, fasta_ref_reps.copynum, fasta_ref_reps.pattern, fasta_ref_reps.head,
+            sequence, c1.direction AS refdir, copies, sameasref,
+            support, first, last, dna, c2.direction AS readdir
+        FROM fasta_ref_reps INNER JOIN vntr_support ON -fasta_ref_reps.rid=vntr_support.refid
+        INNER JOIN clusterlnk c1 ON vntr_support.refid=c1.repeatid
+        INNER JOIN replnk ON vntr_support.representative=replnk.rid
+        INNER JOIN clusterlnk c2 ON c2.repeatid=replnk.rid
+        INNER JOIN fasta_reads ON replnk.sid=fasta_reads.sid
+        $allwithsupport_clause
+        ORDER BY fasta_ref_reps.head ASC, fasta_ref_reps.firstindex ASC, sameasref DESC};
+    my $get_supported_reftrs_sth = $dbh->prepare($get_supported_reftrs_query);
+    $get_supported_reftrs_sth->execute()
+        or die "Cannot execute: " . $get_supported_reftrs_sth->errstr();
+    my ($rid,     $singleton,   $disting,     $pos1,
+        $arlen,   $copiesfloat, $consenuspat, $head,
+        $seq,     $refdir,      $copies,      $sameasref,
+        $support, $readTRStart, $readTRStop,  $dna,
+        $readdir
     );
-    $get_trs_sth->bind_columns(
-        \(  $rid,   $singleton,   $disting,     $pos1,
-            $arlen, $copiesfloat, $consenuspat, $head,
-            $seq,   $leftflank,   $refdir
+    $get_supported_reftrs_sth->bind_columns(
+        \(  $rid,     $singleton,   $disting,     $pos1,
+            $arlen,   $copiesfloat, $consenuspat, $head,
+            $seq,     $refdir,      $copies,      $sameasref,
+            $support, $readTRStart, $readTRStop,  $dna,
+            $readdir
         )
     );
 
-    # Given a TRID, get all read TRs supporting VNTR call
-    my $vntr_support_sth
-        = $dbh->prepare(
-        "SELECT copies,sameasref,support,first,last,dna,direction FROM vntr_support LEFT OUTER JOIN replnk ON vntr_support.representative=replnk.rid LEFT OUTER JOIN clusterlnk ON replnk.rid=clusterlnk.repeatid LEFT OUTER JOIN fasta_reads ON replnk.sid=fasta_reads.sid  WHERE refid=-? ORDER BY sameasref DESC;"
-        ) or die "Couldn't prepare statement: " . $dbh->errstr;
+    # Loop over all supported ref TRs
+    my $oldrefid               = -1;
+    my ( $alleleWithSupportFound, $first, $subSameAsRef1, $j, $al, $patlen )
+        = (0) x 6;
+    my ( $subjectA, $subjectB, $subjectC, $subjectB1, $subjectC1, $alt )
+        = ("") x 6;
+    while ( $get_supported_reftrs_sth->fetch() ) {
+        if ( $rid != $oldrefid ) {
+            warn ">$rid\n" if $ENV{DEBUG};
 
-    # Loop over all VNTRs
-    while ( $get_trs_sth->fetch() ) {
-        $seq = ($seq) ? uc( nowhitespace($seq) ) : "";
-        $leftflank
-            = ($leftflank) ? uc( nowhitespace($leftflank) ) : "";
+            # extra code for single allele, v 1.07
+            if ( $alleleWithSupportFound == 1 ) {
 
-        warn ">$rid\n" if $ENV{DEBUG};
+                if ($subSameAsRef1) {
+                    $subjectA = "0/0";
+                }
+                else {
+                    $subjectA = "1/1";
+                }
+                $subjectB = $subjectB1;
+                $subjectC = $subjectC1;
+            }
 
-        my ( $first, $subSameAsRef1, $j, $al ) = (0) x 4;
-        my ( $subjectA, $subjectB, $subjectC, $subjectB1, $subjectC1, $alt )
-            = ("") x 6;
+            my $qual = ".";
+            if ( "" eq $seq ) { $seq = "."; }
+            if ( "" eq $alt ) { $alt = "."; }
 
-        my $patlen = length($consenuspat);
+            my $filter = ( $singleton == 1 ) ? "PASS" : "SC";
 
-# get vntr support
-# "SELECT copies,sameasref,support,first,last,dna,direction FROM vntr_support LEFT OUTER JOIN replnk ON vntr_support.representative=replnk.rid LEFT OUTER JOIN clusterlnk ON replnk.rid=clusterlnk.repeatid LEFT OUTER JOIN fasta_reads ON replnk.sid=fasta_reads.sid  WHERE refid=-? ORDER BY sameasref DESC;"
-        $vntr_support_sth->execute($rid);
-        my ( $copies, $sameasref, $support, $readTRStart, $readTRStop, $dna,
-            $readdir );
-        $vntr_support_sth->bind_columns(
-            \(  $copies,     $sameasref, $support, $readTRStart,
-                $readTRStop, $dna,       $readdir
-            )
-        );
+            my $info
+                = sprintf(
+                "RC=%.2lf;RPL=$patlen;RAL=$arlen;RCP=%s;ALGNURL=http://${HTTPSERVER}/index.php?db=VNTRPIPE_${DBSUFFIX}&ref=-$rid&isref=1&istab=1&ispng=1&rank=3",
+                $copiesfloat, $consenuspat );
+            my $format = "GT:SP:CGL";
 
-        #print STDERR "\n";
+            if ($alleleWithSupportFound) {
+                print $vcffile "$head\t"
+                    . ( $pos1 - 1 )
+                    . "\ttd$rid\t$seq\t$alt\t$qual\t$filter\t$info\t$format\t$subjectA:$subjectB:$subjectC\n";
+            }
 
-        my $alleleWithSupportFound = 0;
-        warn "\tAlt (before read TR loop): $alt\n" if $ENV{DEBUG};
-
+            $alleleWithSupportFound = 0;
+        }
         # Loop over all allele supporting read TRs
-        while ( $vntr_support_sth->fetch ) {
+        else {
+            $seq = ($seq) ? uc( nowhitespace($seq) ) : "";
             $dna = ($dna) ? uc( nowhitespace($dna) ) : "";
-
-            #if (0 != $j) { print STDERR "ref: $refdir = read: $readdir\n"; }
-
+            $patlen = length($consenuspat);
             if ( $j == 0 ) {
                 $first = $copies;
             }
-
             my $cdiff = $copies - $first;
-
             warn "\tAllele: $cdiff, support $support, alt: $alt\n"
                 if $ENV{DEBUG};
-
+                
             if ( $support >= $MIN_SUPPORT_REQUIRED ) {
                 $alleleWithSupportFound++;
                 $subjectB1     = "$support";
                 $subjectC1     = "$cdiff";
                 $subSameAsRef1 = $sameasref;
-            }
-
-            if ( $support >= $MIN_SUPPORT_REQUIRED ) {
 
                 if ( $subjectA ne "" ) {
                     $subjectA .= "/";
@@ -336,49 +344,10 @@ sub print_vcf {
 
             $j++;
         }
-
-        my $jnum = $vntr_support_sth->rows;
-        if ( 0 == $jnum ) {
-            die "Error: could not get any VNTR_SUPPORT records for rid=$rid!"
-                unless ($allwithsupport);
-            next;
-        }
-
-        # extra code for single allele, v 1.07
-        if ( 1 == $alleleWithSupportFound ) {
-
-            if ($subSameAsRef1) {
-                $subjectA = "0/0";
-            }
-            else {
-                $subjectA = "1/1";
-            }
-            $subjectB = $subjectB1;
-            $subjectC = $subjectC1;
-        }
-
-        my $qual = ".";
-        if ( "" eq $seq ) { $seq = "."; }
-        if ( "" eq $alt ) { $alt = "."; }
-
-        my $filter = ( $singleton == 1 ) ? "PASS" : "SC";
-
-        my $info
-            = sprintf(
-            "RC=%.2lf;RPL=$patlen;RAL=$arlen;RCP=%s;ALGNURL=http://${HTTPSERVER}/index.php?db=VNTRPIPE_${DBSUFFIX}&ref=-$rid&isref=1&istab=1&ispng=1&rank=3",
-            $copiesfloat, $consenuspat );
-        my $format = "GT:SP:CGL";
-
-        if ($alleleWithSupportFound) {
-            print $vcffile "$head\t"
-                . ( $pos1 - 1 )
-                . "\ttd$rid\t$seq\t$alt\t$qual\t$filter\t$info\t$format\t$subjectA:$subjectB:$subjectC\n";
-        }
     }
 
-    $get_trs_sth->finish;
+    $get_supported_reftrs_sth->finish;
 
-    $vntr_support_sth->finish;
     close $vcffile;
     $dbh->disconnect;
 }
@@ -404,7 +373,10 @@ sub print_distr {
     my %PHASH_SN    = ();
     my %PHASH_SN_VN = ();
 
-    print DISTRFILE
+    open my $distrfh, ">", "${result_prefix}.span${MIN_SUPPORT_REQUIRED}.txt"
+        or die
+        "\nCan't open for reading ${result_prefix}.span${MIN_SUPPORT_REQUIRED}.txt\n";
+    print $distrfh
         "\n\nPatternSize, All, Span1, PercentageS1, Span${MIN_SUPPORT_REQUIRED}, PercentageS${MIN_SUPPORT_REQUIRED}, VntrSpan${MIN_SUPPORT_REQUIRED}, PercentageVS${MIN_SUPPORT_REQUIRED}\n";
 
     my $dbh = get_dbh( $DBSUFFIX, $MSDIR . "vs.cnf" );
@@ -508,7 +480,7 @@ sub print_distr {
         if ( exists $PHASH_SN_VN{$key} ) { $val4 = $PHASH_SN_VN{$key}; }
 
         if ( $key < $LARGEST_PSIZE ) {
-            print DISTRFILE $key . ", "
+            print $distrfh $key . ", "
                 . $val1 . ", "
                 . $val2 . ", "
                 . int( 100 * $val2 / $val1 ) . "\%, "
@@ -519,7 +491,7 @@ sub print_distr {
             push( @arX0, "$key" );
         }
         else {
-            print DISTRFILE $key . "+, "
+            print $distrfh $key . "+, "
                 . $val1 . ", "
                 . $val2 . ", "
                 . int( 100 * $val2 / $val1 ) . "\%, "
@@ -541,7 +513,7 @@ sub print_distr {
         $maxval = max( $maxval, $val1 );
     }
     warn "TOTAL, $tall, $tspan1, \n";
-    print DISTRFILE "TOTAL, $tall, $tspan1, "
+    print $distrfh "TOTAL, $tall, $tspan1, "
         . int( 100 * $tspan1 / $tall )
         . "\%, $tspanN, "
         . int( 100 * $tspanN / $tall )
@@ -591,7 +563,7 @@ sub print_distr {
     $tspan1 = 0;
 
     # 3
-    print DISTRFILE
+    print $distrfh
         "\n\nArraySize, All, Clustered, PercentageC, MappedFlanks, PercentageM, BBB, PercentageB, Span1, PercentageS\n";
     $sth
         = $dbh->prepare(
@@ -701,7 +673,7 @@ sub print_distr {
         if ( exists $PHASHB{$key} ) { $valb = $PHASHB{$key}; }
 
         if ( $key < $LARGEST_ASIZE ) {
-            print DISTRFILE $key . ", "
+            print $distrfh $key . ", "
                 . $val1 . ", "
                 . $val4 . ", "
                 . int( 100 * $val4 / $val1 ) . "%, "
@@ -714,7 +686,7 @@ sub print_distr {
             push( @arX0, "$key" );
         }
         else {
-            print DISTRFILE $key . "+, "
+            print $distrfh $key . "+, "
                 . $val1 . ", "
                 . $val4 . ", "
                 . int( 100 * $val4 / $val1 ) . "%, "
@@ -739,7 +711,7 @@ sub print_distr {
         $maxval = max( $maxval, $val1 );
     }
 
-    print DISTRFILE "TOTAL, $tall, $tclustered, "
+    print $distrfh "TOTAL, $tall, $tclustered, "
         . int( 100 * $tclustered / $tall )
         . "\%, $tmapped, "
         . int( 100 * $tmapped / $tall )
@@ -750,7 +722,7 @@ sub print_distr {
 
     # copies gained/lost
     my $total = 0;
-    print DISTRFILE
+    print $distrfh
         "\n\n(vntr support>=$MIN_SUPPORT_REQUIRED) Copies Gained, Frequency\n";
     $sth
         = $dbh->prepare(
@@ -759,16 +731,16 @@ sub print_distr {
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
 
     while ( my @data = $sth->fetchrow_array() ) {
-        print DISTRFILE $data[0] . "," . $data[1] . "\n";
+        print $distrfh $data[0] . "," . $data[1] . "\n";
         $i++;
         $total += $data[1];
     }
     $sth->finish;
-    print DISTRFILE "TOTAL: $total\n";
+    print $distrfh "TOTAL: $total\n";
 
     # copies by patsize
     $total = 0;
-    print DISTRFILE
+    print $distrfh
         "\n\n(vntr support>=$MIN_SUPPORT_REQUIRED) PatternSize, Copies Gained, Frequency\n";
     $sth
         = $dbh->prepare(
@@ -776,16 +748,16 @@ sub print_distr {
         ) or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
     while ( my @data = $sth->fetchrow_array() ) {
-        print DISTRFILE $data[0] . "," . $data[1] . "," . $data[2] . "\n";
+        print $distrfh $data[0] . "," . $data[1] . "," . $data[2] . "\n";
         $i++;
         $total += $data[2];
     }
     $sth->finish;
-    print DISTRFILE "TOTAL: $total\n";
+    print $distrfh "TOTAL: $total\n";
 
     # copies by array size
     $total = 0;
-    print DISTRFILE
+    print $distrfh
         "\n\n(vntr support>=$MIN_SUPPORT_REQUIRED) ArraySize, Copies Gained, Frequency\n";
     $sth
         = $dbh->prepare(
@@ -794,12 +766,12 @@ sub print_distr {
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
 
     while ( my @data = $sth->fetchrow_array() ) {
-        print DISTRFILE $data[0] . "," . $data[1] . "," . $data[2] . "\n";
+        print $distrfh $data[0] . "," . $data[1] . "," . $data[2] . "\n";
         $i++;
         $total += $data[2];
     }
     $sth->finish;
-    print DISTRFILE "TOTAL: $total\n";
+    print $distrfh "TOTAL: $total\n";
 
     # spanning reads
 
@@ -855,56 +827,56 @@ sub print_distr {
     $sth->finish;
 
     # SPANNING
-    print DISTRFILE "\n\nSpanning reads per locus\n\nRefClass     ";
+    print $distrfh "\n\nSpanning reads per locus\n\nRefClass     ";
     my $maxkey = 0;
     foreach my $key ( sort { $a <=> $b } ( keys %SpanningBBB ) ) {
         $maxkey = $key;
     }
 
     for ( my $key = 0; $key <= $maxkey; $key++ ) {
-        print DISTRFILE "\t$key";
+        print $distrfh "\t$key";
     }
-    print DISTRFILE "\tTOTAL";
+    print $distrfh "\tTOTAL";
 
     $total = 0;
-    print DISTRFILE "\nSINGLETON";
+    print $distrfh "\nSINGLETON";
     for ( my $key = 0; $key <= $maxkey; $key++ ) {
         my $val1 = 0;
         if ( exists $SpanningSing{$key} ) { $val1 = $SpanningSing{$key}; }
-        print DISTRFILE "\t$val1";
+        print $distrfh "\t$val1";
         $total += $val1;
     }
-    print DISTRFILE "\t$total";
+    print $distrfh "\t$total";
 
     $total = 0;
-    print DISTRFILE "\nDISTING   ";
+    print $distrfh "\nDISTING   ";
     for ( my $key = 0; $key <= $maxkey; $key++ ) {
         my $val1 = 0;
         if ( exists $SpanninDist{$key} ) { $val1 = $SpanninDist{$key}; }
-        print DISTRFILE "\t$val1";
+        print $distrfh "\t$val1";
         $total += $val1;
     }
-    print DISTRFILE "\t$total";
+    print $distrfh "\t$total";
 
     $total = 0;
-    print DISTRFILE "\nINDIST      ";
+    print $distrfh "\nINDIST      ";
     for ( my $key = 0; $key <= $maxkey; $key++ ) {
         my $val1 = 0;
         if ( exists $SpanningIndist{$key} ) { $val1 = $SpanningIndist{$key}; }
-        print DISTRFILE "\t$val1";
+        print $distrfh "\t$val1";
         $total += $val1;
     }
-    print DISTRFILE "\t$total";
+    print $distrfh "\t$total";
 
     $total = 0;
-    print DISTRFILE "\nBBB         ";
+    print $distrfh "\nBBB         ";
     for ( my $key = 0; $key <= $maxkey; $key++ ) {
         my $val1 = 0;
         if ( exists $SpanningBBB{$key} ) { $val1 = $SpanningBBB{$key}; }
-        print DISTRFILE "\t$val1";
+        print $distrfh "\t$val1";
         $total += $val1;
     }
-    print DISTRFILE "\t$total";
+    print $distrfh "\t$total";
 
     # alleles spanning reads
 
@@ -958,56 +930,56 @@ sub print_distr {
     $sth->finish;
 
     # ALLELES
-    print DISTRFILE "\n\nSpanning reads per allele\n\nRefClass     ";
+    print $distrfh "\n\nSpanning reads per allele\n\nRefClass     ";
     $maxkey = 0;
     foreach my $key ( sort { $a <=> $b } ( keys %AllelesBBB ) ) {
         $maxkey = $key;
     }
 
     for ( my $key = 0; $key <= $maxkey; $key++ ) {
-        print DISTRFILE "\t$key";
+        print $distrfh "\t$key";
     }
-    print DISTRFILE "\tTOTAL";
+    print $distrfh "\tTOTAL";
 
     $total = 0;
-    print DISTRFILE "\nSINGLETON";
+    print $distrfh "\nSINGLETON";
     for ( my $key = 0; $key <= $maxkey; $key++ ) {
         my $val1 = 0;
         if ( exists $AllelesSing{$key} ) { $val1 = $AllelesSing{$key}; }
-        print DISTRFILE "\t$val1";
+        print $distrfh "\t$val1";
         $total += $val1;
     }
-    print DISTRFILE "\t$total";
+    print $distrfh "\t$total";
 
     $total = 0;
-    print DISTRFILE "\nDISTING   ";
+    print $distrfh "\nDISTING   ";
     for ( my $key = 0; $key <= $maxkey; $key++ ) {
         my $val1 = 0;
         if ( exists $AllelesDist{$key} ) { $val1 = $AllelesDist{$key}; }
-        print DISTRFILE "\t$val1";
+        print $distrfh "\t$val1";
         $total += $val1;
     }
-    print DISTRFILE "\t$total";
+    print $distrfh "\t$total";
 
     $total = 0;
-    print DISTRFILE "\nINDIST      ";
+    print $distrfh "\nINDIST      ";
     for ( my $key = 0; $key <= $maxkey; $key++ ) {
         my $val1 = 0;
         if ( exists $AllelesIndist{$key} ) { $val1 = $AllelesIndist{$key}; }
-        print DISTRFILE "\t$val1";
+        print $distrfh "\t$val1";
         $total += $val1;
     }
-    print DISTRFILE "\t$total";
+    print $distrfh "\t$total";
 
     $total = 0;
-    print DISTRFILE "\nBBB         ";
+    print $distrfh "\nBBB         ";
     for ( my $key = 0; $key <= $maxkey; $key++ ) {
         my $val1 = 0;
         if ( exists $AllelesBBB{$key} ) { $val1 = $AllelesBBB{$key}; }
-        print DISTRFILE "\t$val1";
+        print $distrfh "\t$val1";
         $total += $val1;
     }
-    print DISTRFILE "\t$total";
+    print $distrfh "\t$total";
 
     # alleles spanning reads for VNTRs
 
@@ -1061,57 +1033,56 @@ sub print_distr {
     $sth->finish;
 
     # ALLELES for VNTRs
-    print DISTRFILE
-        "\n\nSpanning reads per allele for VNTRs\n\nRefClass     ";
+    print $distrfh "\n\nSpanning reads per allele for VNTRs\n\nRefClass     ";
     $maxkey = 0;
     foreach my $key ( sort { $a <=> $b } ( keys %AllelesBBB ) ) {
         $maxkey = $key;
     }
 
     for ( my $key = 0; $key <= $maxkey; $key++ ) {
-        print DISTRFILE "\t$key";
+        print $distrfh "\t$key";
     }
-    print DISTRFILE "\tTOTAL";
+    print $distrfh "\tTOTAL";
 
     $total = 0;
-    print DISTRFILE "\nSINGLETON";
+    print $distrfh "\nSINGLETON";
     for ( my $key = 0; $key <= $maxkey; $key++ ) {
         my $val1 = 0;
         if ( exists $AllelesSing{$key} ) { $val1 = $AllelesSing{$key}; }
-        print DISTRFILE "\t$val1";
+        print $distrfh "\t$val1";
         $total += $val1;
     }
-    print DISTRFILE "\t$total";
+    print $distrfh "\t$total";
 
     $total = 0;
-    print DISTRFILE "\nDISTING   ";
+    print $distrfh "\nDISTING   ";
     for ( my $key = 0; $key <= $maxkey; $key++ ) {
         my $val1 = 0;
         if ( exists $AllelesDist{$key} ) { $val1 = $AllelesDist{$key}; }
-        print DISTRFILE "\t$val1";
+        print $distrfh "\t$val1";
         $total += $val1;
     }
-    print DISTRFILE "\t$total";
+    print $distrfh "\t$total";
 
     $total = 0;
-    print DISTRFILE "\nINDIST      ";
+    print $distrfh "\nINDIST      ";
     for ( my $key = 0; $key <= $maxkey; $key++ ) {
         my $val1 = 0;
         if ( exists $AllelesIndist{$key} ) { $val1 = $AllelesIndist{$key}; }
-        print DISTRFILE "\t$val1";
+        print $distrfh "\t$val1";
         $total += $val1;
     }
-    print DISTRFILE "\t$total";
+    print $distrfh "\t$total";
 
     $total = 0;
-    print DISTRFILE "\nBBB         ";
+    print $distrfh "\nBBB         ";
     for ( my $key = 0; $key <= $maxkey; $key++ ) {
         my $val1 = 0;
         if ( exists $AllelesBBB{$key} ) { $val1 = $AllelesBBB{$key}; }
-        print DISTRFILE "\t$val1";
+        print $distrfh "\t$val1";
         $total += $val1;
     }
-    print DISTRFILE "\t$total\n";
+    print $distrfh "\t$total\n";
 
     # alleles spanning reads for VNTRs by VNTR class
 
@@ -1141,7 +1112,7 @@ sub print_distr {
     }
     $sth->finish;
 
-    print DISTRFILE
+    print $distrfh
         "\n\nSpanning reads per allele for VNTRs by VNTR class\n\nVNTRClass     ";
     $maxkey = 0;
     foreach my $key ( sort { $a <=> $b } ( keys %AllelesBBBInf ) ) {
@@ -1154,84 +1125,85 @@ sub print_distr {
     }
 
     for ( my $key = 0; $key <= $maxkey; $key++ ) {
-        print DISTRFILE "\t$key";
+        print $distrfh "\t$key";
     }
-    print DISTRFILE "\tTOTAL";
+    print $distrfh "\tTOTAL";
 
     $total = 0;
-    print DISTRFILE "\nInferred";
+    print $distrfh "\nInferred";
     for ( my $key = 0; $key <= $maxkey; $key++ ) {
         my $val1 = 0;
         if ( exists $AllelesBBBInf{$key} ) { $val1 = $AllelesBBBInf{$key}; }
-        print DISTRFILE "\t$val1";
+        print $distrfh "\t$val1";
         $total += $val1;
     }
-    print DISTRFILE "\t$total";
+    print $distrfh "\t$total";
 
     $total = 0;
-    print DISTRFILE "\nObserved";
+    print $distrfh "\nObserved";
     for ( my $key = 0; $key <= $maxkey; $key++ ) {
         my $val1 = 0;
         if ( exists $AllelesBBBObs{$key} ) { $val1 = $AllelesBBBObs{$key}; }
-        print DISTRFILE "\t$val1";
+        print $distrfh "\t$val1";
         $total += $val1;
     }
-    print DISTRFILE "\t$total";
+    print $distrfh "\t$total";
 
     $total = 0;
-    print DISTRFILE "\nTotal";
+    print $distrfh "\nTotal";
     for ( my $key = 0; $key <= $maxkey; $key++ ) {
         my $val1 = 0;
         if ( exists $AllelesBBBTotal{$key} ) {
             $val1 = $AllelesBBBTotal{$key};
         }
-        print DISTRFILE "\t$val1";
+        print $distrfh "\t$val1";
         $total += $val1;
     }
-    print DISTRFILE "\t$total\n";
+    print $distrfh "\t$total\n";
 
     # counts for support 1 alleles
-    print DISTRFILE "\n1A: ";
+    print $distrfh "\n1A: ";
     $sth
         = $dbh->prepare(
         "SELECT count(distinct refid) FROM vntr_support INNER JOIN fasta_ref_reps ON fasta_ref_reps.rid = -vntr_support.refid WHERE copies!=0 AND has_support=0 AND support_vntr=0 AND support=1;"
         );
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
     if ( my @data = $sth->fetchrow_array() ) {
-        print DISTRFILE $data[0];
+        print $distrfh $data[0];
     }
     $sth->finish;
-    print DISTRFILE "\n1B: ";
+    print $distrfh "\n1B: ";
     $sth
         = $dbh->prepare(
         "SELECT count(distinct refid) FROM vntr_support INNER JOIN fasta_ref_reps ON fasta_ref_reps.rid = -vntr_support.refid WHERE copies!=0 AND has_support=1 AND support_vntr=0 AND support=1;"
         );
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
     if ( my @data = $sth->fetchrow_array() ) {
-        print DISTRFILE $data[0];
+        print $distrfh $data[0];
     }
     $sth->finish;
-    print DISTRFILE "\n2A: ";
+    print $distrfh "\n2A: ";
     $sth
         = $dbh->prepare(
         "SELECT count(distinct refid) FROM vntr_support INNER JOIN fasta_ref_reps ON fasta_ref_reps.rid = -vntr_support.refid WHERE homez_diff=1 and support=1;"
         );
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
     if ( my @data = $sth->fetchrow_array() ) {
-        print DISTRFILE $data[0];
+        print $distrfh $data[0];
     }
     $sth->finish;
-    print DISTRFILE "\n2B: ";
+    print $distrfh "\n2B: ";
     $sth
         = $dbh->prepare(
         "SELECT count(distinct refid) FROM vntr_support INNER JOIN fasta_ref_reps ON fasta_ref_reps.rid = -vntr_support.refid WHERE (hetez_same=1 OR hetez_diff=1 OR hetez_multi=1) AND support=1;"
         );
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
     if ( my @data = $sth->fetchrow_array() ) {
-        print DISTRFILE $data[0];
+        print $distrfh $data[0];
     }
     $sth->finish;
     $dbh->disconnect;
+    close($distrfh);
 
     # images
 
@@ -1648,7 +1620,10 @@ sub print_latex {
     my $VNTRTotalByGeneticClass;
 
     # latex header
-    printf( STDOUT "\n\\documentclass[twoside,10pt]{article}"
+    open( my $texfh, ">", "${result_prefix}.span${MIN_SUPPORT_REQUIRED}.tex" )
+        or die
+        "\nCan't open for writing ${result_prefix}.span${MIN_SUPPORT_REQUIRED}.tex\n\n";
+    printf( $texfh "\n\\documentclass[twoside,10pt]{article}"
             . "\n\\usepackage{underscore}"
             . "\n\\setlength{\\topmargin}{-1cm}"
             . "\n\\setlength{\\oddsidemargin}{-0.5cm}"
@@ -1826,7 +1801,7 @@ sub print_latex {
         ? int( 100 * $refAsMulti / $VNTRTotalByGeneticClass )
         : 0;
 
-    printf( STDOUT "\n\\begin{table}[htdp]"
+    printf( $texfh "\n\\begin{table}[htdp]"
             . "\n\\begin{center}"
             . "\nA. Mapping\\\\"
             . "\n\\vspace{.1in}"
@@ -1926,9 +1901,9 @@ sub print_latex {
         $percentVNTRasSingleton,
         $percentVNTRasIndistinguishable
     );
-    printf( STDOUT "\n\\end{document}" );
+    printf( $texfh "\n\\end{document}" );
     $dbh->disconnect;
-
+    close($texfh);
 }
 
 ####################################
@@ -2008,19 +1983,12 @@ my %REPHASH = ();
 #  }
 #}
 
+set_statistics( $DBSUFFIX, ( N_MIN_SUPPORT => $MIN_SUPPORT_REQUIRED ) );
+
 my $dbh = get_dbh( $DBSUFFIX, $MSDIR . "vs.cnf" )
     || die "Could not connect to database: $DBI::errstr";
 
 #goto AAA;
-
-set_statistics( $DBSUFFIX, ( N_MIN_SUPPORT => $MIN_SUPPORT_REQUIRED ) );
-
-open( STDFILE, ">", "${result_prefix}.span${MIN_SUPPORT_REQUIRED}.tex" )
-    or die
-    "\nCan't open for writing ${result_prefix}.span${MIN_SUPPORT_REQUIRED}.tex\n\n";
-open( DISTRFILE, ">", "${result_prefix}.span${MIN_SUPPORT_REQUIRED}.txt" )
-    or die
-    "\nCan't open for reading ${result_prefix}.span${MIN_SUPPORT_REQUIRED}.txt\n\n";
 
 my $sth1
     = $dbh->prepare(
@@ -2418,18 +2386,19 @@ elsif ( $run_conf{BACKEND} eq "sqlite" ) {
 }
 
 $dbh->disconnect();
+
+warn "Producing output LaTeX file...\n";
 print_latex($ReadTRsSupport);
 
+warn "Producing distribution file...\n";
 print_distr();
 
 # Print VCF for VNTRs with N support
+warn "Producing VCF (span ${MIN_SUPPORT_REQUIRED} support)...\n";
 print_vcf();
 
 # All with support
+warn "Producing VCF (all with support)...\n";
 print_vcf(1);
 
-print STDFILE $STDBUFFER;
-close STDFILE;
-close DISTRFILE;
-
-1;
+warn "Done!\n";
