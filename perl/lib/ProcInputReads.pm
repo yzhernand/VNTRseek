@@ -127,7 +127,8 @@ sub fork_proc {
         );
         exit unless $reader;
 
-        my $output_prefix = "$output_dir/$current_file";
+        my $current_split = 0;
+        my $output_prefix = "$output_dir/$current_file" . "_" . $current_split++;
         warn "Running child, current_file = $current_file ($filelist->[$current_file])...\n";
 
         # TODO Error checking if TRF, in the start of the pipe, breaks down
@@ -142,6 +143,7 @@ sub fork_proc {
         # $logfile->autoflush;
         # my $debug_reads_processed = 0;
 
+        my $num_recs = 0;
         while ( my ( $header, $body ) = $reader->() ) {
 
             # say $logfile $data[0] . "\n" . $data[1];
@@ -150,6 +152,15 @@ sub fork_proc {
 
             # $trf_pipe, $header, $body, $debug_reads_processed );
             # $debug_reads_processed++;
+            if ((++$num_recs % 1e6) == 0) {
+                $output_prefix = "$output_dir/$current_file" . "_" . $current_split++;
+                # TODO Replace with method to close pipe and check error
+                # (because this is done more than once)
+                close $trf_pipe;
+                open $trf_pipe,
+                    "|$trf_param | $trf2proclu_param -o '$output_prefix.index' > '$output_prefix.leb36'"
+                    or die "Cannot start TRF+trf2proclu pipe: $!\n";
+            }
         }
 
   # Normally, close() returns false for failure of a pipe. If the only problem
