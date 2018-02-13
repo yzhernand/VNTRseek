@@ -27,7 +27,7 @@ if(CMAKE_HOST_UNIX)
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
        )
     ")
-    #INSTALL(FILES "${CMAKE_CURRENT_BINARY_DIR}/vntrseek"
+    INSTALL(FILES "${CMAKE_CURRENT_BINARY_DIR}/vntrseek"
         DESTINATION bin
         OPTIONAL
         )
