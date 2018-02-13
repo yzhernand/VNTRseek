@@ -3,7 +3,7 @@ use strict;
 use Cwd;
 use DBI;
 use Carp;
-use Config::Simple;
+#use Config::Simple;
 
 use FindBin;
 
@@ -35,17 +35,17 @@ sub create_blank_file {
 }
 
 ################################################################
-sub read_config_file_configsimple {
-  my $output_folder = shift
-    or croak "Error: function expects 1 parameter (got none)\n";
-  my $config_ref;
-  carp "$output_folder/vs.cnf";
-  my $cfg = new Config::Simple( syntax => "ini" );
-  $cfg->read("$output_folder/vs.cnf");
-  $config_ref = $cfg->get_block('default');
-  $cfg->write("$output_folder/vs.cnf.bak");
-  return $config_ref;
-}
+#sub read_config_file_configsimple {
+#  my $output_folder = shift
+#    or croak "Error: function expects 1 parameter (got none)\n";
+#  my $config_ref;
+#  carp "$output_folder/vs.cnf";
+#  my $cfg = new Config::Simple( syntax => "ini" );
+#  $cfg->read("$output_folder/vs.cnf");
+#  $config_ref = $cfg->get_block('default');
+#  $cfg->write("$output_folder/vs.cnf.bak");
+#  return $config_ref;
+#}
 
 ################################################################
 sub read_config_file {
