@@ -75,13 +75,6 @@
 #define I64d ld
 #endif
 
-
-#define max3(a,b,c) (((a)>=(b))?(((a)>=(c))?(a):(c)):(((b)>=(c))?(b):(c)))
-#define min3(a,b,c) (((a)<=(b))?(((a)<=(c))?(a):(c)):(((b)<=(c))?(b):(c)))
-#define max(a,b) (((a)>=(b))?(a):(b))
-#define min(a,b) (((a)<=(b))?(a):(b))
-
-
 /***************************************************************/
 //#define EASY_LIFE_DEBUG
 
@@ -262,11 +255,16 @@ int *MinimumRepresentation(int *indptr, int len, int *indptrrc, int lenrc, int *
 {
 
     int i, j;
-    int *src, *srcrc, *tar, *sourceptr, *destinptr, tmp, *indices;
+    int *src, *srcrc, *tar,
+        // *sourceptr,
+        // *destinptr,
+        tmp//,
+        // *indices
+        ;
 
     RC = 0;
 
-    if (NULL == indptr || NULL == indptrrc) return;
+    if (NULL == indptr || NULL == indptrrc) return NULL;
 
     src = pintdup(indptr, len);
     srcrc = pintdup(indptrrc, lenrc);
@@ -440,7 +438,7 @@ int main(int argc, char **argv)
 
     if (d != NULL) {
 
-        while (de = readdir(d)) {
+        while ((de = readdir(d)) != NULL) {
 
             if (strlen(de->d_name) > 17 && 0 == strcasecmp(".leb36.renumbered", de->d_name + strlen(de->d_name) - 17)) {
                 fiptr = smalloc(sizeof(FITEM_STRUCT));

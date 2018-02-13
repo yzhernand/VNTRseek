@@ -70,8 +70,15 @@
 #include <stdlib.h>
 #include <limits.h>
 #include <math.h>
+#include <ctype.h>
+#include <string.h>
 
 #include "../libs/easylife/easylife.h"
+
+#define max3(a,b,c) (((a)>=(b))?(((a)>=(c))?(a):(c)):(((b)>=(c))?(b):(c)))
+#define min3(a,b,c) (((a)<=(b))?(((a)<=(c))?(a):(c)):(((b)<=(c))?(b):(c)))
+#define max(a,b) (((a)>=(b))?(a):(b))
+#define min(a,b) (((a)<=(b))?(a):(b))
 
 /* the following structure is used to pass a sequence to the algorithm */
 #define MAXSEQNAMELEN 200
@@ -434,7 +441,7 @@ float ave_entropy_and_counts(int *indices, int proflen, int *aProf, int *cProf, 
 PROFILE*    ReadProfileWithRC(FILE* fp, PROFILE** profrcret)
 {
     int c=0,i,key=0,patlen=0,proflen=0,proflenrc=0,number=0;
-    char dummy=0;
+    // char dummy=0;
     float copynum;
     char digits[4],*src,*src2;
     PROFILE *prof, *profrc;
@@ -1515,7 +1522,7 @@ PAP* GetBestProfileAP(PROFILE* p1, PROFILE* p2, unsigned char* submatrix)
 	return bestsofar;
 }
 
-printSP(PSD *S, int leftlen, int toplen) {
+void printSP(PSD *S, int leftlen, int toplen) {
 
 	char c;
 	int col,row;

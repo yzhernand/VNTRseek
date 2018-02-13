@@ -57,7 +57,7 @@ my $redund_executable = "$install_dir/redund.exe";
 
 my $proclu_executable = "$install_dir/psearch.exe";
 
-#=<<Prepare SQLite dbs for reference sets>>
+#=<<Prepare SQLite dbs for reference set>>
 #=<<First the filtered set>>
 # Prepares the db with the ref set sequences, if not already done.
 # Only need this for the filtered set.
@@ -76,15 +76,6 @@ if (load_profiles_if_not_exists( $filtered_set, $opts{redo} ) )
     # argument being 1
     warn "Running redundancy elimination on filtered set.\n";
     run_redund( $filtered_set, "filtered.leb36", 0 );
-}
-
-#=<<Then for the full file>>
-warn "Loading full set profiles (if needed).\n";
-if ( load_profiles_if_not_exists( $full_set, $opts{redo} ) ) {
-
-    #=<<Run redund.exe on the full file>>
-    warn "Running redundancy elimination on full set.\n";
-    run_redund( $full_set, "full.leb36", 1 );
 }
 
 #=<<Use databases to fetch rotindex files>>
@@ -141,39 +132,21 @@ close $tmp_rotindex;
 # TODO This actually won't work because the full set is not guaranteed
 # to have a fasta_ref_reps table (it probably never will). Instead,
 # rewrite run_redund so that we get the files redund produced.
-# Now the full set
-my $full_dbh = DBI->connect(
-    "DBI:SQLite:dbname=$full_sqlitedb",
-    undef, undef,
-    {   AutoCommit                 => 1,
-        RaiseError                 => 1,
-        sqlite_see_if_its_a_number => 1,
-    }
-) or die "Could not connect to database: $DBI::errstr";
-my $tmp_full_file = File::Temp->new( SUFFIX => ".leb36", DIR => $tmpdir_name );
-my $get_full_set_profiles = q{SELECT rid, length(pattern) AS patsize,
-    round(copynum, 2), proflen, proflenrc, profile, profilerc, nA, nC, nG, nT,
-    mkflank(flankleft, flankright) AS flanks
-    FROM fasta_ref_reps JOIN ref_profiles USING (rid)
-        JOIN minreporder USING (rid)
-    ORDER BY minreporder.idx ASC};
-# Full ref file, ordered by min representation as given by redund
-my $get_full_set_profiles_sth = $full_dbh->prepare($get_full_set_profiles);
-$get_full_set_profiles_sth->execute;
-open my $tmp_full_file_fh, ">", $tmp_full_file;
-while (my @fields = $get_full_set_profiles_sth->fetchrow_array) {
-    say $tmp_full_file_fh join(" ", @fields)
-};
-close $tmp_full_file_fh;
+#=<<Then for the full file>>
+my $tmp_full_dir;
+warn "Loading full set profiles (if needed).\n";
+if ( load_profiles_if_not_exists( $full_set, $opts{redo} ) ) {
+
+    #=<<Run redund.exe on the full file>>
+    warn "Running redundancy elimination on full set.\n";
+    # Tell run_redund that we want to keep the files it creates
+    $tmp_full_dir = run_redund( $full_set, "full.leb36", 1 );
+}
+
+# FUll file location
+my $tmp_full_file = $tmp_full_dir->dirname . "/full.leb36";
 # Full rotindex
-($rotindex_str) = $full_dbh->selectrow_array($get_rotindex);
-die "Error getting rotindex file from full set. Try rerunning with --redo option\n"
-    unless ($rotindex_str);
-open $tmp_rotindex, ">", "${tmp_full_file}.rotindex";
-print $tmp_rotindex $rotindex_str;
-close $tmp_rotindex;
-# Don't need full set dbh anymore
-$full_dbh->disconnect;
+my $tmp_full_rotindex = "${tmp_full_file}.rotindex";
 
 print "Press enter to continue...";
 my $dummy = <STDIN>;

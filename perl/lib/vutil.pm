@@ -521,7 +521,8 @@ sub make_refseq_db {
 
     if ( $num_rows == 0 || defined $redo ) {
         warn "Creating reference sequence database...\n";
-        $dbh->do(q{DROP TABLE fasta_ref_reps});
+        $dbh->do(q{DROP TABLE IF EXISTS fasta_ref_reps});
+        $dbh->do(q{DROP TABLE IF EXISTS ref_profiles});
         $dbh->do($create_fasta_ref_reps_q);
         $dbh->do($fasta_ref_reps_index_q);
 
@@ -847,6 +848,8 @@ sub run_redund {
         WHERE name = 'minreporder'})
         or carp "Couldn't do statement: $DBI::errstr\n";
     $minrep_sql =~ s/minreporder/main.minreporder/;
+    $dbh->do(q{DROP TABLE IF EXISTS main.minreporder})
+        or carp "Couldn't do statement: $DBI::errstr\n";
     $dbh->do($minrep_sql)
         or carp "Couldn't do statement: $DBI::errstr\n";
     $dbh->do(
@@ -876,7 +879,7 @@ sub run_redund {
     $dbh->disconnect;
 
     if ($keep_files) {
-        return({TMPDIR => $tmpdir, TMPFILE => $tmp_file});
+        return $tmpdir;
     }
 }
 
