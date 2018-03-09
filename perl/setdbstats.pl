@@ -56,28 +56,28 @@ my $rc;
 my $exstring;
 my $input;
 
-open($input, "-|", "wc -l $reffile | tail -1");
+open($input, "-|", "wc -l < $reffile");
 $rc = <$input>;
 if ($rc =~ /(\d+)/) {
   SetStatistics('NUMBER_REF_TRS',$rc);
 }
 close($input);
 
-open($input, "-|", "wc -l $readpf/*.indexhist | tail -1");
+open($input, "-|", "cat $readpf/*.indexhist | wc -l");
 $rc = <$input>;
 if ($rc =~ /(\d+)/) {
   SetStatistics('NUMBER_TRS_IN_READS',$rc);
 }
 close($input);
 
-open($input, "-|", "wc -l $reffolder/reference.leb36.rotindex | tail -1");
+open($input, "-|", "wc -l < $reffolder/reference.leb36.rotindex");
 $rc = <$input>;
 if ($rc =~ /(\d+)/) {
   SetStatistics('NUMBER_REFS_TRS_AFTER_REDUND',$rc);
 }
 close($input);
 
-open($input, "-|", "wc -l $rpfc/*.rotindex | tail -1");
+open($input, "-|", "cat $rpfc/*.rotindex | wc -l");
 $rc = <$input>;
 if ($rc =~ /(\d+)/) {
   SetStatistics('NUMBER_TRS_IN_READS_AFTER_REDUND',$rc);

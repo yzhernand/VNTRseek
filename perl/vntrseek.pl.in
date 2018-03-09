@@ -209,7 +209,6 @@ my $timestart;
 print_config($MSDIR);
 
 my $DBNAME     = "VNTRPIPE_$opts{DBSUFFIX}";
-my $HTTPSERVER = "$opts{SERVER}/vntrview";
 
 # clustering parameters (only cutoffs, other nonessantial paramters are in run_proclu.pl
 my $PROCLU_EXECUTABLE = "psearch.exe";
@@ -402,6 +401,7 @@ unless ( -w $opts{HTML_DIR} )    { die("Directory '$opts{HTML_DIR}' not writable
 unless ( -w $opts{OUTPUT_ROOT} ) { die("Directory '$opts{OUTPUT_ROOT}' not writable!"); }
 unless ( -w "$opts{TMPDIR}" )    { die("Directory '$opts{TMPDIR}' not writable!"); }
 
+my $HTTPSERVER = "$opts{SERVER}/vntrview";
 #unless (-x "$opts{HTML_DIR}/aln.exe") { die("File '$opts{HTML_DIR}/aln.exe' not executable!"); }
 #unless (-x "$opts{HTML_DIR}/malign") { die("File '$opts{HTML_DIR}/malign' not executable!"); }
 
@@ -537,9 +537,7 @@ sub GlearError {
         print "\nGlearError: making next step: $to.\n\n";
     }
 
-    SetError( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "ERROR_STEP", 0 );
-    SetError( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "ERROR_DESC", "" );
-    SetError( $DBNAME, $opts{LOGIN}, $opts{PASS}, $opts{HOST}, "ERROR_CODE", 0 );
+    SetError( 0, "", 0 );
     return 0;
 }
 
