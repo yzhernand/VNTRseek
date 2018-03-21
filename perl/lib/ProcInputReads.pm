@@ -46,6 +46,8 @@ my %reader_table;
 @reader_table{@supported_format_names}
     = ( \&read_fastaq, \&read_fastaq, \&read_bam );
 
+# TODO Simplify: we'll only support whatever seqtk supports and jusr
+# let seqtk handle decompression for us.
 # Similarly for compression formats, add a new one to the list, then
 # add the regex and command needed to extract in the correct position
 # in the values list
@@ -67,6 +69,8 @@ my %decompress_cmds;
     "tar xJfmO ",
     "xzcat "
 );
+
+my $records_before_split = 1e7;
 
 =head2 Methods
 
@@ -115,7 +119,7 @@ sub fork_proc {
     my ($input_dir,        $output_dir,       $trf_param,
         $trf2proclu_param, $reverse_read,     $strip_454_TCAG,
         $warn_454_TCAG,    $format,           $compression,
-        $current_file,  $files_to_process, $filelist
+        $current_file,     $files_to_process, $filelist
     ) = @_;
     defined( my $pid = fork() )
         or die "Unable to fork: $!\n";
@@ -127,8 +131,10 @@ sub fork_proc {
         );
         exit unless $reader;
 
-        my $output_prefix = "$output_dir/$current_file";
-        warn "Running child, current_file = $current_file ($filelist->[$current_file])...\n";
+        my $current_fragment = 0;
+        my $output_prefix = "$output_dir/${current_file}_$current_fragment";
+        warn
+            "Running child, current_file = $current_file ($filelist->[$current_file])...\n";
 
         # TODO Error checking if TRF, in the start of the pipe, breaks down
         local $SIG{PIPE} = sub { die "Error in trf+trf2proclu pipe: $?\n" };
@@ -142,6 +148,7 @@ sub fork_proc {
         # $logfile->autoflush;
         # my $debug_reads_processed = 0;
 
+        my $reads_processed = 0;
         while ( my ( $header, $body ) = $reader->() ) {
 
             # say $logfile $data[0] . "\n" . $data[1];
@@ -150,6 +157,13 @@ sub fork_proc {
 
             # $trf_pipe, $header, $body, $debug_reads_processed );
             # $debug_reads_processed++;
+            if ( ( $reads_processed++ % $records_before_split ) == 0 ) {
+                close $trf_pipe;
+                $output_prefix
+                    = "$output_dir/${current_file}_" . ++$current_fragment;
+                open $trf_pipe,
+                    "|$trf_param | $trf2proclu_param -o '$output_prefix.index' > '$output_prefix.leb36'";
+            }
         }
 
   # Normally, close() returns false for failure of a pipe. If the only problem
@@ -174,11 +188,12 @@ sub fork_proc {
             # TODO Doesn't account for TRF's negative return values
         }
 
-        # Check exit error
-        # Here, check if log output file is empty. If so, delete the output for this fork
-        if (-z "$output_prefix.log" || !(-e "$output_prefix.index")) {
-            warn "Process $current_file did not find any VNTRs. Removing leb36 file...\n";
-            unlink("$output_prefix.leb36")
+# Check exit error
+# Here, check if log output file is empty. If so, delete the output for this fork
+        if ( -z "$output_prefix.log" || !( -e "$output_prefix.index" ) ) {
+
+# warn "Process $current_file did not find any VNTRs. Removing leb36 file...\n";
+            unlink("$output_prefix.leb36");
         }
 
         exit;
@@ -204,8 +219,7 @@ sub get_reader {
         = @_;
 
     my $reader = $reader_table{$format}->(
-        $input_dir, $compression, $current_file,
-        $files_to_process, $filelist
+        $input_dir, $compression, $current_file, $files_to_process, $filelist
     );
 
     exit unless $reader;
@@ -462,12 +476,13 @@ sub read_fastaq {
     my $openmode = "-|";
 
     warn "Processing file " . $filelist->[$current_file] . "\n";
-    my $filename = '"'
-        . "$input_dir/"
-        . $filelist->[$current_file] . '"';
+    my $filename = '"' . "$input_dir/" . $filelist->[$current_file] . '"';
 
     if ($compression) {
-        $filename = $decompress_cmds{$compression} . $filename . "| seqtk seq -a -S"
+        $filename
+            = $decompress_cmds{$compression}
+            . $filename
+            . "| seqtk seq -a -S";
     }
     else {
         $filename = "seqtk seq -a -S " . $filename;
@@ -559,19 +574,16 @@ sub read_bam {
         next if ( ( $num_aln + $num_unaln ) == 0 );
 
         # $start is always 1
-        my $region = "$chr:1-$end";
-        my $scmd
-            = "samtools view "
-            . ( ($unmapped) ? "-f 4 " : "" )
-            . $bamfile
-            . ( ($unmapped) ? "" : " $region" );
+        my $samflags  = ($unmapped) ? " -f 4" : "-F 256 -F 2048";
+        my $region    = ($unmapped) ? "" : "$chr:1-$end";
+        my $scmd      = "samtools view " . $samflags . $bamfile . $region;
         push @samcmds, $scmd;
     }
 
     # Save the number of samtools commands we'll need to use
     $$files_to_process = scalar @samcmds;
 
-  # Return undef if the index "$current_file" exceeds the number of regions
+    # Return undef if the index "$current_file" exceeds the number of regions
     unless ( $current_file < @samcmds ) {
         return undef;
     }

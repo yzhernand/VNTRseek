@@ -24,7 +24,7 @@ my %VSCNF_FILE = ();
 my $VSREAD     = 0;
 
 ################################################################
-sub trim($) {
+sub trim {
     my $string = shift;
     $string =~ s/^\s+//;
     $string =~ s/\s+$//;
@@ -364,6 +364,7 @@ sub get_statistics {
 ################################################################
 
 sub stats_get {
+    croak 'Cannot use "stats_get" in list context' if wantarray;
 
     my $argc = @_;
     if ( $argc < 5 ) {
@@ -381,7 +382,7 @@ sub stats_get {
 
     # check if database exists first, return undef if not
     unless ($dbh) {
-        return undef;
+        return;
     }
 
     # get the namve/value pair
@@ -882,6 +883,12 @@ sub run_redund {
         return $tmpdir;
     }
 }
+
+################################################################
+# TODO Function to generate leb36 file from db after redund was
+# run. Will execute run_redund unless 'minreporder' table exists
+# SQL query: SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name='minreporder';
+# Code to import from produce_indist
 
 ################################################################
 sub write_sqlite {

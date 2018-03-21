@@ -129,9 +129,6 @@ $rotindex_str =~ s/(\d+)/-$1/g;
 print $tmp_rotindex $rotindex_str;
 close $tmp_rotindex;
 
-# TODO This actually won't work because the full set is not guaranteed
-# to have a fasta_ref_reps table (it probably never will). Instead,
-# rewrite run_redund so that we get the files redund produced.
 #=<<Then for the full file>>
 my $tmp_full_dir;
 warn "Loading full set profiles (if needed).\n";
