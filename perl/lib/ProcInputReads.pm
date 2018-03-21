@@ -570,12 +570,9 @@ sub read_bam {
         next if ( ( $num_aln + $num_unaln ) == 0 );
 
         # $start is always 1
-        my $region = "$chr:1-$end";
-        my $scmd
-            = "samtools view "
-            . ( ($unmapped) ? "-f 4 " : "" )
-            . $bamfile
-            . ( ($unmapped) ? "" : " $region" );
+        my $samflags  = ($unmapped) ? " -f 4" : "-F 256 -F 2048";
+        my $region    = ($unmapped) ? "" : "$chr:1-$end";
+        my $scmd      = "samtools view " . $samflags . $bamfile . $region;
         push @samcmds, $scmd;
     }
 
