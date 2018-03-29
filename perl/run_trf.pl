@@ -15,9 +15,9 @@ use Carp;
 use FindBin;
 
 # this is where the pipeline is installed
-my $install_dir = "$FindBin::RealBin";
+our $install_dir = "$FindBin::RealBin";
 use lib "$FindBin::RealBin/lib";    # must be same as install dir!
-use ProcInputReads qw(fork_proc formats_regexs compressed_formats_regexs);
+use ProcInputReads qw(fork_proc init_bam formats_regexs compressed_formats_regexs);
 
 my $files_processed = 0;    # files processed
 my $files_to_process = 0;   # Either: the actual number of files to process
@@ -118,6 +118,13 @@ if ( $max_processes == 0 ) {
     }
 }
 
+# If BAM, init files list
+if ($input_format eq "bam") {
+    @filenames = init_bam($input_dir, $IS_PAIRED_READS, \@filenames);
+    $files_to_process = @filenames;
+}
+
+$max_processes = ($files_to_process < $max_processes) ? $files_to_process : $max_processes;
 warn "Will use $max_processes processes\n";
 
 # fork as many new processes as there are CPUs

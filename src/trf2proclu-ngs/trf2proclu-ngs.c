@@ -43,15 +43,15 @@
 
 // Warning:
 // When modifying LBI_MAX_HEADER_SIZE, must also modify TRF_HEADER_FORMAT.
-#define LBI_MAX_HEADER_SIZE	200
-#define TRF_HEADER_FORMAT	"@%200[^\n\r]"
-#define LBI_MAX_FLANK_SIZE	1000
+#define LBI_MAX_HEADER_SIZE 200
+#define TRF_HEADER_FORMAT   "@%200[^\n\r]"
+#define LBI_MAX_FLANK_SIZE  1000
 
 // Warning:
 // When modifying LBI_MAX_PATTERN_SIZE or LBI_MAX_SEQUENCE_SIZE, must also modify TRF_RECORD_FORMAT.
-#define	LBI_MAX_PATTERN_SIZE	50000
-#define	LBI_MAX_SEQUENCE_SIZE	520000
-#define	TRF_RECORD_FORMAT	"%d %d %d %f %d %d %d %d %d %d %d %d %f %50000s %520000s %1000s %1000s"
+#define LBI_MAX_PATTERN_SIZE    50000
+#define LBI_MAX_SEQUENCE_SIZE   520000
+#define TRF_RECORD_FORMAT   "%d %d %d %f %d %d %d %d %d %d %d %d %f %50000s %520000s %1000s %1000s"
 
 typedef struct {
 
@@ -88,7 +88,7 @@ typedef struct {
 
 } REP_STRUCT;
 
-/********************************	doCriticalErrorAndQuit 	****************************/
+/********************************   doCriticalErrorAndQuit  ****************************/
 void doCriticalErrorAndQuit(const char *format, ... )
 {
     /* needed for EasyLife error handling */
@@ -270,7 +270,7 @@ int *MinimumRepresentation(int *indptr, int len, int *indptrrc, int lenrc, int *
 
 
 
-/********************************	main 	********************************************/
+/********************************   main    ********************************************/
 
 // Flag set by --ngs command line option
 static int verbose = 0;
@@ -316,10 +316,10 @@ int main(int argc, char **argv)
             {"output", required_argument, NULL, 'o'},
             {0, 0, NULL, 0}
         };
-        int option_index = 0;	// getopt_long() stores the option index here
+        int option_index = 0;   // getopt_long() stores the option index here
         c = getopt_long(argc, argv, "hf:m:s:i:p:l:o:", long_options, &option_index);
 
-        if (c == -1) break;	// detect the end of the options
+        if (c == -1) break; // detect the end of the options
 
         switch (c) {
         case 0:
@@ -332,7 +332,7 @@ int main(int argc, char **argv)
 
         case 'h':
             fprintf(stderr, "Usage: %s -f <num> -m <num> -s <num> -i <num> -o <string> -p <num> -l <num> [input.dat]\nWhere:\n\t-f specifies the id assigned to the first record in the file (must be greater than or equal to 1),\n\t-m must be equal to the matching weight parameter of the corresponding TRF run,\n\t-s must be equal to the mismatch penalty parameter of the corresponding TRF run,\n\t-i must be equal to the indel penalty parameter of the corresponding TRF run,\n\t-o specifies the name of the output index file,\n\t-p specifies minimum patsize to keep TR,\n\t-l specifies minimum flanksize (either side) to keep TR\n%s reads a DAT file output by the TRF and produces an LEB36 file and an index file that contains records from the DAT file each preceded by a unique id.\n", argv[0], argv[0]);
-            return (-3);
+            return (3);
 
         case 'f':
             startid = atoi(optarg);
@@ -371,16 +371,16 @@ int main(int argc, char **argv)
         case 'o':
             if ((indexfile = malloc(strlen(optarg) + 1)) == NULL) {
                 fputs("Could not allocate memory. Aborting.\n", stderr);
-                return (-4);
+                return (4);
             }
 
             strcpy(indexfile, optarg);
             break;
 
-        case '?':	// getopt_long already printed an error message
+        case '?':   // getopt_long already printed an error message
             break;
 
-        default:	// should never happen
+        default:    // should never happen
             assert(0);
         }
     }
@@ -388,49 +388,49 @@ int main(int argc, char **argv)
     if (indexfile == NULL || strlen(indexfile) == 0) {
         fputs("No name given for the output index file. Aborting.\n", stderr);
         fprintf(stderr, "Usage: %s -f <num> -m <num> -s <num> -i <num> -o <string> -p <num> -l <num> [input.dat]\nWhere:\n\t-f specifies the id assigned to the first record in the file (must be greater than or equal to 1),\n\t-m must be equal to the matching weight parameter of the corresponding TRF run,\n\t-s must be equal to the mismatch penalty parameter of the corresponding TRF run,\n\t-i must be equal to the indel penalty parameter of the corresponding TRF run,\n\t-o specifies the name of the output index file,\n\t-p specifies minimum patsize to keep TR,\n\t-l specifies minimum flanksize (either side) to keep TR\n%s reads a DAT file output by the TRF and produces an LEB36 file and an index file that contains records from the DAT file each preceded by a unique id.\n", argv[0], argv[0]);
-        return (-5);
+        return (5);
     }
 
     if (minperiod <= -1000000) {
         fputs("No minperiod provided. Aborting.\n", stderr);
         fprintf(stderr, "Usage: %s -f <num> -m <num> -s <num> -i <num> -o <string> -p <num> -l <num> [input.dat]\nWhere:\n\t-f specifies the id assigned to the first record in the file (must be greater than or equal to 1),\n\t-m must be equal to the matching weight parameter of the corresponding TRF run,\n\t-s must be equal to the mismatch penalty parameter of the corresponding TRF run,\n\t-i must be equal to the indel penalty parameter of the corresponding TRF run,\n\t-o specifies the name of the output index file,\n\t-p specifies minimum patsize to keep TR,\n\t-l specifies minimum flanksize (either side) to keep TR\n%s reads a DAT file output by the TRF and produces an LEB36 file and an index file that contains records from the DAT file each preceded by a unique id.\n", argv[0], argv[0]);
-        return (-6);
+        return (6);
     }
 
     if (minflank <= -1000000) {
         fputs("No minflank provided. Aborting.\n", stderr);
         fprintf(stderr, "Usage: %s -f <num> -m <num> -s <num> -i <num> -o <string> -p <num> -l <num> [input.dat]\nWhere:\n\t-f specifies the id assigned to the first record in the file (must be greater than or equal to 1),\n\t-m must be equal to the matching weight parameter of the corresponding TRF run,\n\t-s must be equal to the mismatch penalty parameter of the corresponding TRF run,\n\t-i must be equal to the indel penalty parameter of the corresponding TRF run,\n\t-o specifies the name of the output index file,\n\t-p specifies minimum patsize to keep TR,\n\t-l specifies minimum flanksize (either side) to keep TR\n%s reads a DAT file output by the TRF and produces an LEB36 file and an index file that contains records from the DAT file each preceded by a unique id.\n", argv[0], argv[0]);
-        return (-7);
+        return (7);
     }
 
     if (match <= -1000000) {
         fputs("No match weight provided. Aborting.\n", stderr);
         fprintf(stderr, "Usage: %s -f <num> -m <num> -s <num> -i <num> -o <string> -p <num> -l <num> [input.dat]\nWhere:\n\t-f specifies the id assigned to the first record in the file (must be greater than or equal to 1),\n\t-m must be equal to the matching weight parameter of the corresponding TRF run,\n\t-s must be equal to the mismatch penalty parameter of the corresponding TRF run,\n\t-i must be equal to the indel penalty parameter of the corresponding TRF run,\n\t-o specifies the name of the output index file,\n\t-p specifies minimum patsize to keep TR,\n\t-l specifies minimum flanksize (either side) to keep TR\n%s reads a DAT file output by the TRF and produces an LEB36 file and an index file that contains records from the DAT file each preceded by a unique id.\n", argv[0], argv[0]);
-        return (-8);
+        return (8);
     }
 
     if (mismatch <= -1000000) {
         fputs("No mismatch weight provided. Aborting.\n", stderr);
         fprintf(stderr, "Usage: %s -f <num> -m <num> -s <num> -i <num> -o <string> -p <num> -l <num> [input.dat]\nWhere:\n\t-f specifies the id assigned to the first record in the file (must be greater than or equal to 1),\n\t-m must be equal to the matching weight parameter of the corresponding TRF run,\n\t-s must be equal to the mismatch penalty parameter of the corresponding TRF run,\n\t-i must be equal to the indel penalty parameter of the corresponding TRF run,\n\t-o specifies the name of the output index file,\n\t-p specifies minimum patsize to keep TR,\n\t-l specifies minimum flanksize (either side) to keep TR\n%s reads a DAT file output by the TRF and produces an LEB36 file and an index file that contains records from the DAT file each preceded by a unique id.\n", argv[0], argv[0]);
-        return (-9);
+        return (9);
     }
 
     if (indel <= -1000000) {
         fputs("No indel weight provided. Aborting.\n", stderr);
         fprintf(stderr, "Usage: %s -f <num> -m <num> -s <num> -i <num> -o <string> -p <num> -l <num> [input.dat]\nWhere:\n\t-f specifies the id assigned to the first record in the file (must be greater than or equal to 1),\n\t-m must be equal to the matching weight parameter of the corresponding TRF run,\n\t-s must be equal to the mismatch penalty parameter of the corresponding TRF run,\n\t-i must be equal to the indel penalty parameter of the corresponding TRF run,\n\t-o specifies the name of the output index file,\n\t-p specifies minimum patsize to keep TR,\n\t-l specifies minimum flanksize (either side) to keep TR\n%s reads a DAT file output by the TRF and produces an LEB36 file and an index file that contains records from the DAT file each preceded by a unique id.\n", argv[0], argv[0]);
-        return (-10);
+        return (10);
     }
 
     if (startid <= -1000000) {
         fputs("No startng id provided. Aborting.\n", stderr);
         fprintf(stderr, "Usage: %s -f <num> -m <num> -s <num> -i <num> -o <string> -p <num> -l <num> [input.dat]\nWhere:\n\t-f specifies the id assigned to the first record in the file (must be greater than or equal to 1),\n\t-m must be equal to the matching weight parameter of the corresponding TRF run,\n\t-s must be equal to the mismatch penalty parameter of the corresponding TRF run,\n\t-i must be equal to the indel penalty parameter of the corresponding TRF run,\n\t-o specifies the name of the output index file,\n\t-p specifies minimum patsize to keep TR,\n\t-l specifies minimum flanksize (either side) to keep TR\n%s reads a DAT file output by the TRF and produces an LEB36 file and an index file that contains records from the DAT file each preceded by a unique id.\n", argv[0], argv[0]);
 
-        return (-11);
+        return (11);
     }
 
 
 
-    int nonopt = argc - optind;	// determine the number of non-option ARGV elements
+    int nonopt = argc - optind; // determine the number of non-option ARGV elements
 
     if (nonopt == 0) {
         // read from standard input if no non-option arguments specified
@@ -447,9 +447,9 @@ int main(int argc, char **argv)
     }
     else if (nonopt > 1) {
         fputs("Too many non-option arguments specified. Aborting.\n", stderr);
-        return (-12);
+        return (12);
     }
-    else {	// optind < 0
+    else {  // optind < 0
         assert(0); // should never happen
     }
 
@@ -467,30 +467,30 @@ int main(int argc, char **argv)
     setbuf(logfp, NULL); // Flush log file output immediately by disabling buffer
 
     //if (optind < argc) {
-    //	fprintf (stderr, "non-option ARGV-elements: ");
-    //	while (optind < argc)
-    //		fprintf (stderr, "%s ", argv[optind++]);
-    //	putchar ('\n');
+    //  fprintf (stderr, "non-option ARGV-elements: ");
+    //  while (optind < argc)
+    //      fprintf (stderr, "%s ", argv[optind++]);
+    //  putchar ('\n');
     //}
     //if (nonopt == 1) {
-    //	fprintf(stderr, "Closing input file '%s'\n", argv[argc - 1]);
-    //	fclose(fp);
+    //  fprintf(stderr, "Closing input file '%s'\n", argv[argc - 1]);
+    //  fclose(fp);
     //}
     //abort();
 
     // skip data file header portion
     //for(i=0;i<14;i++) {
-    //	fgets(pattern,LBI_MAX_PATTERN_SIZE,fp);
-    //	if(pattern[0]=='P') // get the parameters
-    //	{
-    //		sscanf(pattern,"%s %d %d %d %d %d %d",sequence,&match,&mismatch,&indel,&PM,&PI,&minscore);
-    //	}
+    //  fgets(pattern,LBI_MAX_PATTERN_SIZE,fp);
+    //  if(pattern[0]=='P') // get the parameters
+    //  {
+    //      sscanf(pattern,"%s %d %d %d %d %d %d",sequence,&match,&mismatch,&indel,&PM,&PI,&minscore);
+    //  }
     //}
 
     // read records from file
     repList = EasyListCreate(NULL, free);
     error = 0; thecount = 0;
-    theid = startid;	// TODO: this must be incremented in steps of one for every
+    theid = startid;    // TODO: this must be incremented in steps of one for every
 
     // allocate the similarity matrix
     sm = CreateSubstitutionMatrix(match, -mismatch);
@@ -500,7 +500,7 @@ int main(int argc, char **argv)
         if (ferror(fp)) {
             fclose(fp);
             fputs("Error reading from file. Aborting.\n", stderr);
-            return (-13);
+            return (13);
         }
 
         // scan TRF header
@@ -509,7 +509,7 @@ int main(int argc, char **argv)
         if (i != 1) {
             fclose(fp);
             fputs("Could not read TRF header. Aborting.\n", stderr);
-            return (-14);
+            return (14);
         }
 
         // scan TRF record(s)
@@ -592,7 +592,7 @@ int main(int argc, char **argv)
 
                 if (0 == seqlen) {
                     fputs("No sequence len passed though header of the RC read. Aborting.\n", stderr);
-                    return (-15);
+                    return (15);
                 }
 
                 repPtr->firstindex = seqlen - lastindex + 1;
@@ -628,7 +628,7 @@ int main(int argc, char **argv)
 
             if (-1 == cRes) {
                 fputs("Memory allocation failed on ComputeBetterPattern(). Aborting.\n", stderr);
-                return (-16);
+                return (16);
             }
 
             // fix
@@ -737,7 +737,7 @@ int main(int argc, char **argv)
 
                 if (NULL == rep.pattern || NULL == rep.subsequence) {
                     fputs("Memory allocation failed on allocatin a revese complement. Aborting.\n", stderr);
-                    return (-20);
+                    return (20);
                 }
 
                 rep.profile = NULL;
@@ -748,7 +748,7 @@ int main(int argc, char **argv)
 
                 if (-1 == cRes) {
                     fputs("Memory allocation failed on ComputeBetterPattern(). Aborting.\n", stderr);
-                    return (-21);
+                    return (21);
                 }
 
                 // fill out RC indices and set other vars
@@ -780,7 +780,7 @@ int main(int argc, char **argv)
 
                 if (NULL == repPtr->minRepresentation) {
                     fputs("Minimum representation is NULL. Aborting.\n", stderr);
-                    return (-100);
+                    return (100);
                 }
 
                 repPtr->acgtCount = repPtr->prof->acgtCount;
@@ -824,7 +824,7 @@ int main(int argc, char **argv)
 
     if (fp == NULL) {
         fputs("Unable to open index file for writing. Aborting.\n", stderr);
-        return (-17);
+        return (17);
     }
 
 
@@ -834,17 +834,17 @@ int main(int argc, char **argv)
 
     if (fph == NULL) {
         fputs("Unable to open indexhist file for writing. Aborting.\n", stderr);
-        return (-18);
+        return (18);
     }
 
     for (tnode = repList->head; tnode != NULL; tnode = tnode->next) {
         repPtr = (REP_STRUCT *)(tnode->item);
         /*fprintf(fp,"%d %d %d %d %.1f %d %d %d %d %d %d %d %d %.2f %s %s\n",repPtr->id,
-        		repPtr->firstindex, repPtr->lastindex, repPtr->period,
-        		repPtr->copynum, repPtr->patsize, repPtr->matchperc,
-        		repPtr->indelperc, repPtr->score, repPtr->acount,
-        		repPtr->ccount, repPtr->gcount, repPtr->tcount,
-        		repPtr->entropy, repPtr->pattern, repPtr->sequence );*/
+                repPtr->firstindex, repPtr->lastindex, repPtr->period,
+                repPtr->copynum, repPtr->patsize, repPtr->matchperc,
+                repPtr->indelperc, repPtr->score, repPtr->acount,
+                repPtr->ccount, repPtr->gcount, repPtr->tcount,
+                repPtr->entropy, repPtr->pattern, repPtr->sequence );*/
 
         if (repPtr->spanning)
         { fprintf(fp, "%d\t%s\t%d\t%d\t%.1f\t%d\t%s\n", repPtr->id, repPtr->header, repPtr->firstindex, repPtr->lastindex, repPtr->copynum, repPtr->patsize, repPtr->pattern); }
@@ -878,5 +878,6 @@ int main(int argc, char **argv)
         fputs("done\n", stderr);
 
     /* return last used id */
-    return (thecount >= 1) ? (theid - 1) : (-2);
+    // return (thecount >= 1) ? (theid - 1) : (-2);
+    return (thecount >= 1) ? 0 : 1;
 }
