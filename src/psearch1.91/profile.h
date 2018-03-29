@@ -39,7 +39,7 @@
     PROFILE STORAGE FORMAT EXPLANATION
     The file format used to store profiles is text based.
     Each profile is stored in its own line and in the following
-	format:
+    format:
 
     KEY PATLEN COPYNUMBER PROFLEN LEB36PROFILE LEB36PROFILERC Na Nc Ng Nt LEFTFLANK|RIGHTFLANK
 
@@ -85,56 +85,53 @@ extern char *GetComplement(char *);
 /* the following structure is used to pass a sequence to the algorithm */
 #define MAXSEQNAMELEN 200
 
-typedef struct
-{
-    int length,id;
+typedef struct {
+    int length, id;
     char *sequence;
 } FASTASEQUENCE;
 
 
 //////////////////////// BASIC DATA TYPES ///////////////////////////
 
-typedef struct
-{
+typedef struct {
     int key;
     int patlen;
     float copynum;
     int proflen;
     int rcflag;
-    int* indices;
-    int a,c,g,t,n;
+    int *indices;
+    int a, c, g, t, n;
     int nextoffset;
 
-	int aProf,cProf,gProf,tProf,dashProf;
-	float AveEntProf;
+    int aProf, cProf, gProf, tProf, dashProf;
+    float AveEntProf;
 
-	/* these are for blast part */
-	FASTASEQUENCE *seq;
-	void *scan2;
-	int trange;
+    /* these are for blast part */
+    FASTASEQUENCE *seq;
+    void *scan2;
+    int trange;
 
-     /* these are for confirmation before linking TRs, added in v1.86 */
-     char * left;
-     char * right;
-     int leftlen;
-     int rightlen;
+    /* these are for confirmation before linking TRs, added in v1.86 */
+    char *left;
+    char *right;
+    int leftlen;
+    int rightlen;
 
 
-     /* this is to make rotation exclusion stuff work, v 1.87 */
-     char rotationmaster;
-     char dir;
-     EASY_LIST *rotlist;
+    /* this is to make rotation exclusion stuff work, v 1.87 */
+    char rotationmaster;
+    char dir;
+    EASY_LIST *rotlist;
 } PROFILE;
 
-typedef struct
-{
+typedef struct {
     int     start;
     int     distance, distanceweighted, weights;
     double  similarity;
     int     length;
     int     rcflag;
-    int*    prof1side;
-    int*    prof2side;
+    int    *prof1side;
+    int    *prof2side;
 } PAP;
 
 
@@ -145,31 +142,31 @@ typedef struct
 // otherwise use nextoffset member of previous profile to ensure that
 // a profile following a specific one is read. Returns NULL at the
 // end of the file.
-PROFILE*    ReadProfile(FILE* fp, int offset); //NO LONGER USED
-PROFILE*    ReadProfileWithRC(FILE* fp, int offset, PROFILE** profrcret, int isread);
+PROFILE    *ReadProfile(FILE *fp, int offset); //NO LONGER USED
+PROFILE    *ReadProfileWithRC(FILE *fp, int offset, PROFILE **profrcret, int isread);
 
 // Writes the profile to the current position of text file.
-void        WriteProfile(FILE* fp, PROFILE* prof); //NO LONGER USED
-void        WriteProfileWithRC(FILE* fp, PROFILE* prof, PROFILE* profrc);
+void        WriteProfile(FILE *fp, PROFILE *prof); //NO LONGER USED
+void        WriteProfileWithRC(FILE *fp, PROFILE *prof, PROFILE *profrc);
 
 // Frees memory associate with a profile
-void        FreeProfile(PROFILE* prof);
+void        FreeProfile(PROFILE *prof);
 
 // copy profile structure and data
-PROFILE*    CopyProfile(PROFILE* prof);
+PROFILE    *CopyProfile(PROFILE *prof);
 
 // Creates a reverse complement of a profile
-PROFILE* GetReverseComplementProfile(PROFILE* original);
+PROFILE *GetReverseComplementProfile(PROFILE *original);
 
 
 // Gets the id of the standard composition that is closest. The counts
 // parameter is an array of five ints constaining counts for A,C,G,T,
 // and - or insertions in that order.
-int         GetCompositionId(int* counts);
+int         GetCompositionId(int *counts);
 
 // Gets the counts for a given standard composition id. Standard
 // counts allways add up to 10.
-void        GetCompositionCounts(int id, int* counts);
+void        GetCompositionCounts(int id, int *counts);
 
 // Gets the Id of the standard composition that has the complement
 // counts of the given one. If the id given has counts 2,4,3,0,1
@@ -181,7 +178,7 @@ int         GetComplementId(int id);
 char     GetCompositionSymbol(int id);
 
 // Prints symbols for array of compositions to file or stdout.
-void    WriteSymbols(FILE* fp, int* indices, int length);
+void    WriteSymbols(FILE *fp, int *indices, int length);
 
 
 
@@ -190,25 +187,25 @@ void    WriteSymbols(FILE* fp, int* indices, int length);
 // array of distances as upper triagular including diagonal using
 // unsigned characters. The size of the file is 12 + 501,501 =
 // 501,513 bytes. Returns NULL if invalid file.
-unsigned char* LoadDistanceTable(char* filename);
+unsigned char *LoadDistanceTable(char *filename);
 
 // Frees memory. Same as free(disttable);
-void FreeDistanceTable(unsigned char* disttable);
+void FreeDistanceTable(unsigned char *disttable);
 
 // Aligns p1 against the cyclic permuation of p2 that produces the lowest distance
-PAP* GetBestProfileAP(PROFILE* p1, PROFILE* p2, unsigned char* submatrix);
+PAP *GetBestProfileAP(PROFILE *p1, PROFILE *p2, unsigned char *submatrix);
 
 // Align p1 against current rotation of p2 (not cyclic)
-PAP* GetFixedProfileAP(PROFILE* p1, PROFILE* p2, unsigned char* submatrix);
+PAP *GetFixedProfileAP(PROFILE *p1, PROFILE *p2, unsigned char *submatrix);
 
 
 // Frees memory associated with a profile alignemnt struct and its members
-void FreePAP(PAP* ap);
+void FreePAP(PAP *ap);
 
 
 // Rescores a profile alignment with another substitution matrix.
 // New escore updates the distance member of the PAP structure
-void RescorePAP(PAP *ap, unsigned char* submatrix);
+void RescorePAP(PAP *ap, unsigned char *submatrix);
 
 
 
@@ -232,34 +229,36 @@ char cmp_symbol[1001];
 int cmp_init = 0;
 
 // routines used for converting to/from little endian base-36
-void LEB36ToInt(char* leb36,int* dec);
-void IntToLEB36(int* dec, char* leb36);
+void LEB36ToInt(char *leb36, int *dec);
+void IntToLEB36(int *dec, char *leb36);
 
 
-void        FreeProfile(PROFILE* prof)
+void        FreeProfile(PROFILE *prof)
 {
-    if(prof!=NULL)
-    {
+    if (prof != NULL) {
         free(prof->indices);
         free(prof);
     }
+
     return;
 }
 
 
-PROFILE* CopyProfile(PROFILE* prof)
+PROFILE *CopyProfile(PROFILE *prof)
 {
     int i;
-    PROFILE* result;
+    PROFILE *result;
 
-    if(prof==NULL)
+    if (prof == NULL)
         return NULL;
 
-    result = (PROFILE*) malloc(sizeof(PROFILE));
-    if(result==NULL) return NULL;
-    result->indices = (int*) malloc(sizeof(int)*(prof->proflen));
-    if(result->indices==NULL)
-    {
+    result = (PROFILE *) malloc(sizeof(PROFILE));
+
+    if (result == NULL) return NULL;
+
+    result->indices = (int *) malloc(sizeof(int) * (prof->proflen));
+
+    if (result->indices == NULL) {
         free(result);
         return NULL;
     }
@@ -271,125 +270,146 @@ PROFILE* CopyProfile(PROFILE* prof)
     result->proflen = prof->proflen;
     result->rcflag = prof->rcflag;
     result->nextoffset = prof->nextoffset;
-    for(i=0;i<(result->proflen);i++) {
+
+    for (i = 0; i < (result->proflen); i++) {
         result->indices[i] = prof->indices[i];
     }
 
     return result;
 }
 
-static char _conc_map[] = {'A','C','G','T','-','N'};
+static char _conc_map[] = {'A', 'C', 'G', 'T', '-', 'N'};
 
-char *getConcensusFromProfile(PROFILE *prof1) {
+char *getConcensusFromProfile(PROFILE *prof1)
+{
 
-	char *str,*str2,*it,*it2;
-	int cr, i, sel, max, j;
-	int counts[5];
-	
-
-	str = (char*)scalloc( prof1->proflen + 1 , sizeof(char) );
-	it2=str;
-
-	for (cr=-1,i=0; i<prof1->proflen;i++) {
-		GetCompositionCounts(prof1->indices[i],counts);	
-		sel=0; max=0; for (j=0;j<5;j++) { if (counts[j]>max) {max=counts[j]; sel=j;} }
-		//{printf("i: %d  -- %d %d %d %d %d sel: %d\n",i,counts[0],counts[1],counts[2],counts[3],counts[4],sel);}
-		if (sel!=4) { cr++; *it2 = _conc_map[sel]; it2++; }
-	}
-	str[cr+1] = 0;
-
-	// original buffer might be larger than we need
-	str2 = (char*)scalloc( cr + 2 , sizeof(char) );
-	for (it = str, it2=str2; it<=str+cr; it++,it2++) *it2 = *it;
-	*it2 = '\0';
-
-	sfree(str);
+    char *str, *str2, *it, *it2;
+    int cr, i, sel, max, j;
+    int counts[5];
 
 
+    str = (char *)scalloc( prof1->proflen + 1 , sizeof(char) );
+    it2 = str;
 
-	return str2;
+    for (cr = -1, i = 0; i < prof1->proflen; i++) {
+        GetCompositionCounts(prof1->indices[i], counts);
+        sel = 0; max = 0; for (j = 0; j < 5; j++) { if (counts[j] > max) {max = counts[j]; sel = j;} }
+
+        //{printf("i: %d  -- %d %d %d %d %d sel: %d\n",i,counts[0],counts[1],counts[2],counts[3],counts[4],sel);}
+        if (sel != 4) { cr++; *it2 = _conc_map[sel]; it2++; }
+    }
+
+    str[cr + 1] = 0;
+
+    // original buffer might be larger than we need
+    str2 = (char *)scalloc( cr + 2 , sizeof(char) );
+
+    for (it = str, it2 = str2; it <= str + cr; it++, it2++) *it2 = *it;
+
+    *it2 = '\0';
+
+    sfree(str);
+
+
+
+    return str2;
 }
 
-char *getConcensusComplementFromProfile(PROFILE *prof1) {
+char *getConcensusComplementFromProfile(PROFILE *prof1)
+{
 
-	char *str,*str2,*it,*it2;
-	int cr, i, sel, max, j;
-	int counts[5];
-	
+    char *str, *str2, *it, *it2;
+    int cr, i, sel, max, j;
+    int counts[5];
 
-	str = (char*)scalloc( prof1->proflen + 1 , sizeof(char) );
-	it2=str;
 
-	for (cr=-1,i=0; i<prof1->proflen;i++) {
-		GetCompositionCounts(prof1->indices[i],counts);	
-		sel=0; max=0; for (j=0;j<5;j++) { if (counts[j]>max) {max=counts[j]; sel=j;} }
-		//{printf("i: %d  -- %d %d %d %d %d sel: %d\n",i,counts[0],counts[1],counts[2],counts[3],counts[4],sel);}
-		if (sel!=4) { cr++; *it2 = _conc_map[sel]; it2++; }
-	}
-	str[cr+1] = 0;
+    str = (char *)scalloc( prof1->proflen + 1 , sizeof(char) );
+    it2 = str;
 
-	// original buffer might be larger than we need
-	str2 = (char*)scalloc( cr + 2 , sizeof(char) );
-	for (it = str + cr, it2=str2; it>=str; it--,it2++) *it2 = *it;
-	*it2 = '\0';
+    for (cr = -1, i = 0; i < prof1->proflen; i++) {
+        GetCompositionCounts(prof1->indices[i], counts);
+        sel = 0; max = 0; for (j = 0; j < 5; j++) { if (counts[j] > max) {max = counts[j]; sel = j;} }
 
-	sfree(str);
+        //{printf("i: %d  -- %d %d %d %d %d sel: %d\n",i,counts[0],counts[1],counts[2],counts[3],counts[4],sel);}
+        if (sel != 4) { cr++; *it2 = _conc_map[sel]; it2++; }
+    }
 
-	return str2;
+    str[cr + 1] = 0;
+
+    // original buffer might be larger than we need
+    str2 = (char *)scalloc( cr + 2 , sizeof(char) );
+
+    for (it = str + cr, it2 = str2; it >= str; it--, it2++) *it2 = *it;
+
+    *it2 = '\0';
+
+    sfree(str);
+
+    return str2;
 }
 
 /* 5-ary entropy function, values are 0-1 */
-double entropy_col(int *counts) {
-    double c0,c1,c2,c3,c4;
+double entropy_col(int *counts)
+{
+    double c0, c1, c2, c3, c4;
 
-    c0=counts[0]?(-counts[0]/10.0)*log(counts[0]/10.0)/log(5):0;
-    c1=counts[1]?(-counts[1]/10.0)*log(counts[1]/10.0)/log(5):0;
-    c2=counts[2]?(-counts[2]/10.0)*log(counts[2]/10.0)/log(5):0;
-    c3=counts[3]?(-counts[3]/10.0)*log(counts[3]/10.0)/log(5):0;
-    c4=counts[4]?(-counts[4]/10.0)*log(counts[4]/10.0)/log(5):0;
+    c0 = counts[0] ? (-counts[0] / 10.0) * log(counts[0] / 10.0) / log(5) : 0;
+    c1 = counts[1] ? (-counts[1] / 10.0) * log(counts[1] / 10.0) / log(5) : 0;
+    c2 = counts[2] ? (-counts[2] / 10.0) * log(counts[2] / 10.0) / log(5) : 0;
+    c3 = counts[3] ? (-counts[3] / 10.0) * log(counts[3] / 10.0) / log(5) : 0;
+    c4 = counts[4] ? (-counts[4] / 10.0) * log(counts[4] / 10.0) / log(5) : 0;
 
-    return c0+c1+c2+c3+c4;
+    return c0 + c1 + c2 + c3 + c4;
 }
 
 /* 5-ary average entropy function, values are 0-1 */
-float ave_entropy_and_counts(int *indices, int proflen, int *aProf, int *cProf, int *gProf, int *tProf,int *dashProf) {
+float ave_entropy_and_counts(int *indices, int proflen, int *aProf, int *cProf, int *gProf, int *tProf, int *dashProf)
+{
 
-	int i,k,j;
-	double entropy,aveentropy,entropySum;
-	int counts[5];
-	char *colptr,*ae_columns = NULL;
+    int i, k, j;
+    double entropy, aveentropy, entropySum;
+    int counts[5];
+    char *colptr, *ae_columns = NULL;
 
-	ae_columns = (char*)scalloc(proflen * 10 + 1, sizeof(char));
+    ae_columns = (char *)scalloc(proflen * 10 + 1, sizeof(char));
 
-	aveentropy = entropySum= 0.0;
-	for (i=0,colptr = ae_columns; i<proflen; i++) {
+    aveentropy = entropySum = 0.0;
 
-		GetCompositionCounts(indices[i],counts);
-		k=0;
-		for (j=0; j<counts[0]; j++) { colptr[k]='A'; k++; (*aProf)++; }
-		for (j=0; j<counts[1]; j++) { colptr[k]='C'; k++; (*cProf)++;}
-		for (j=0; j<counts[2]; j++) { colptr[k]='G'; k++; (*gProf)++;}
-		for (j=0; j<counts[3]; j++) { colptr[k]='T'; k++; (*tProf)++;}
-		for (j=0; j<counts[4]; j++) { colptr[k]='-'; k++; (*dashProf)++;}
-        	//sprintf(colptr,"%s","AACCGGTT--");
-		colptr+=10;
+    for (i = 0, colptr = ae_columns; i < proflen; i++) {
 
-		entropy = entropy_col(counts);
+        GetCompositionCounts(indices[i], counts);
+        k = 0;
+
+        for (j = 0; j < counts[0]; j++) { colptr[k] = 'A'; k++; (*aProf)++; }
+
+        for (j = 0; j < counts[1]; j++) { colptr[k] = 'C'; k++; (*cProf)++;}
+
+        for (j = 0; j < counts[2]; j++) { colptr[k] = 'G'; k++; (*gProf)++;}
+
+        for (j = 0; j < counts[3]; j++) { colptr[k] = 'T'; k++; (*tProf)++;}
+
+        for (j = 0; j < counts[4]; j++) { colptr[k] = '-'; k++; (*dashProf)++;}
+
+        //sprintf(colptr,"%s","AACCGGTT--");
+        colptr += 10;
+
+        entropy = entropy_col(counts);
         entropySum = entropySum + entropy;
-	}
-	aveentropy = entropySum / proflen;
-	
-	sfree(ae_columns);
+    }
 
-	return (float)aveentropy;
+    aveentropy = entropySum / proflen;
+
+    sfree(ae_columns);
+
+    return (float)aveentropy;
 }
 
-PROFILE*    ReadProfileWithRC(FILE* fp, int offset, PROFILE** profrcret, int isread)
+PROFILE    *ReadProfileWithRC(FILE *fp, int offset, PROFILE **profrcret, int isread)
 {
-    int c=0,i,key=0,patlen=0,proflen=0,proflenrc=0,number=0;
-    char dummy=0;
+    int c = 0, i, key = 0, patlen = 0, proflen = 0, proflenrc = 0, number = 0;
+    char dummy = 0;
     float copynum;
-    char digits[4],*src,*src2;
+    char digits[4], *src, *src2;
     PROFILE *prof, *profrc;
 
     static char leftflank[1000];
@@ -397,26 +417,30 @@ PROFILE*    ReadProfileWithRC(FILE* fp, int offset, PROFILE** profrcret, int isr
     static char buffer[2500];
 
     // go to the offset
-	if(offset>=0) fseek(fp,offset,SEEK_SET);
+    if (offset >= 0) fseek(fp, offset, SEEK_SET);
 
     // read key, pattern length and profile length
-    c = fscanf(fp,"%d %d %f %d %d",&key,&patlen,&copynum,&proflen,&proflenrc);
-    if(c!=5) {
-		//printf("\nload error!!!1\n");
+    c = fscanf(fp, "%d %d %f %d %d", &key, &patlen, &copynum, &proflen, &proflenrc);
+
+    if (c != 5) {
+        //printf("\nload error!!!1\n");
         return NULL;
     }
 
 
     // allocate a profile object and the corresponding array of indices
-    prof = (PROFILE*) malloc(sizeof(PROFILE));
-    if(prof==NULL) return NULL;
-    prof->indices = (int*) malloc(sizeof(int)*proflen);
-    if(prof->indices==NULL)
-    {
+    prof = (PROFILE *) malloc(sizeof(PROFILE));
+
+    if (prof == NULL) return NULL;
+
+    prof->indices = (int *) malloc(sizeof(int) * proflen);
+
+    if (prof->indices == NULL) {
         free(prof);
         printf("\nload error!!!2\n");
         return NULL;
     }
+
     // set members
     prof->key = key;
     prof->left = NULL;
@@ -427,30 +451,32 @@ PROFILE*    ReadProfileWithRC(FILE* fp, int offset, PROFILE** profrcret, int isr
     prof->copynum  = copynum;
     prof->proflen  = proflen;
     prof->rcflag = 0;
-	prof->scan2 = NULL;
-	prof->trange = 0;
-	prof->aProf=0;
-	prof->cProf=0;
-	prof->gProf=0;
-	prof->tProf=0;
-	prof->dashProf=0;
-	prof->AveEntProf=0.0;
+    prof->scan2 = NULL;
+    prof->trange = 0;
+    prof->aProf = 0;
+    prof->cProf = 0;
+    prof->gProf = 0;
+    prof->tProf = 0;
+    prof->dashProf = 0;
+    prof->AveEntProf = 0.0;
     prof->rotationmaster  = 1;
     prof->dir  = 0;
     prof->rotlist = NULL;
 
 
-    if (proflenrc>0) {
-        profrc = (PROFILE*) malloc(sizeof(PROFILE));
-        if (profrc) profrc->indices = (int*) malloc(sizeof(int)*proflenrc);
-        if(profrc==NULL || profrc->indices==NULL)
-        {
+    if (proflenrc > 0) {
+        profrc = (PROFILE *) malloc(sizeof(PROFILE));
+
+        if (profrc) profrc->indices = (int *) malloc(sizeof(int) * proflenrc);
+
+        if (profrc == NULL || profrc->indices == NULL) {
             free(prof->indices);
             free(prof);
             free(profrc);
             printf("\nload error!!!3\n");
             return NULL;
         }
+
         // set members
         profrc->key = key;
         profrc->left = NULL;
@@ -461,26 +487,25 @@ PROFILE*    ReadProfileWithRC(FILE* fp, int offset, PROFILE** profrcret, int isr
         profrc->copynum =  copynum;
         profrc->proflen  = proflenrc;
         profrc->rcflag = 1;
-		profrc->scan2 = NULL;
-		profrc->trange = 0;
-		profrc->aProf=0;
-		profrc->cProf=0;
-		profrc->gProf=0;
-		profrc->tProf=0;
-		profrc->dashProf=0;
-		profrc->AveEntProf=0.0;
-	profrc->rotationmaster  = 1;
-	profrc->dir  = 0;
-    	profrc->rotlist = NULL;
+        profrc->scan2 = NULL;
+        profrc->trange = 0;
+        profrc->aProf = 0;
+        profrc->cProf = 0;
+        profrc->gProf = 0;
+        profrc->tProf = 0;
+        profrc->dashProf = 0;
+        profrc->AveEntProf = 0.0;
+        profrc->rotationmaster  = 1;
+        profrc->dir  = 0;
+        profrc->rotlist = NULL;
 
     }
 
-    for(i=0;i<proflen;i++)
-    {
+    for (i = 0; i < proflen; i++) {
         // get next two digits
-        c = fscanf(fp,"%2s",digits);
-        if(c!=1)
-        {
+        c = fscanf(fp, "%2s", digits);
+
+        if (c != 1) {
             free(prof->indices);
             free(prof);
             free(profrc->indices);
@@ -490,12 +515,12 @@ PROFILE*    ReadProfileWithRC(FILE* fp, int offset, PROFILE** profrcret, int isr
         }
 
         // translate to decimal and save
-        LEB36ToInt(digits,&number);
+        LEB36ToInt(digits, &number);
         prof->indices[i] = number;
     }
 
     // read the space
-    if (proflenrc<=0) {
+    if (proflenrc <= 0) {
 
         prof->nextoffset = ftell(fp);
 
@@ -504,233 +529,245 @@ PROFILE*    ReadProfileWithRC(FILE* fp, int offset, PROFILE** profrcret, int isr
     }
 
     // read the rc profile
-    for(i=0;i<proflenrc;i++)
-    {
+    for (i = 0; i < proflenrc; i++) {
         // get next two digits
-        c = fscanf(fp,"%2s",digits);
-        if(c!=1)
-        {
+        c = fscanf(fp, "%2s", digits);
+
+        if (c != 1) {
             free(prof->indices);
             free(prof);
             free(profrc->indices);
             free(profrc);
-			printf("\nload error!!!5\n");
+            printf("\nload error!!!5\n");
             return NULL;
         }
 
         // translate to decimal and save
-        LEB36ToInt(digits,&number);
+        LEB36ToInt(digits, &number);
         profrc->indices[i] = number;
     }
 
     // read counts
-    c = fscanf(fp," %d %d %d %d",&(prof->a),&(prof->c),&(prof->g),&(prof->t));
-    if(c!=4) {
-		printf("\nload error!!!6\n");
+    c = fscanf(fp, " %d %d %d %d", &(prof->a), &(prof->c), &(prof->g), &(prof->t));
+
+    if (c != 4) {
+        printf("\nload error!!!6\n");
         return NULL;
     }
-	profrc->a=prof->t;
-	profrc->t=prof->a;
-	profrc->c=prof->g;
-	profrc->g=prof->c;
-	
+
+    profrc->a = prof->t;
+    profrc->t = prof->a;
+    profrc->c = prof->g;
+    profrc->g = prof->c;
 
 
-    if (profrcret) 
+
+    if (profrcret)
         *profrcret = profrc;
 
     prof->nextoffset = ftell(fp);
 
 
-	/* get concensus for blast search */
-	{
-		FASTASEQUENCE *pseq,*pseq2;
+    /* get concensus for blast search */
+    {
+        FASTASEQUENCE *pseq, *pseq2;
 
-                pseq = (FASTASEQUENCE*)scalloc(1,sizeof(FASTASEQUENCE));;
-		pseq2 = (FASTASEQUENCE*)scalloc(1,sizeof(FASTASEQUENCE));;
+        pseq = (FASTASEQUENCE *)scalloc(1, sizeof(FASTASEQUENCE));;
+        pseq2 = (FASTASEQUENCE *)scalloc(1, sizeof(FASTASEQUENCE));;
 
-		pseq->sequence = getConcensusFromProfile(prof);
-		pseq->length = strlen(pseq->sequence);
-		pseq->id = key;
+        pseq->sequence = getConcensusFromProfile(prof);
+        pseq->length = strlen(pseq->sequence);
+        pseq->id = key;
 
-		pseq2->sequence = getConcensusFromProfile(profrc);
-		pseq2->length = strlen(pseq2->sequence);
-		pseq2->id = key;
+        pseq2->sequence = getConcensusFromProfile(profrc);
+        pseq2->length = strlen(pseq2->sequence);
+        pseq2->id = key;
 
-		prof->seq = pseq;
-		profrc->seq = pseq2;
+        prof->seq = pseq;
+        profrc->seq = pseq2;
 
-		prof->AveEntProf = ave_entropy_and_counts(prof->indices,prof->proflen,&(prof->aProf),&(prof->cProf),&(prof->gProf),&(prof->tProf),&(prof->dashProf));
-		profrc->AveEntProf = ave_entropy_and_counts(profrc->indices,profrc->proflen,&(profrc->aProf),&(profrc->cProf),&(profrc->gProf),&(profrc->tProf),&(profrc->dashProf));
+        prof->AveEntProf = ave_entropy_and_counts(prof->indices, prof->proflen, &(prof->aProf), &(prof->cProf), &(prof->gProf), &(prof->tProf), &(prof->dashProf));
+        profrc->AveEntProf = ave_entropy_and_counts(profrc->indices, profrc->proflen, &(profrc->aProf), &(profrc->cProf), &(profrc->gProf), &(profrc->tProf), &(profrc->dashProf));
 
-		/*
-		printf("key: %d\n",prof->key);
-		printf("seq: %s\n",pseq->sequence);
-		printf("seqcomp: %s\n",pseq->sequencecomplement);
-		printf("forward %d %d %d %d %d ave. ent: %f\n",prof->aProf,prof->cProf,prof->gProf,prof->tProf,prof->dashProf,prof->AveEntProf);
-		printf("reverse %d %d %d %d %d ave. ent: %f\n",profrc->aProf,profrc->cProf,profrc->gProf,profrc->tProf,profrc->dashProf,profrc->AveEntProf);
-		exit(1);
-		*/
-	}
+        /*
+        printf("key: %d\n",prof->key);
+        printf("seq: %s\n",pseq->sequence);
+        printf("seqcomp: %s\n",pseq->sequencecomplement);
+        printf("forward %d %d %d %d %d ave. ent: %f\n",prof->aProf,prof->cProf,prof->gProf,prof->tProf,prof->dashProf,prof->AveEntProf);
+        printf("reverse %d %d %d %d %d ave. ent: %f\n",profrc->aProf,profrc->cProf,profrc->gProf,profrc->tProf,profrc->dashProf,profrc->AveEntProf);
+        exit(1);
+        */
+    }
 
     /* optionally there could be 2 flanks there, at most 50 would be used */
-    leftflank[0]=rightflank[0]='\0';
-    c = fscanf(fp,"%s",buffer);
-    if(c!=1) {
+    leftflank[0] = rightflank[0] = '\0';
+    c = fscanf(fp, "%s", buffer);
+
+    if (c != 1) {
         printf("\nNo flanks specified!\n");
-        return NULL; 
+        return NULL;
     }
-    i=0;
-    for (src=buffer; *src!='\0'; src++) {
-     if (*src == '|') { 
-       *src = '\0';
-       strcpy(leftflank,buffer);
-       strcpy(rightflank,src+1);
+
+    i = 0;
+
+    for (src = buffer; *src != '\0'; src++) {
+        if (*src == '|') {
+            *src = '\0';
+            strcpy(leftflank, buffer);
+            strcpy(rightflank, src + 1);
 
 
-       src2 = leftflank;
-       while (*src2!='\0') { *src2=toupper(*src2); if (NULL==strchr("ACGT",*src2)) { *src2='N'; } src2++; }
-       src2 = rightflank;
-       while (*src2!='\0') { *src2=toupper(*src2); if (NULL==strchr("ACGT",*src2)) { *src2='N'; } src2++; }
+            src2 = leftflank;
 
-       prof->left = GetReverse(leftflank); 
-       prof->leftlen = strlen(prof->left);       
-       prof->right = strdup(rightflank); 
-       prof->rightlen = strlen(prof->right);
+            while (*src2 != '\0') { *src2 = toupper(*src2); if (NULL == strchr("ACGT", *src2)) { *src2 = 'N'; } src2++; }
 
-       profrc->left = GetComplement(prof->right); profrc->leftlen = strlen(profrc->left);
-       profrc->right = GetComplement(prof->left); profrc->rightlen = strlen(profrc->right);
-       i=1; break;
-     }
+            src2 = rightflank;
+
+            while (*src2 != '\0') { *src2 = toupper(*src2); if (NULL == strchr("ACGT", *src2)) { *src2 = 'N'; } src2++; }
+
+            prof->left = GetReverse(leftflank);
+            prof->leftlen = strlen(prof->left);
+            prof->right = strdup(rightflank);
+            prof->rightlen = strlen(prof->right);
+
+            profrc->left = GetComplement(prof->right); profrc->leftlen = strlen(profrc->left);
+            profrc->right = GetComplement(prof->left); profrc->rightlen = strlen(profrc->right);
+            i = 1; break;
+        }
     }
-    if(i!=1) {
+
+    if (i != 1) {
         printf("\nNo flanks specified!\n");
-        return NULL; 
+        return NULL;
     }
 
-    
+
     //fprintf(stderr,"l=%s | r=%s\n",leftflank,rightflank);
-    
+
 
     prof->nextoffset = ftell(fp);
 
     // fix to limit flank length if Ref to REf is used
     if (OPTION == 'R') {
-	prof->leftlen = min ( prof->leftlen , REFLEN);
-	prof->rightlen = min ( prof->rightlen , REFLEN);
-	profrc->leftlen = min ( profrc->leftlen , REFLEN);
-	profrc->rightlen = min ( profrc->rightlen , REFLEN);
+        prof->leftlen = min ( prof->leftlen , REFLEN);
+        prof->rightlen = min ( prof->rightlen , REFLEN);
+        profrc->leftlen = min ( profrc->leftlen , REFLEN);
+        profrc->rightlen = min ( profrc->rightlen , REFLEN);
 
-    } else {
+    }
+    else {
 
-	/* We only want to shorten the read, to make sure reference flank is longer. 
-           This is because only seq1 is without end penalty.
-           If we were to shorten both, a single insertion in read would produce 2 errors
-        */ 
-	if (isread) {
-		prof->leftlen = min ( prof->leftlen , MAXFLANKCONSIDERED);
-		prof->rightlen = min ( prof->rightlen , MAXFLANKCONSIDERED);
-		profrc->leftlen = min ( profrc->leftlen , MAXFLANKCONSIDERED);
-		profrc->rightlen = min ( profrc->rightlen , MAXFLANKCONSIDERED);
-	}
+        /* We only want to shorten the read, to make sure reference flank is longer.
+               This is because only seq1 is without end penalty.
+               If we were to shorten both, a single insertion in read would produce 2 errors
+            */
+        if (isread) {
+            prof->leftlen = min ( prof->leftlen , MAXFLANKCONSIDERED);
+            prof->rightlen = min ( prof->rightlen , MAXFLANKCONSIDERED);
+            profrc->leftlen = min ( profrc->leftlen , MAXFLANKCONSIDERED);
+            profrc->rightlen = min ( profrc->rightlen , MAXFLANKCONSIDERED);
+        }
     }
 
     return prof;
 }
 
-void  WriteProfileWithRC(FILE* fp, PROFILE* prof, PROFILE* profrc)
+void  WriteProfileWithRC(FILE *fp, PROFILE *prof, PROFILE *profrc)
 {
-    int i,number,proflen;
+    int i, number, proflen;
     char digits[4];
 
-	/* write repeat data */
-    fprintf(fp,"%d %d %.2f %d %d ",prof->key,prof->patlen,prof->copynum,prof->proflen,profrc ? profrc->proflen : -1);
+    /* write repeat data */
+    fprintf(fp, "%d %d %.2f %d %d ", prof->key, prof->patlen, prof->copynum, prof->proflen, profrc ? profrc->proflen : -1);
     proflen = prof->proflen;
 
-	/* write profile */
-    for(i=0;i<proflen;i++)
-    {
+    /* write profile */
+    for (i = 0; i < proflen; i++) {
         number = prof->indices[i];
-        IntToLEB36(&number,digits);
-        if(digits[1]=='\0')
-        {
+        IntToLEB36(&number, digits);
+
+        if (digits[1] == '\0') {
             digits[1] = '0';
             digits[2] = '\0';
         }
-        fprintf(fp,"%s",digits);
+
+        fprintf(fp, "%s", digits);
     }
 
-    if (NULL == profrc) { fprintf(fp,"\n"); return; }
+    if (NULL == profrc) { fprintf(fp, "\n"); return; }
 
-    fprintf(fp," ");
+    fprintf(fp, " ");
 
-	/* write profile RC */
+    /* write profile RC */
     proflen = profrc->proflen;
-    for(i=0;i<proflen;i++)
-    {
+
+    for (i = 0; i < proflen; i++) {
         number = profrc->indices[i];
-        IntToLEB36(&number,digits);
-        if(digits[1]=='\0')
-        {
+        IntToLEB36(&number, digits);
+
+        if (digits[1] == '\0') {
             digits[1] = '0';
             digits[2] = '\0';
         }
-        fprintf(fp,"%s",digits);
+
+        fprintf(fp, "%s", digits);
     }
-    
-	/* write a,c,g,t counts (from source sequence) for clustering hints */
-    fprintf(fp," %d %d %d %d",prof->a,prof->c,prof->g,prof->t);
+
+    /* write a,c,g,t counts (from source sequence) for clustering hints */
+    fprintf(fp, " %d %d %d %d", prof->a, prof->c, prof->g, prof->t);
 
 
-	fprintf(fp,"\n");
+    fprintf(fp, "\n");
 
     return;
 }
 
-void LEB36ToInt(char* leb36,int* dec)
+void LEB36ToInt(char *leb36, int *dec)
 {
-    int i,mult,num;
+    int i, mult, num;
     char *p;
 
     // step through leb36 digits
     num = 0;
     mult = 1;
-    for(p=leb36;*p!='\0';p++)
-    {
-        if(*p<65) i = (*p)&0xF;
-        else i = ((*p)&0x1F)+9;
 
-        num += (i*mult);
+    for (p = leb36; *p != '\0'; p++) {
+        if (*p < 65) i = (*p) & 0xF;
+        else i = ((*p) & 0x1F) + 9;
+
+        num += (i * mult);
         mult *= 36;
     }
+
     *dec = num; // assign before returning
 
     return;
 }
 
 
-void IntToLEB36(int* dec, char* leb36)
+void IntToLEB36(int *dec, char *leb36)
 {
-    int i,div;
-    char *p,c;
+    int i, div;
+    char *p, c;
 
-    if(*dec==0)
-    {
+    if (*dec == 0) {
         leb36[0] = '0';
         leb36[1] = '\0';
     }
 
     div = *dec;
     p = leb36;
-    while(div>0)
-    {
-        i = div%36;
-        (i<10)?(c=i+48):(c=i+55);
+
+    while (div > 0) {
+        i = div % 36;
+        (i < 10) ? (c = i + 48) : (c = i + 55);
         *p = c;
         div /= 36;
         p++;
     }
-    if(p==leb36) *(p++) = '0';
+
+    if (p == leb36) *(p++) = '0';
+
     *p = '\0';
 
     return;
@@ -739,34 +776,38 @@ void IntToLEB36(int* dec, char* leb36)
 
 void InitializeCompositions(void)
 {
-    int a,c,g,t,dash,id=0,ms,mc;
+    int a, c, g, t, dash, id = 0, ms, mc;
 
-    for(a=0;a<=10;a++)
-    for(c=0;c<=10;c++)
-    for(g=0;g<=10;g++)
-    for(t=0;t<=10;t++)
-    {
-        dash = 10-a-c-g-t;
-        if(dash>=0)
-        {
-            cmp_ids[a][c][g][t]=id;
-            NONDASHES[id]=a+c+g+t;
-            cmp_counts[id][0]=a;
-            cmp_counts[id][1]=c;
-            cmp_counts[id][2]=g;
-            cmp_counts[id][3]=t;
+    for (a = 0; a <= 10; a++)
+        for (c = 0; c <= 10; c++)
+            for (g = 0; g <= 10; g++)
+                for (t = 0; t <= 10; t++) {
+                    dash = 10 - a - c - g - t;
 
-            ms = 'A';
-            mc = a;
-            if(c>mc){mc=c;ms='C';};
-            if(g>mc){mc=g;ms='G';};
-            if(t>mc){mc=t;ms='T';};
-            if(dash>mc){mc=dash;ms='-';}
-            cmp_symbol[id] = ms;
+                    if (dash >= 0) {
+                        cmp_ids[a][c][g][t] = id;
+                        NONDASHES[id] = a + c + g + t;
+                        cmp_counts[id][0] = a;
+                        cmp_counts[id][1] = c;
+                        cmp_counts[id][2] = g;
+                        cmp_counts[id][3] = t;
 
-            id++;
-        }
-    }
+                        ms = 'A';
+                        mc = a;
+
+                        if (c > mc) {mc = c; ms = 'C';};
+
+                        if (g > mc) {mc = g; ms = 'G';};
+
+                        if (t > mc) {mc = t; ms = 'T';};
+
+                        if (dash > mc) {mc = dash; ms = '-';}
+
+                        cmp_symbol[id] = ms;
+
+                        id++;
+                    }
+                }
 
     cmp_init = 1;
 
@@ -774,61 +815,64 @@ void InitializeCompositions(void)
 }
 
 
-int GetCompositionId(int* counts)
+int GetCompositionId(int *counts)
 {
-    int i,total=0;
-    int aceil,cceil,gceil,tceil;
-    int a,c,g,t,d;
-    double an,cn,gn,tn,dn;
-    double difa,difc,difg,dift,difd;
-    int besta,bestc,bestg,bestt,bestd;
-    double distance,bestdist=10000.0;
+    int i, total = 0;
+    int aceil, cceil, gceil, tceil;
+    int a, c, g, t, d;
+    double an, cn, gn, tn, dn;
+    double difa, difc, difg, dift, difd;
+    int besta, bestc, bestg, bestt, bestd;
+    double distance, bestdist = 10000.0;
 
-    if(!cmp_init) InitializeCompositions();
+    if (!cmp_init) InitializeCompositions();
 
-    for(i=0;i<5;i++) total+= counts[i];
-    if(total==0) return 602; // id of perfect mixture
-    if(total==10) return cmp_ids[counts[0]][counts[1]][counts[2]][counts[3]];
+    for (i = 0; i < 5; i++) total += counts[i];
+
+    if (total == 0) return 602; // id of perfect mixture
+
+    if (total == 10) return cmp_ids[counts[0]][counts[1]][counts[2]][counts[3]];
 
     // normalize counts as doubles;
-    an = counts[0]*10.0/total;
-    cn = counts[1]*10.0/total;
-    gn = counts[2]*10.0/total;
-    tn = counts[3]*10.0/total;
-    dn = 10.0-an-cn-gn-tn;
-    if(dn<0.0) dn=0.0;
+    an = counts[0] * 10.0 / total;
+    cn = counts[1] * 10.0 / total;
+    gn = counts[2] * 10.0 / total;
+    tn = counts[3] * 10.0 / total;
+    dn = 10.0 - an - cn - gn - tn;
+
+    if (dn < 0.0) dn = 0.0;
 
     // figure out which count is closer in euclidean space
-    aceil = counts[0]*10/total+1;
-    cceil = counts[1]*10/total+1;
-    gceil = counts[2]*10/total+1;
-    tceil = counts[3]*10/total+1;
-    for(a=aceil-1;a<=aceil;a++)
-    for(c=cceil-1;c<=cceil;c++)
-    for(g=gceil-1;g<=gceil;g++)
-    for(t=tceil-1;t<=tceil;t++)
-    {
-        d = 10-a-c-g-t;
-        if(d>=0) // valid composition
-        {
-            difa = an - a;
-            difc = cn - c;
-            difg = gn - g;
-            dift = tn - t;
-            difd = dn - d;
+    aceil = counts[0] * 10 / total + 1;
+    cceil = counts[1] * 10 / total + 1;
+    gceil = counts[2] * 10 / total + 1;
+    tceil = counts[3] * 10 / total + 1;
 
-            distance = difa*difa+difc*difc+difg*difg+dift*dift+difd*difd;
-            if(distance<bestdist)
-            {
-                bestdist = distance;
-                besta = a;
-                bestc = c;
-                bestg = g;
-                bestt = t;
-                bestd = d;
-            }
-        }
-    }
+    for (a = aceil - 1; a <= aceil; a++)
+        for (c = cceil - 1; c <= cceil; c++)
+            for (g = gceil - 1; g <= gceil; g++)
+                for (t = tceil - 1; t <= tceil; t++) {
+                    d = 10 - a - c - g - t;
+
+                    if (d >= 0) { // valid composition
+                        difa = an - a;
+                        difc = cn - c;
+                        difg = gn - g;
+                        dift = tn - t;
+                        difd = dn - d;
+
+                        distance = difa * difa + difc * difc + difg * difg + dift * dift + difd * difd;
+
+                        if (distance < bestdist) {
+                            bestdist = distance;
+                            besta = a;
+                            bestc = c;
+                            bestg = g;
+                            bestt = t;
+                            bestd = d;
+                        }
+                    }
+                }
 
     return cmp_ids[besta][bestc][bestg][bestt];
 }
@@ -838,29 +882,30 @@ int _NONDASHES(int id) {
     int cn;
 
     if(!cmp_init) InitializeCompositions();
-	
+
     cn = cmp_counts[id][0] + cmp_counts[id][1] + cmp_counts[id][2] + cmp_counts[id][3];
 
     return cn;
 }
 */
 
-void GetCompositionCounts(int id, int* counts)
+void GetCompositionCounts(int id, int *counts)
 {
     int i;
 
-    if(!cmp_init) InitializeCompositions();
+    if (!cmp_init) InitializeCompositions();
 
-    if(id<0||id>1000)
-    {
-        for(i=0;i<5;i++) counts[i]=2; // perfect mixture
+    if (id < 0 || id > 1000) {
+        for (i = 0; i < 5; i++) counts[i] = 2; // perfect mixture
+
         return;
     }
-    for(i=0;i<4;i++)
-    {
+
+    for (i = 0; i < 4; i++) {
         counts[i] = cmp_counts[id][i];
     }
-    counts[4] = 10-counts[0]-counts[1]-counts[2]-counts[3];
+
+    counts[4] = 10 - counts[0] - counts[1] - counts[2] - counts[3];
 
     return;
 }
@@ -868,11 +913,11 @@ void GetCompositionCounts(int id, int* counts)
 
 int GetComplementId(int id)
 {
-    int a,c,g,t;
+    int a, c, g, t;
 
-    if(!cmp_init) InitializeCompositions();
+    if (!cmp_init) InitializeCompositions();
 
-    if(id<1) return 0; // protect against gap or newgap
+    if (id < 1) return 0; // protect against gap or newgap
 
     a = cmp_counts[id][3];
     c = cmp_counts[id][2];
@@ -885,67 +930,69 @@ int GetComplementId(int id)
 
 char    GetCompositionSymbol(int id)
 {
-    if(!cmp_init) InitializeCompositions();
+    if (!cmp_init) InitializeCompositions();
 
-    if(id<0) return '~'; // account for new gap index
+    if (id < 0) return '~'; // account for new gap index
+
     return cmp_symbol[id];
 }
 
 
-void    WriteSymbols(FILE* fp, int* indices, int length)
+void    WriteSymbols(FILE *fp, int *indices, int length)
 {
-    int i,index;
+    int i, index;
     char symbol;
 
-    for(i=0;i<length;i++)
-    {
+    for (i = 0; i < length; i++) {
         index = indices[i];
-        if(index>1000||index<0) index = -1;
+
+        if (index > 1000 || index < 0) index = -1;
+
         symbol = GetCompositionSymbol(index);
-        fprintf(fp,"%c",symbol);
+        fprintf(fp, "%c", symbol);
     }
 
     return;
 }
 
 
-unsigned char* LoadDistanceTable(char* filename)
+unsigned char *LoadDistanceTable(char *filename)
 {
-    int header[3],i;
-    FILE* fp;
-    unsigned char* buffer;
+    int header[3], i;
+    FILE *fp;
+    unsigned char *buffer;
 
     // open the file for reading
-    fp = fopen(filename,"rb");
-    if(fp==NULL) return NULL;
+    fp = fopen(filename, "rb");
+
+    if (fp == NULL) return NULL;
 
     // read header
-    i = fread(header,sizeof(int),3,fp);
-    if(i!=3)
-    {
+    i = fread(header, sizeof(int), 3, fp);
+
+    if (i != 3) {
         fclose(fp);
         return NULL;
     }
 
     // verify header
-    if(header[0]!=777||header[1]!=10||header[2]!=5)
-    {
+    if (header[0] != 777 || header[1] != 10 || header[2] != 5) {
         fclose(fp);
         return NULL;
     }
 
     // allocate buffer
-    buffer = (unsigned char*) malloc(501501);
-    if(buffer==NULL)
-    {
+    buffer = (unsigned char *) malloc(501501);
+
+    if (buffer == NULL) {
         fclose(fp);
         return NULL;
     }
 
     // read data
-    i = fread(buffer,1,501501,fp);
-    if(i!=501501)
-    {
+    i = fread(buffer, 1, 501501, fp);
+
+    if (i != 501501) {
         fclose(fp);
         return NULL;
     }
@@ -956,7 +1003,7 @@ unsigned char* LoadDistanceTable(char* filename)
 }
 
 
-void FreeDistanceTable(unsigned char* disttable)
+void FreeDistanceTable(unsigned char *disttable)
 {
     free(disttable);
     return;
@@ -983,33 +1030,30 @@ void FreeDistanceTable(unsigned char* disttable)
                                     sm[1000*(c)-((c)*(c)-(c))/2+(r)])
 
 
-struct tagPALIMIT
-{
+struct tagPALIMIT {
     int left;
     int right;
 };
 typedef struct tagPALIMIT PALIMIT;
 
-struct tagSPINEOFPALIMITS
-{
+struct tagSPINEOFPALIMITS {
     int     done;
     int     distance;
-    PALIMIT*  limits;
+    PALIMIT  *limits;
 };
 typedef struct tagSPINEOFPALIMITS SPINEOFPALIMITS;
 
-struct tagPSD
-{
+struct tagPSD {
     int distance;
-    int direction; 
+    int direction;
 };
 typedef struct tagPSD PSD;
 
 
 /* global variables */
 SPINEOFPALIMITS paL[MAXPROFILESIZE];
-PSD*    paS;
-int    padoublepat[MAXPROFILESIZE*2];
+PSD    *paS;
+int    padoublepat[MAXPROFILESIZE * 2];
 int pa_need_init = 1;
 
 
@@ -1019,10 +1063,9 @@ int pa_need_init = 1;
 
 /* paReserve is a stack of limit structures */
 
-struct tagRESERVEOFPALIMITS
-{
+struct tagRESERVEOFPALIMITS {
     int next;
-    PALIMIT*  limits[paLOGDEPTH];
+    PALIMIT  *limits[paLOGDEPTH];
 };
 typedef struct tagRESERVEOFPALIMITS RESERVE;
 
@@ -1033,25 +1076,25 @@ RESERVE paReserve;
 
 void addlimits(int a)
 {
- paReserve.next++;
- paL[a].limits=paReserve.limits[paReserve.next];
- paReserve.limits[paReserve.next]=NULL;
+    paReserve.next++;
+    paL[a].limits = paReserve.limits[paReserve.next];
+    paReserve.limits[paReserve.next] = NULL;
 }
 
- 
+
 void removelimits(int a)
 {
- paReserve.limits[paReserve.next]=paL[a].limits;
- paL[a].limits=NULL;
- paReserve.next--;
+    paReserve.limits[paReserve.next] = paL[a].limits;
+    paL[a].limits = NULL;
+    paReserve.next--;
 }
 
 /* Controlstack is used to get the correct order for the alignments */
 
 struct tagCONTROLSTACK {
-  int height;
-  int left[paLOGDEPTH];
-  int right[paLOGDEPTH];
+    int height;
+    int left[paLOGDEPTH];
+    int right[paLOGDEPTH];
 };
 
 typedef struct tagCONTROLSTACK CONTROLSTACK;
@@ -1061,23 +1104,23 @@ CONTROLSTACK Controlstack;
 /* Controlstack functions */
 
 int Controlstackempty()
-{return(Controlstack.height==-1);}
- 
-void newControlstack() {Controlstack.height=-1;}
+{return (Controlstack.height == -1);}
+
+void newControlstack() {Controlstack.height = -1;}
 
 
 void pushControlstack(int a, int b)
 {
-   Controlstack.height++;
-   Controlstack.left[Controlstack.height]=a;
-   Controlstack.right[Controlstack.height]=b;
+    Controlstack.height++;
+    Controlstack.left[Controlstack.height] = a;
+    Controlstack.right[Controlstack.height] = b;
 }
 
 void popControlstack(int *a, int *b)
 {
-   *a=Controlstack.left[Controlstack.height];
-   *b=Controlstack.right[Controlstack.height];
-   Controlstack.height--;
+    *a = Controlstack.left[Controlstack.height];
+    *b = Controlstack.right[Controlstack.height];
+    Controlstack.height--;
 }
 
 /* changed this procedure to remove allocation for paL[], added allocation
@@ -1086,117 +1129,115 @@ void popControlstack(int *a, int *b)
 int PA_InitializeGlobals()
 {
     int i;
-    
+
     /* allocate the maximum DS space that can possibly be needed */
-    paS = (PSD*) malloc((MAXPROFILESIZE+1)*(MAXPROFILESIZE+1)*sizeof(PSD));
-    if(paS==NULL) return 1;
+    paS = (PSD *) malloc((MAXPROFILESIZE + 1) * (MAXPROFILESIZE + 1) * sizeof(PSD));
+
+    if (paS == NULL) return 1;
 
     /* allocate paLOGDEPTH row limits */
-    for(i=0; i<paLOGDEPTH; i++)
-    {
-        paReserve.limits[i] = (PALIMIT*) malloc(sizeof(PALIMIT)*(MAXPROFILESIZE+1));
-        if(paReserve.limits[i]==NULL) return 1;
+    for (i = 0; i < paLOGDEPTH; i++) {
+        paReserve.limits[i] = (PALIMIT *) malloc(sizeof(PALIMIT) * (MAXPROFILESIZE + 1));
+
+        if (paReserve.limits[i] == NULL) return 1;
     }
-    paReserve.next=-1;
 
-    pa_need_init =0;
+    paReserve.next = -1;
 
-	return 0;
+    pa_need_init = 0;
+
+    return 0;
 }
 
 // creates the boundaries that are used in the first alignment
-void init_rectangular_limits(int plength,int slength)
+void init_rectangular_limits(int plength, int slength)
 {
-	static int i;
+    static int i;
 
-	for(i=0;i<=slength;i++)
-	{
-        paL[0].limits[i].right=0;
-        paL[0].limits[i].left=0;
-        paL[plength].limits[i].right=plength;
-        paL[plength].limits[i].left=plength;
-	}
+    for (i = 0; i <= slength; i++) {
+        paL[0].limits[i].right = 0;
+        paL[0].limits[i].left = 0;
+        paL[plength].limits[i].right = plength;
+        paL[plength].limits[i].left = plength;
+    }
 }
 
 void PAPToLimit(int start, int slength, int plength, PAP *pa)
 
 {
-    int row,col,i,length;
+    int row, col, i, length;
     int *ss, *ps;
 
-    length=pa->length;
-    ss=pa->prof1side;
-    ps=pa->prof2side;
-	  
-	row=0;
-	col=start;
-    paL[start].limits[row].right=col;
-	
-	for(i=0;i<length;i++) 
-	{
-      if((ss[i]!=NEWGAPINDEX)&&(ps[i]!=NEWGAPINDEX))
-	  {
-	    row++;
-	    col++;
-	  }
-      else if (ss[i]==NEWGAPINDEX) {col++;}
-      else /* (ps[i]==NEWGAPINDEX) */ {row++;}
-      paL[start].limits[row].right=col;
-	}
-	
-	row=slength;
-	col=start+plength; 
-	
-	for(i=length-1;i>=0;i--) 
-	{
-      paL[start].limits[row].left=col;
-      if((ss[i]!=NEWGAPINDEX)&&(ps[i]!=NEWGAPINDEX))
-	  {
-	    row--;
-	    col--;
-	  }
-      else if (ss[i]==NEWGAPINDEX) {col--;}
-      else /* (ps[i]==NEWGAPINDEX) */ {row--;}
-	}
-	
-    paL[start].limits[row].left=col;
+    length = pa->length;
+    ss = pa->prof1side;
+    ps = pa->prof2side;
+
+    row = 0;
+    col = start;
+    paL[start].limits[row].right = col;
+
+    for (i = 0; i < length; i++) {
+        if ((ss[i] != NEWGAPINDEX) && (ps[i] != NEWGAPINDEX)) {
+            row++;
+            col++;
+        }
+        else if (ss[i] == NEWGAPINDEX) {col++;}
+        else /* (ps[i]==NEWGAPINDEX) */ {row++;}
+
+        paL[start].limits[row].right = col;
+    }
+
+    row = slength;
+    col = start + plength;
+
+    for (i = length - 1; i >= 0; i--) {
+        paL[start].limits[row].left = col;
+
+        if ((ss[i] != NEWGAPINDEX) && (ps[i] != NEWGAPINDEX)) {
+            row--;
+            col--;
+        }
+        else if (ss[i] == NEWGAPINDEX) {col--;}
+        else /* (ps[i]==NEWGAPINDEX) */ {row--;}
+    }
+
+    paL[start].limits[row].left = col;
 }
 
 
 
 
-PAP* GetBoundedProfileAP(int* left, int* top, int leftlen, int start,
-                        int end,PALIMIT* mins, PALIMIT* maxs,
-                        unsigned char* sm)
+PAP *GetBoundedProfileAP(int *left, int *top, int leftlen, int start,
+                         int end, PALIMIT *mins, PALIMIT *maxs,
+                         unsigned char *sm)
 {
-    int min,max,rindex2,leftRminus1;
-    int r,c,i,width,sumw, dsum, dashnum;
+    int min, max, rindex2, leftRminus1;
+    int r, c, i, width, sumw, dsum, dashnum;
     PSD  *Sp, *Srm1p, *Scm1p, *Srcm1p; /* temporary pointers */
-    int sa,f,e;
+    int sa, f, e;
     PAP *ap;
-    int *seqpos,*patpos,*leftpos,*toppos;
+    int *seqpos, *patpos, *leftpos, *toppos;
 
     /****************************************
     * Do distances and directions for row zero
     *****************************************/
-    r=0;
+    r = 0;
     Sp = paS; /* place at first position */
-    Sp->distance = 0; paS->direction = PA_START;Sp++;
-    max = MINIMUM(maxs[r].right,end);
-    for(c=start+1,i=1;c<=max;c++,i++)
-    {
+    Sp->distance = 0; paS->direction = PA_START; Sp++;
+    max = MINIMUM(maxs[r].right, end);
+
+    for (c = start + 1, i = 1; c <= max; c++, i++) {
         Sp->direction = PA_RIGHT;
         /* Sp->distance = i; */
-        Sp->distance = EVALDISTANCENEW(0,0,top[c-1],sm)+(Sp-1)->distance;
+        Sp->distance = EVALDISTANCENEW(0, 0, top[c - 1], sm) + (Sp - 1)->distance;
         //Sp->distance = 255 +(Sp-1)->distance; /* modified by Y. Gelfand on Aug 05, 2009 */
-		Sp++;
+        Sp++;
     }
-    if(max<MINIMUM(maxs[r+1].right,end)) /* need to pad with PA_VLN at end */
-    {
-        for(i=MINIMUM(maxs[r+1].right,end);i>max;i--)
-        {
-             Sp->distance=PA_VLN;
-             Sp++;
+
+    if (max < MINIMUM(maxs[r + 1].right, end)) { /* need to pad with PA_VLN at end */
+        for (i = MINIMUM(maxs[r + 1].right, end); i > max; i--) {
+            Sp->distance = PA_VLN;
+            Sp++;
         }
     }
 
@@ -1204,96 +1245,92 @@ PAP* GetBoundedProfileAP(int* left, int* top, int leftlen, int start,
     * Do distances and directions for start column
     *******************************************/
     Sp = paS; /* reset to first element */
-    width = end-start+1;
-    for(r=1;r<=leftlen;r++)
-    {
-        Sp+= width;
+    width = end - start + 1;
+
+    for (r = 1; r <= leftlen; r++) {
+        Sp += width;
         /* Sp->distance = r; */
-        Sp->distance = EVALDISTANCENEW(0,0,left[r-1],sm)+(Sp-width)->distance;
+        Sp->distance = EVALDISTANCENEW(0, 0, left[r - 1], sm) + (Sp - width)->distance;
         //Sp->distance = 255+(Sp-width)->distance;  /* modified by Y. Gelfand on Aug 05, 2009 */
-        Sp->direction =PA_DOWN;
-        min = MAXIMUM(mins[r+1].left,start); /* min of next row */
-        if(min>start) break;  /* break if left is cut-off */
+        Sp->direction = PA_DOWN;
+        min = MAXIMUM(mins[r + 1].left, start); /* min of next row */
+
+        if (min > start) break; /* break if left is cut-off */
     }
 
     /**********************************************
     * Do distances and directions in center of matrix
     ***********************************************/
-	//rindex = 1000*(GAPINDEX)-((GAPINDEX)*(GAPINDEX)-(GAPINDEX))/2;
+    //rindex = 1000*(GAPINDEX)-((GAPINDEX)*(GAPINDEX)-(GAPINDEX))/2;
 
-    for(r=1;r<=leftlen;r++)
-    {
-        Sp  = paS+(width*r);
-        min = MAXIMUM(mins[r].left,start);
-        max = MINIMUM(maxs[r].right,end);
+    for (r = 1; r <= leftlen; r++) {
+        Sp  = paS + (width * r);
+        min = MAXIMUM(mins[r].left, start);
+        max = MINIMUM(maxs[r].right, end);
 
-        if(min>start) /* it's a left cut-off row */
-        {
-            Sp+= (min-start); /* position on first valid column */
-            (Sp-1)->distance=PA_VLN;  /* pad with PA_VLN if left cut-off */
-			c=min;
+        if (min > start) { /* it's a left cut-off row */
+            Sp += (min - start); /* position on first valid column */
+            (Sp - 1)->distance = PA_VLN; /* pad with PA_VLN if left cut-off */
+            c = min;
         }
-        else
-		{
-			Sp++; /* otherwise just move to column start+1 */
-			c=min+1;
-		}
+        else {
+            Sp++; /* otherwise just move to column start+1 */
+            c = min + 1;
+        }
 
         /* set the other pointers */
-        Scm1p = Sp-1;
-        Srm1p = Sp-width;
-        Srcm1p= Scm1p-width;
+        Scm1p = Sp - 1;
+        Srm1p = Sp - width;
+        Srcm1p = Scm1p - width;
 
-		leftRminus1 = left[r-1];
-		rindex2 = 1000*(leftRminus1)-((leftRminus1)*(leftRminus1)-(leftRminus1))/2;
+        leftRminus1 = left[r - 1];
+        rindex2 = 1000 * (leftRminus1) - ((leftRminus1) * (leftRminus1) - (leftRminus1)) / 2;
 
-        for(;c<=max;c++)
-        {
+        for (; c <= max; c++) {
             /*
             e = Scm1p->distance+1;
             f = Srm1p->distance+1;
             sa= Srcm1p->distance+(left[r-1]==top[c-1]?0:1);
             */
 
-			/*
+            /*
             e = Scm1p->distance+EVALDISTANCE(GAPINDEX,top[c-1],sm);
             f = Srm1p->distance+EVALDISTANCE(GAPINDEX,left[r-1],sm);
             sa= Srcm1p->distance+EVALDISTANCE(left[r-1],top[c-1],sm);
-			*/
-	    e = Scm1p->distance +          EVALDISTANCENEW(0,0,top[c-1],sm);
-            f = Srm1p->distance +          EVALDISTANCENEW(0,0,leftRminus1,sm);
+            */
+            e = Scm1p->distance +          EVALDISTANCENEW(0, 0, top[c - 1], sm);
+            f = Srm1p->distance +          EVALDISTANCENEW(0, 0, leftRminus1, sm);
             /* modified by Y. Gelfand on Aug 05, 2009 */
             //e = Scm1p->distance+255;
             //f = Scm1p->distance+255;
-            sa= Srcm1p->distance+EVALDISTANCENEW(leftRminus1,rindex2,top[c-1],sm);
+            sa = Srcm1p->distance + EVALDISTANCENEW(leftRminus1, rindex2, top[c - 1], sm);
 
-            switch(min3switch(sa,f,e))
-            {
-                case 1:
-                    Sp->distance = sa;
-                    Sp->direction = PA_DIAGONAL;
-                    break;
-                case 2:
-                    Sp->distance = f;
-                    Sp->direction = PA_DOWN;
-                    break;
-                case 3:
-                    Sp->distance = e;
-                    Sp->direction = PA_RIGHT;
-                    break;
+            switch (min3switch(sa, f, e)) {
+            case 1:
+                Sp->distance = sa;
+                Sp->direction = PA_DIAGONAL;
+                break;
+
+            case 2:
+                Sp->distance = f;
+                Sp->direction = PA_DOWN;
+                break;
+
+            case 3:
+                Sp->distance = e;
+                Sp->direction = PA_RIGHT;
+                break;
             }
 
             /* increase pointers */
-            Sp++;Scm1p++;Srm1p++;Srcm1p++;
+            Sp++; Scm1p++; Srm1p++; Srcm1p++;
         }
 
 
-        if(r<leftlen&&max<MINIMUM(maxs[r+1].right,end))/* need to pad with PA_VLN at end */
-        {
-            for(i=MINIMUM(maxs[r+1].right,end);i>max;i--)
-            {
-                 Sp->distance=PA_VLN;
-                 Sp++;
+        if (r < leftlen && max < MINIMUM(maxs[r + 1].right, end)) { /* need to pad with PA_VLN at end */
+            for (i = MINIMUM(maxs[r + 1].right, end); i > max; i--) {
+                Sp->distance = PA_VLN;
+                Sp++;
             }
         }
     }
@@ -1301,82 +1338,87 @@ PAP* GetBoundedProfileAP(int* left, int* top, int leftlen, int start,
     /**********************************************
     * Allocate alignment an do trace back
     ***********************************************/
-    ap = (PAP*) malloc(sizeof(PAP));
-    if(ap==NULL) return NULL;
+    ap = (PAP *) malloc(sizeof(PAP));
+
+    if (ap == NULL) return NULL;
 
     ap->start = start;
-    Sp=paS+(leftlen+1)*(width)-1; /* position in last column of last row */
+    Sp = paS + (leftlen + 1) * (width) - 1; /* position in last column of last row */
     ap->distance = Sp->distance;
     /*figure out the length of the alignment */
     ap->length = 0;
-    for(;;)
-    {
-        switch(Sp->direction)
-        {
-            case PA_DIAGONAL:
-                Sp -=(width+1);
-                break;
-            case PA_RIGHT:
-                Sp--;
-                break;
-            case PA_DOWN:
-                Sp -= width;
-                break;
-            default:
-                goto exit1;
+
+    for (;;) {
+        switch (Sp->direction) {
+        case PA_DIAGONAL:
+            Sp -= (width + 1);
+            break;
+
+        case PA_RIGHT:
+            Sp--;
+            break;
+
+        case PA_DOWN:
+            Sp -= width;
+            break;
+
+        default:
+            goto exit1;
         }
+
         ap->length++;
     }
-    exit1:; /* goes here in case PA_START */
+
+exit1:; /* goes here in case PA_START */
 
     /* reweight the score with weights inversely proportional to number of dashes */
     /* Yevgeniy Gelfand, Oct 11, 2009 */
-    toppos = top+(end-1); 
-    leftpos = left+(leftlen-1);
-    Sp=paS+(leftlen+1)*(width)-1; /* position in last column of last row */
-    sumw=0;
-    dsum=0;
-    for(;;)
-    {
-        switch(Sp->direction)
-        {
-            case PA_DIAGONAL:
-	   	        dashnum = min(10,NONDASHES[*leftpos] + NONDASHES[*toppos]);
-		        dsum += (dashnum * EVALDISTANCE(*leftpos,*toppos,sm));
-		        sumw += dashnum;
-		        leftpos--;toppos--;
-                Sp -=(width+1);
-                break;
-            
-	    case PA_RIGHT:
-		        dashnum = NONDASHES[*toppos];
-		        dsum += (dashnum * EVALDISTANCE(GAPINDEX,*toppos,sm));
-		        sumw += dashnum;
-		        toppos--;
-                Sp--;
-                break;
+    toppos = top + (end - 1);
+    leftpos = left + (leftlen - 1);
+    Sp = paS + (leftlen + 1) * (width) - 1; /* position in last column of last row */
+    sumw = 0;
+    dsum = 0;
 
-            case PA_DOWN:
-		        dashnum = NONDASHES[*leftpos];
-		        dsum += (dashnum * EVALDISTANCE(*leftpos,GAPINDEX,sm));
-		        sumw += dashnum;
-		        leftpos--;
-                Sp -= width;
-                break;
+    for (;;) {
+        switch (Sp->direction) {
+        case PA_DIAGONAL:
+            dashnum = min(10, NONDASHES[*leftpos] + NONDASHES[*toppos]);
+            dsum += (dashnum * EVALDISTANCE(*leftpos, *toppos, sm));
+            sumw += dashnum;
+            leftpos--; toppos--;
+            Sp -= (width + 1);
+            break;
 
-            default:
-                goto exit7;
+        case PA_RIGHT:
+            dashnum = NONDASHES[*toppos];
+            dsum += (dashnum * EVALDISTANCE(GAPINDEX, *toppos, sm));
+            sumw += dashnum;
+            toppos--;
+            Sp--;
+            break;
+
+        case PA_DOWN:
+            dashnum = NONDASHES[*leftpos];
+            dsum += (dashnum * EVALDISTANCE(*leftpos, GAPINDEX, sm));
+            sumw += dashnum;
+            leftpos--;
+            Sp -= width;
+            break;
+
+        default:
+            goto exit7;
         }
     }
-    exit7:; /* goes here in case PA_START */
+
+exit7:; /* goes here in case PA_START */
     ap->distanceweighted = dsum;
     ap->weights = sumw;
 
     /* allocate memory for the alignment */
-    ap->prof1side  = (int*) malloc((ap->length)*sizeof(int));
-    ap->prof2side   = (int*) malloc((ap->length)*sizeof(int));
-    if(ap->prof1side==NULL||ap->prof2side==NULL)
-    {
+    ap->prof1side  = (int *) malloc((ap->length) * sizeof(int));
+    ap->prof2side   = (int *) malloc((ap->length) * sizeof(int));
+
+    if (ap->prof1side == NULL || ap->prof2side == NULL) {
         free(ap->prof1side);
         free(ap->prof2side);
         free(ap);
@@ -1384,74 +1426,79 @@ PAP* GetBoundedProfileAP(int* left, int* top, int leftlen, int start,
     }
 
     /* trace back and fill in alignment */
-    seqpos  = ap->prof1side+ap->length-1;
-    patpos  = ap->prof2side+ap->length-1;
-    toppos = top+(end-1); 
-    leftpos = left+(leftlen-1);
-    Sp=paS+(leftlen+1)*(width)-1; /* position in last column of last row */
-    for(;;)
-    {
-        switch(Sp->direction)
-        {
-            case PA_DIAGONAL:
-                *seqpos=*leftpos; *patpos=*toppos;
-                seqpos--;leftpos--;patpos--;toppos--;
-                Sp -=(width+1);
-                break;
-            case PA_RIGHT:
-                *seqpos = NEWGAPINDEX;
-                *patpos = *toppos;
-		//if (*toppos == GAPINDEX) {ap->distance += 255; }
-                seqpos--;patpos--;toppos--;
-                Sp--;
-                break;
-            case PA_DOWN:
-                *patpos=NEWGAPINDEX;
-                *seqpos=*leftpos;
-		//if (*leftpos == GAPINDEX) {ap->distance += 255; }
-                patpos--;seqpos--;leftpos--;
-                Sp -= width;
-                break;
-            default:
-                goto exit2;
+    seqpos  = ap->prof1side + ap->length - 1;
+    patpos  = ap->prof2side + ap->length - 1;
+    toppos = top + (end - 1);
+    leftpos = left + (leftlen - 1);
+    Sp = paS + (leftlen + 1) * (width) - 1; /* position in last column of last row */
+
+    for (;;) {
+        switch (Sp->direction) {
+        case PA_DIAGONAL:
+            *seqpos = *leftpos; *patpos = *toppos;
+            seqpos--; leftpos--; patpos--; toppos--;
+            Sp -= (width + 1);
+            break;
+
+        case PA_RIGHT:
+            *seqpos = NEWGAPINDEX;
+            *patpos = *toppos;
+            //if (*toppos == GAPINDEX) {ap->distance += 255; }
+            seqpos--; patpos--; toppos--;
+            Sp--;
+            break;
+
+        case PA_DOWN:
+            *patpos = NEWGAPINDEX;
+            *seqpos = *leftpos;
+            //if (*leftpos == GAPINDEX) {ap->distance += 255; }
+            patpos--; seqpos--; leftpos--;
+            Sp -= width;
+            break;
+
+        default:
+            goto exit2;
         }
     }
-    exit2:; /* goes here in case PA_START */
+
+exit2:; /* goes here in case PA_START */
 
     /* return pointer to alignment */
     return ap;
 }
 
-void DoubleProfile(int *p,int len, int* dest)
+void DoubleProfile(int *p, int len, int *dest)
 {
-    int i,run;
-    int *ps,*pd;
+    int i, run;
+    int *ps, *pd;
 
-    run = len*2;
+    run = len * 2;
     ps = p;
     pd = dest;
-    for(i=0;i<run;i++)
-    {
-        if(i==len) ps = p;
+
+    for (i = 0; i < run; i++) {
+        if (i == len) ps = p;
+
         *pd = *ps;
         ps++;
         pd++;
     }
+
     return;
 }
 
 
-PAP* GetBestProfileAP(PROFILE* p1, PROFILE* p2, unsigned char* submatrix)
+PAP *GetBestProfileAP(PROFILE *p1, PROFILE *p2, unsigned char *submatrix)
 {
-    int m,left,right;
-    PAP *bestsofar,*ap;
-    int *s,*p,slength,plength;
+    int m, left, right;
+    PAP *bestsofar, *ap;
+    int *s, *p, slength, plength;
 
 
     /* make sure memory for workspace and limits has been allocated */
-    if(pa_need_init)
-    {
-        if(PA_InitializeGlobals()) return NULL;
+    if (pa_need_init) {
+        if (PA_InitializeGlobals()) return NULL;
+
         pa_need_init = 0;
     }
 
@@ -1461,15 +1508,15 @@ PAP* GetBestProfileAP(PROFILE* p1, PROFILE* p2, unsigned char* submatrix)
     p = p2->indices;
     plength = p2->proflen;
 
-	newControlstack();
-	addlimits(0);
-	addlimits(plength);
-	init_rectangular_limits(plength,slength);
+    newControlstack();
+    addlimits(0);
+    addlimits(plength);
+    init_rectangular_limits(plength, slength);
 
     /* duplicate the top profile into global padoublepat */
-    DoubleProfile(p,plength,padoublepat);
+    DoubleProfile(p, plength, padoublepat);
 
-	/* get first alignment */
+    /* get first alignment */
     bestsofar = GetBoundedProfileAP(s, padoublepat, slength, 0, plength,
                                     paL[0].limits, paL[plength].limits,
                                     submatrix);
@@ -1478,100 +1525,102 @@ PAP* GetBestProfileAP(PROFILE* p1, PROFILE* p2, unsigned char* submatrix)
     PAPToLimit(0, slength, plength, bestsofar);
 
     /* copy paL[0].limits to paL[plength].limits */
-    for(m=0;m<=slength;m++)
-    {
-        paL[plength].limits[m].right = paL[0].limits[m].right+plength;
-        paL[plength].limits[m].left = paL[0].limits[m].left+plength;
+    for (m = 0; m <= slength; m++) {
+        paL[plength].limits[m].right = paL[0].limits[m].right + plength;
+        paL[plength].limits[m].left = paL[0].limits[m].left + plength;
     }
 
-	pushControlstack(0,plength);
+    pushControlstack(0, plength);
 
-	while(!Controlstackempty())
-	{
-	  popControlstack(&left,&right);
+    while (!Controlstackempty()) {
+        popControlstack(&left, &right);
 
-	  if(right-left>1)
-	  {
-	    m=(left+right)/2;
+        if (right - left > 1) {
+            m = (left + right) / 2;
 
 
-	    /* the next is the routine for the alignment */
-        ap = GetBoundedProfileAP(s, padoublepat, slength, m, m+plength,
-                                    paL[left].limits, paL[right].limits,
-                                    submatrix);
+            /* the next is the routine for the alignment */
+            ap = GetBoundedProfileAP(s, padoublepat, slength, m, m + plength,
+                                     paL[left].limits, paL[right].limits,
+                                     submatrix);
 
-	    addlimits(m);
-        /* copy alignment to paL[m].limits */
-        PAPToLimit(m,slength,plength,ap);
-        //if(ap->distance<bestsofar->distance)
-		//if (((ap->distance)/(255.0*ap->length)) < ((bestsofar->distance)/(255.0*bestsofar->length)) )
-        if (((ap->distanceweighted)/(255.0*ap->weights)) < ((bestsofar->distanceweighted)/(255.0*bestsofar->weights)) )
-        {
-            FreePAP(bestsofar);
-            bestsofar = ap;
+            addlimits(m);
+            /* copy alignment to paL[m].limits */
+            PAPToLimit(m, slength, plength, ap);
+
+            //if(ap->distance<bestsofar->distance)
+            //if (((ap->distance)/(255.0*ap->length)) < ((bestsofar->distance)/(255.0*bestsofar->length)) )
+            if (((ap->distanceweighted) / (255.0 * ap->weights)) < ((bestsofar->distanceweighted) / (255.0 * bestsofar->weights)) ) {
+                FreePAP(bestsofar);
+                bestsofar = ap;
+            }
+            else {
+                FreePAP(ap);
+            }
+
+            pushControlstack(m, right);
+            pushControlstack(left, m);
         }
-        else
-        {
-            FreePAP(ap);
-        }
-	    pushControlstack(m,right);
-	    pushControlstack(left,m);
-	  }
-      else removelimits(left);
-	}
+        else removelimits(left);
+    }
 
     removelimits(plength);
 
     // set rc flag
-    if(p1->rcflag==p2->rcflag) bestsofar->rcflag = 0;
+    if (p1->rcflag == p2->rcflag) bestsofar->rcflag = 0;
     else bestsofar->rcflag = 1;
 
     // set similarity member
     //bestsofar->similarity = (1.0-(bestsofar->distance)/(255.0*bestsofar->length));
-    bestsofar->similarity = (1.0-(bestsofar->distanceweighted)/(255.0*bestsofar->weights));
+    bestsofar->similarity = (1.0 - (bestsofar->distanceweighted) / (255.0 * bestsofar->weights));
 
-	return bestsofar;
+    return bestsofar;
 }
 
-printSP(PSD *S, int leftlen, int toplen) {
+printSP(PSD *S, int leftlen, int toplen)
+{
 
-	char c;
-	int col,row;
+    char c;
+    int col, row;
     PSD *Sp; /* temporary pointers */
 
-	Sp=S;
+    Sp = S;
 
-	/* top 
+    /* top
     for(col=1; col<=toplen; col++)
     {
         Sp++;
-		if (PA_RIGHT ==  Sp->direction) c='R';
-		if (PA_DOWN ==  Sp->direction) c='D';
-		if (PA_DIAGONAL ==  Sp->direction) c='D';
-		if (PA_START ==  Sp->direction) c='S';
-		printf("%d%c ",Sp->direction,c);
+        if (PA_RIGHT ==  Sp->direction) c='R';
+        if (PA_DOWN ==  Sp->direction) c='D';
+        if (PA_DIAGONAL ==  Sp->direction) c='D';
+        if (PA_START ==  Sp->direction) c='S';
+        printf("%d%c ",Sp->direction,c);
     }
-*/
+    */
 
     /* body of matrix */
-	printf("\n\n");
-    for(row=0;row<=leftlen;row++)
-    {
-        /* set all pointer around column one of current row */
-        Sp      =   S+row*(toplen+1);
+    printf("\n\n");
 
-        for(col=0;col<=toplen;col++)
-        {
-			if (PA_RIGHT ==  Sp->direction) c='R';
-			if (PA_DOWN ==  Sp->direction) c='D';
-			if (PA_DIAGONAL ==  Sp->direction) c='\\';
-			if (PA_START ==  Sp->direction) c='S';
-			printf("%d-%c ",Sp->distance,c);
+    for (row = 0; row <= leftlen; row++) {
+        /* set all pointer around column one of current row */
+        Sp      =   S + row * (toplen + 1);
+
+        for (col = 0; col <= toplen; col++) {
+            if (PA_RIGHT ==  Sp->direction) c = 'R';
+
+            if (PA_DOWN ==  Sp->direction) c = 'D';
+
+            if (PA_DIAGONAL ==  Sp->direction) c = '\\';
+
+            if (PA_START ==  Sp->direction) c = 'S';
+
+            printf("%d-%c ", Sp->distance, c);
 
             /* update pointers */
             Sp++;
         }
-		printf("\n");
+
+        printf("\n");
     }
 
 }
@@ -1581,154 +1630,162 @@ printSP(PSD *S, int leftlen, int toplen) {
 
 unsigned int cells_processed;
 
-PAP* GetFixedProfileAPNarrowband(PROFILE* p1, PROFILE* p2, unsigned char* sm, int homology) {
-    
-    int     col, row,length,lstart,rend,center,toplenreached,oldrend,sumw, dsum, dashnum;
+PAP *GetFixedProfileAPNarrowband(PROFILE *p1, PROFILE *p2, unsigned char *sm, int homology)
+{
+
+    int     col, row, length, lstart, rend, center, toplenreached, oldrend, sumw, dsum, dashnum;
     int     e;             /* equals e+indel */
     int     f;             /* equals f+indel */
     int     sa;             /* equals s+indel */
-    PSD* S=NULL;
-    PSD *Sp, *Srm1p, *Scm1p, *Srcm1p,*SrcmRp,*SL; /* temporary pointers */
-    PAP* ap;
-    int leftlen,toplen,*toppos,*leftpos;
-    int *left,*top;
-    double svector,diagonal,virtdiagonal,angle,virt100;
+    PSD *S = NULL;
+    PSD *Sp, *Srm1p, *Scm1p, *Srcm1p, *SrcmRp, *SL; /* temporary pointers */
+    PAP *ap;
+    int leftlen, toplen, *toppos, *leftpos;
+    int *left, *top;
+    double svector, diagonal, virtdiagonal, angle, virt100;
     double topangle, bandradius, midradius, minlen;
-    int startradius,bandradius_int;
+    int startradius, bandradius_int;
 
 
-    // set lengths to be used 
-    cells_processed=0;
+    // set lengths to be used
+    cells_processed = 0;
     leftlen = p1->proflen;
     toplen = p2->proflen;
-    diagonal = sqrt(pow(toplen,2) + pow(leftlen,2)) ;    // actual diagonal length
-    minlen = min(toplen,leftlen);
-    virtdiagonal = sqrt(pow(minlen,2) * 2) ;             // modified virtdiagonal to accountfor matrix not being a perfect square matrix
+    diagonal = sqrt(pow(toplen, 2) + pow(leftlen, 2)) ;  // actual diagonal length
+    minlen = min(toplen, leftlen);
+    virtdiagonal = sqrt(pow(minlen, 2) * 2) ;            // modified virtdiagonal to accountfor matrix not being a perfect square matrix
     virt100 = 100 * virtdiagonal / diagonal;
-    svector = (double)toplen/(double)leftlen;
-    startradius=6;
+    svector = (double)toplen / (double)leftlen;
+    startradius = 6;
 
-	
-	{
-		angle = acos( homology / 100.0 ); 
-		topangle = atan( (double)leftlen / (double)toplen);
-		midradius =  tan(angle) * (virtdiagonal / 2.0);
-		bandradius =  midradius / sin(topangle);
-		bandradius_int = (int) max(bandradius,startradius) + 1; 
-	}
-	
 
-	/* this formula is from Dr. Benson's TRF program */
-	//bandradius_int = (int)floor(2.3*sqrt(.1*max(toplen,leftlen)));
-	//bandradius_int = max(bandradius_int,startradius) + 1; 
+    {
+        angle = acos( homology / 100.0 );
+        topangle = atan( (double)leftlen / (double)toplen);
+        midradius =  tan(angle) * (virtdiagonal / 2.0);
+        bandradius =  midradius / sin(topangle);
+        bandradius_int = (int) max(bandradius, startradius) + 1;
+    }
+
+
+    /* this formula is from Dr. Benson's TRF program */
+    //bandradius_int = (int)floor(2.3*sqrt(.1*max(toplen,leftlen)));
+    //bandradius_int = max(bandradius_int,startradius) + 1;
 
     /* set shorthand for array of profile indices */
     left = p1->indices;
     top = p2->indices;
-    
+
     /* allocate the alignment matrix */
-    S = (PSD*) malloc(sizeof(PSD)*(leftlen+1)*(toplen+1));
-    if(S==NULL)
-    {
+    S = (PSD *) malloc(sizeof(PSD) * (leftlen + 1) * (toplen + 1));
+
+    if (S == NULL) {
         return NULL; /* in case memory allocation fails */
     }
 
     /* compute Alignment Matrix */
     /* first element */
-    Sp=S;
+    Sp = S;
     Sp->distance  = 0;
     Sp->direction = PA_START;
 
 
     /* across the top */
-    for(col=1; col<=toplen; col++)
-    {
-		center = (int)(0 * svector); 
-		rend = center + bandradius_int + 3;			rend=min(toplen,(rend));
+    for (col = 1; col <= toplen; col++) {
+        center = (int)(0 * svector);
+        rend = center + bandradius_int + 3;         rend = min(toplen, (rend));
         Sp++;
         Sp->direction = PA_RIGHT;
-		if (col>(center + bandradius_int))
-			Sp->distance = 100000000;
-		else
-			Sp->distance = EVALDISTANCE(GAPINDEX,top[col-1],sm)+(Sp-1)->distance;
-		if (rend==col) break;
+
+        if (col > (center + bandradius_int))
+            Sp->distance = 100000000;
+        else
+            Sp->distance = EVALDISTANCE(GAPINDEX, top[col - 1], sm) + (Sp - 1)->distance;
+
+        if (rend == col) break;
     }
 
     /* Down the left side */
-    Sp=S;
-    for(row=1; row<=leftlen; row++)
-    {
-		center = (int)(row * svector); 
-		lstart = center - bandradius_int;		lstart=max(1,(lstart));
+    Sp = S;
+
+    for (row = 1; row <= leftlen; row++) {
+        center = (int)(row * svector);
+        lstart = center - bandradius_int;       lstart = max(1, (lstart));
         Srm1p = Sp;
-        Sp+=(toplen+1);
+        Sp += (toplen + 1);
         Sp->direction = PA_DOWN;
-        Sp->distance = EVALDISTANCE(GAPINDEX,left[row-1],sm)+Srm1p->distance;
-		if (lstart>3) break;
+        Sp->distance = EVALDISTANCE(GAPINDEX, left[row - 1], sm) + Srm1p->distance;
+
+        if (lstart > 3) break;
     }
 
     /* body of matrix */
-	toplenreached = 0;
-	oldrend = startradius;
-    for(row=1;row<=leftlen;row++)
-    {
+    toplenreached = 0;
+    oldrend = startradius;
+
+    for (row = 1; row <= leftlen; row++) {
 
 
-		/* calculate narrowband bounds */
-		center = (int)(row * svector); 
-		lstart = center - bandradius_int;			lstart=max(1,(lstart));
-		rend = center + bandradius_int;			rend=min(toplen,(rend));
+        /* calculate narrowband bounds */
+        center = (int)(row * svector);
+        lstart = center - bandradius_int;           lstart = max(1, (lstart));
+        rend = center + bandradius_int;         rend = min(toplen, (rend));
 
-		//printf("row: %d center: %d svector: %.2lf\n",row,center,svector);
+        //printf("row: %d center: %d svector: %.2lf\n",row,center,svector);
 
         /* set all pointer around column one of current row */
-        Sp      =   S+lstart+row*(toplen+1);
-        Scm1p   =   Sp-1;
-        Srm1p   =   Scm1p-toplen;
-        Srcm1p  =   Srm1p-1;
-		SrcmRp	=	S+(row-1)*(toplen+1) + oldrend+1;
+        Sp      =   S + lstart + row * (toplen + 1);
+        Scm1p   =   Sp - 1;
+        Srm1p   =   Scm1p - toplen;
+        Srcm1p  =   Srm1p - 1;
+        SrcmRp  =   S + (row - 1) * (toplen + 1) + oldrend + 1;
 
-		if (lstart>1) {
-			SL = Scm1p;
-			for (e=0; e<3; e++) {
-				if (SL < (S+row*(toplen+1))) break;
-				SL->direction = PA_DOWN;
-				SL->distance = 100000000;
-				SL--;
-			}
-		}
-		if (!toplenreached) {
-			if (row>1) {
-				for (e=0; e<3; e++) {
-					if (SrcmRp >= (S+row*(toplen+1))) break;
-					SrcmRp->direction = PA_RIGHT;
-					SrcmRp->distance = 100000000;
-					SrcmRp++; 
-				}
-			}
-			if (rend==toplen) toplenreached=1;
-		}
+        if (lstart > 1) {
+            SL = Scm1p;
 
-        for(col=lstart;col<=rend;col++)
-        {
-            e = Scm1p->distance+EVALDISTANCE(GAPINDEX,top[col-1],sm);
-            f = Srm1p->distance+EVALDISTANCE(GAPINDEX,left[row-1],sm);
-            sa = Srcm1p->distance+EVALDISTANCE(left[row-1],top[col-1],sm);
+            for (e = 0; e < 3; e++) {
+                if (SL < (S + row * (toplen + 1))) break;
 
-            switch(min3switch(sa,f,e))
-            {
-                case 1:
-                    Sp->distance = sa;
-                    Sp->direction = PA_DIAGONAL;
-                    break;
-                case 2:
-                    Sp->distance = f;
-                    Sp->direction = PA_DOWN;
-                    break;
-                case 3:
-                    Sp->distance = e;
-                    Sp->direction = PA_RIGHT;
-                    break;
+                SL->direction = PA_DOWN;
+                SL->distance = 100000000;
+                SL--;
+            }
+        }
+
+        if (!toplenreached) {
+            if (row > 1) {
+                for (e = 0; e < 3; e++) {
+                    if (SrcmRp >= (S + row * (toplen + 1))) break;
+
+                    SrcmRp->direction = PA_RIGHT;
+                    SrcmRp->distance = 100000000;
+                    SrcmRp++;
+                }
+            }
+
+            if (rend == toplen) toplenreached = 1;
+        }
+
+        for (col = lstart; col <= rend; col++) {
+            e = Scm1p->distance + EVALDISTANCE(GAPINDEX, top[col - 1], sm);
+            f = Srm1p->distance + EVALDISTANCE(GAPINDEX, left[row - 1], sm);
+            sa = Srcm1p->distance + EVALDISTANCE(left[row - 1], top[col - 1], sm);
+
+            switch (min3switch(sa, f, e)) {
+            case 1:
+                Sp->distance = sa;
+                Sp->direction = PA_DIAGONAL;
+                break;
+
+            case 2:
+                Sp->distance = f;
+                Sp->direction = PA_DOWN;
+                break;
+
+            case 3:
+                Sp->distance = e;
+                Sp->direction = PA_RIGHT;
+                break;
             }
 
             /* update pointers */
@@ -1737,102 +1794,109 @@ PAP* GetFixedProfileAPNarrowband(PROFILE* p1, PROFILE* p2, unsigned char* sm, in
             Scm1p++;
             Srcm1p++;
 #ifdef PROCLU_DEBUG
-			cells_processed++;
+            cells_processed++;
 #endif
         }
 
-		oldrend = rend;
+        oldrend = rend;
     }
+
     /* set at last element */
-    Sp = S+(toplen+1)*leftlen+toplen;
+    Sp = S + (toplen + 1) * leftlen + toplen;
 
 
     /* allocate alignment structure */
-    ap = (PAP*) malloc(sizeof(PAP));
-    if(ap==NULL)
-    {
+    ap = (PAP *) malloc(sizeof(PAP));
+
+    if (ap == NULL) {
         free(S);
         return NULL;
     }
+
     ap->start = 0;
     ap->distance = Sp->distance;
 
     /* get the length of the alignment */
     length = 0;
-    toppos = top+toplen-1; 
-    leftpos = left+leftlen-1;
-    while(Sp->direction!=PA_START)
-    {
+    toppos = top + toplen - 1;
+    leftpos = left + leftlen - 1;
+
+    while (Sp->direction != PA_START) {
         length ++;
-        switch(Sp->direction)
-        {
-            case PA_START:
-                 break;
-            case PA_DIAGONAL:
-		 toppos--; leftpos--;
-                 Sp = Sp -(toplen+2);
-                 break;
-            case PA_RIGHT:
-		 //if (*toppos == GAPINDEX) {ap->distance += 255; }
-		 toppos--;
-                 Sp = Sp - 1;
-                 break;
-            case PA_DOWN:
-		 //if (*leftpos == GAPINDEX) {ap->distance += 255; }
-		 leftpos--;
-                 Sp = Sp - (toplen+1);
-                 break;
+
+        switch (Sp->direction) {
+        case PA_START:
+            break;
+
+        case PA_DIAGONAL:
+            toppos--; leftpos--;
+            Sp = Sp - (toplen + 2);
+            break;
+
+        case PA_RIGHT:
+            //if (*toppos == GAPINDEX) {ap->distance += 255; }
+            toppos--;
+            Sp = Sp - 1;
+            break;
+
+        case PA_DOWN:
+            //if (*leftpos == GAPINDEX) {ap->distance += 255; }
+            leftpos--;
+            Sp = Sp - (toplen + 1);
+            break;
         }
-		if (length>5000) {
-			printf("ERROR! Cannot find start!\n");
-			printSP(S, leftlen, toplen);
-			printf("\n\n%d-vs-%d\n",leftlen,toplen);
-			exit(1);
-		}
+
+        if (length > 5000) {
+            printf("ERROR! Cannot find start!\n");
+            printSP(S, leftlen, toplen);
+            printf("\n\n%d-vs-%d\n", leftlen, toplen);
+            exit(1);
+        }
     }
+
     ap->length = length;
 
 
     /* reweight the score with weights inversely proportional to number of dashes */
     /* Yevgeniy Gelfand, Oct 11, 2009 */
-    toppos = top+toplen-1; 
-    leftpos = left+leftlen-1;
-    Sp = S+(toplen+1)*leftlen+toplen;
-    sumw=0;
-    dsum=0;
-    for(;;)
-    {
-        switch(Sp->direction)
-        {
-            case PA_DIAGONAL:
-	   	        dashnum = min(10,NONDASHES[*leftpos] + NONDASHES[*toppos]);
-		        dsum += (dashnum * EVALDISTANCE(*leftpos,*toppos,sm));
-		        sumw += dashnum;
-		        leftpos--;toppos--;
-                Sp = Sp -(toplen+2);
-                break;
-            
-	    case PA_RIGHT:
-		        dashnum = NONDASHES[*toppos];
-		        dsum += (dashnum * EVALDISTANCE(GAPINDEX,*toppos,sm));
-		        sumw += dashnum;
-		        toppos--;
-                Sp--;
-                break;
+    toppos = top + toplen - 1;
+    leftpos = left + leftlen - 1;
+    Sp = S + (toplen + 1) * leftlen + toplen;
+    sumw = 0;
+    dsum = 0;
 
-            case PA_DOWN:
-		        dashnum = NONDASHES[*leftpos];
-		        dsum += (dashnum * EVALDISTANCE(*leftpos,GAPINDEX,sm));
-		        sumw += dashnum;
-		        leftpos--;
-                Sp = Sp - (toplen+1);
-                break;
+    for (;;) {
+        switch (Sp->direction) {
+        case PA_DIAGONAL:
+            dashnum = min(10, NONDASHES[*leftpos] + NONDASHES[*toppos]);
+            dsum += (dashnum * EVALDISTANCE(*leftpos, *toppos, sm));
+            sumw += dashnum;
+            leftpos--; toppos--;
+            Sp = Sp - (toplen + 2);
+            break;
 
-            default:
-                goto exit7;
+        case PA_RIGHT:
+            dashnum = NONDASHES[*toppos];
+            dsum += (dashnum * EVALDISTANCE(GAPINDEX, *toppos, sm));
+            sumw += dashnum;
+            toppos--;
+            Sp--;
+            break;
+
+        case PA_DOWN:
+            dashnum = NONDASHES[*leftpos];
+            dsum += (dashnum * EVALDISTANCE(*leftpos, GAPINDEX, sm));
+            sumw += dashnum;
+            leftpos--;
+            Sp = Sp - (toplen + 1);
+            break;
+
+        default:
+            goto exit7;
         }
     }
-    exit7:; /* goes here in case PA_START */
+
+exit7:; /* goes here in case PA_START */
     ap->distanceweighted = dsum;
     ap->weights = sumw;
 
@@ -1840,22 +1904,22 @@ PAP* GetFixedProfileAPNarrowband(PROFILE* p1, PROFILE* p2, unsigned char* sm, in
 
 
     //ap->similarity = (1.0-(ap->distance)/(255.0*ap->length));
-    ap->similarity = (1.0-(ap->distanceweighted)/(255.0*ap->weights));
+    ap->similarity = (1.0 - (ap->distanceweighted) / (255.0 * ap->weights));
 
     ap->prof1side = NULL;
     ap->prof2side = NULL;
 
 
-/*
-if (ap->similarity>.85)
-{
-	printSP(S, leftlen, toplen);
-	printf("\n\n%d-vs-%d Distance: %d Length: %d sim: %.2lf\n",leftlen,toplen,ap->distance,ap->length, ap->similarity);
-	exit(1);
-}
-*/
+    /*
+    if (ap->similarity>.85)
+    {
+        printSP(S, leftlen, toplen);
+        printf("\n\n%d-vs-%d Distance: %d Length: %d sim: %.2lf\n",leftlen,toplen,ap->distance,ap->length, ap->similarity);
+        exit(1);
+    }
+    */
 
-	//printf("|\n"); fflush(stdout);
+    //printf("|\n"); fflush(stdout);
 
     /* free alignment matrix */
     free(S);
@@ -1867,18 +1931,18 @@ if (ap->similarity>.85)
 
 
 
-PAP* GetFixedProfileAP(PROFILE* p1, PROFILE* p2, unsigned char* sm)
+PAP *GetFixedProfileAP(PROFILE *p1, PROFILE *p2, unsigned char *sm)
 {
-    int     col, row,length;
+    int     col, row, length;
     int     e;             /* equals e+indel */
     int     f;             /* equals f+indel */
     int     sa;             /* equals s+indel */
-    PSD* S=NULL;
+    PSD *S = NULL;
     PSD *Sp, *Srm1p, *Scm1p, *Srcm1p; /* temporary pointers */
-    PAP* ap;
-    int *prof1sidepos,*prof2sidepos,*toppos,*leftpos;
-    int leftlen,toplen,sumw, dsum, dashnum;
-    int *left,*top;
+    PAP *ap;
+    int *prof1sidepos, *prof2sidepos, *toppos, *leftpos;
+    int leftlen, toplen, sumw, dsum, dashnum;
+    int *left, *top;
 
 
     /* set lengths to be used */
@@ -1889,67 +1953,65 @@ PAP* GetFixedProfileAP(PROFILE* p1, PROFILE* p2, unsigned char* sm)
     left = p1->indices;
     top = p2->indices;
 
-    
+
     /* allocate the alignment matrix */
-    S = (PSD*) malloc(sizeof(PSD)*(leftlen+1)*(toplen+1));
-    if(S==NULL)
-    {
+    S = (PSD *) malloc(sizeof(PSD) * (leftlen + 1) * (toplen + 1));
+
+    if (S == NULL) {
         return NULL; /* in case memory allocation fails */
     }
 
     /* compute Alignment Matrix */
     /* first element */
-    Sp=S;
+    Sp = S;
     Sp->distance  = 0;
     Sp->direction = PA_START;
 
     /* across the top */
-    for(col=1; col<=toplen; col++)
-    {
+    for (col = 1; col <= toplen; col++) {
         Sp++;
-        Sp->direction = PA_RIGHT;            
-        Sp->distance = EVALDISTANCE(GAPINDEX,top[col-1],sm)+(Sp-1)->distance;
+        Sp->direction = PA_RIGHT;
+        Sp->distance = EVALDISTANCE(GAPINDEX, top[col - 1], sm) + (Sp - 1)->distance;
     }
 
     /* Down the left side */
-    Sp=S;
-    for(row=1; row<=leftlen; row++)
-    {
+    Sp = S;
+
+    for (row = 1; row <= leftlen; row++) {
         Srm1p = Sp;
-        Sp+=(toplen+1);
+        Sp += (toplen + 1);
         Sp->direction = PA_DOWN;
-        Sp->distance = EVALDISTANCE(GAPINDEX,left[row-1],sm)+Srm1p->distance;
+        Sp->distance = EVALDISTANCE(GAPINDEX, left[row - 1], sm) + Srm1p->distance;
     }
 
     /* body of matrix */
-    for(row=1;row<=leftlen;row++)
-    {
+    for (row = 1; row <= leftlen; row++) {
         /* set all pointer around column one of current row */
-        Sp      =   S+1+row*(toplen+1);
-        Scm1p   =   Sp-1;
-        Srm1p   =   Scm1p-toplen;
-        Srcm1p  =   Srm1p-1;
+        Sp      =   S + 1 + row * (toplen + 1);
+        Scm1p   =   Sp - 1;
+        Srm1p   =   Scm1p - toplen;
+        Srcm1p  =   Srm1p - 1;
 
-        for(col=1;col<=toplen;col++)
-        {
-            e = Scm1p->distance+EVALDISTANCE(GAPINDEX,top[col-1],sm);
-            f = Srm1p->distance+EVALDISTANCE(GAPINDEX,left[row-1],sm);
-            sa = Srcm1p->distance+EVALDISTANCE(left[row-1],top[col-1],sm);
+        for (col = 1; col <= toplen; col++) {
+            e = Scm1p->distance + EVALDISTANCE(GAPINDEX, top[col - 1], sm);
+            f = Srm1p->distance + EVALDISTANCE(GAPINDEX, left[row - 1], sm);
+            sa = Srcm1p->distance + EVALDISTANCE(left[row - 1], top[col - 1], sm);
 
-            switch(min3switch(sa,f,e))
-            {
-                case 1:
-                    Sp->distance = sa;
-                    Sp->direction = PA_DIAGONAL;
-                    break;
-                case 2:
-                    Sp->distance = f;
-                    Sp->direction = PA_DOWN;
-                    break;
-                case 3:
-                    Sp->distance = e;
-                    Sp->direction = PA_RIGHT;
-                    break;
+            switch (min3switch(sa, f, e)) {
+            case 1:
+                Sp->distance = sa;
+                Sp->direction = PA_DIAGONAL;
+                break;
+
+            case 2:
+                Sp->distance = f;
+                Sp->direction = PA_DOWN;
+                break;
+
+            case 3:
+                Sp->distance = e;
+                Sp->direction = PA_RIGHT;
+                break;
             }
 
             /* update pointers */
@@ -1959,92 +2021,98 @@ PAP* GetFixedProfileAP(PROFILE* p1, PROFILE* p2, unsigned char* sm)
             Srcm1p++;
         }
     }
+
     /* set at last element */
-    Sp = S+(toplen+1)*leftlen+toplen;
+    Sp = S + (toplen + 1) * leftlen + toplen;
 
 
     /* allocate alignment structure */
-    ap = (PAP*) malloc(sizeof(PAP));
-    if(ap==NULL)
-    {
+    ap = (PAP *) malloc(sizeof(PAP));
+
+    if (ap == NULL) {
         free(S);
         return NULL;
     }
+
     ap->start = 0;
     ap->distance = Sp->distance;
 
     /* get the length of the alignment */
     length = 0;
-    while(Sp->direction!=PA_START)
-    {
+
+    while (Sp->direction != PA_START) {
         length ++;
-        switch(Sp->direction)
-        {
-            case PA_START:
-                 break;
-            case PA_DIAGONAL:
-                 Sp = Sp -(toplen+2);
-                 break;
-            case PA_RIGHT:
-                 Sp = Sp - 1;
-                 break;
-            case PA_DOWN:
-                 Sp = Sp - (toplen+1);
-                 break;
+
+        switch (Sp->direction) {
+        case PA_START:
+            break;
+
+        case PA_DIAGONAL:
+            Sp = Sp - (toplen + 2);
+            break;
+
+        case PA_RIGHT:
+            Sp = Sp - 1;
+            break;
+
+        case PA_DOWN:
+            Sp = Sp - (toplen + 1);
+            break;
         }
     }
+
     ap->length = length;
 
 
     /* reweight the score with weights inversely proportional to number of dashes */
     /* Yevgeniy Gelfand, Oct 11, 2009 */
-    toppos = top+toplen-1; 
-    leftpos = left+leftlen-1;
-    Sp = S+(toplen+1)*leftlen+toplen;
-    sumw=0;
-    dsum=0;
-    for(;;)
-    {
-        switch(Sp->direction)
-        {
-            case PA_DIAGONAL:
-	   	        dashnum = min(10,NONDASHES[*leftpos] + NONDASHES[*toppos]);
-		        dsum += (dashnum * EVALDISTANCE(*leftpos,*toppos,sm));
-		        sumw += dashnum;
-		        leftpos--;toppos--;
-                Sp = Sp -(toplen+2);
-                break;
-            
-	    case PA_RIGHT:
-		        dashnum = NONDASHES[*toppos];
-		        dsum += (dashnum * EVALDISTANCE(GAPINDEX,*toppos,sm));
-		        sumw += dashnum;
-		        toppos--;
-                Sp--;
-                break;
+    toppos = top + toplen - 1;
+    leftpos = left + leftlen - 1;
+    Sp = S + (toplen + 1) * leftlen + toplen;
+    sumw = 0;
+    dsum = 0;
 
-            case PA_DOWN:
-		        dashnum = NONDASHES[*leftpos];
-		        dsum += (dashnum * EVALDISTANCE(*leftpos,GAPINDEX,sm));
-		        sumw += dashnum;
-		        leftpos--;
-                Sp = Sp - (toplen+1);
-                break;
+    for (;;) {
+        switch (Sp->direction) {
+        case PA_DIAGONAL:
+            dashnum = min(10, NONDASHES[*leftpos] + NONDASHES[*toppos]);
+            dsum += (dashnum * EVALDISTANCE(*leftpos, *toppos, sm));
+            sumw += dashnum;
+            leftpos--; toppos--;
+            Sp = Sp - (toplen + 2);
+            break;
 
-            default:
-                goto exit7;
+        case PA_RIGHT:
+            dashnum = NONDASHES[*toppos];
+            dsum += (dashnum * EVALDISTANCE(GAPINDEX, *toppos, sm));
+            sumw += dashnum;
+            toppos--;
+            Sp--;
+            break;
+
+        case PA_DOWN:
+            dashnum = NONDASHES[*leftpos];
+            dsum += (dashnum * EVALDISTANCE(*leftpos, GAPINDEX, sm));
+            sumw += dashnum;
+            leftpos--;
+            Sp = Sp - (toplen + 1);
+            break;
+
+        default:
+            goto exit7;
         }
     }
-    exit7:; /* goes here in case PA_START */
+
+exit7:; /* goes here in case PA_START */
     ap->distanceweighted = dsum;
     ap->weights = sumw;
 
 
     /* free alignment matrix */
     free(S);
-	
-	//ap->similarity = (1.0-(ap->distance)/(255.0*ap->length));
-    ap->similarity = (1.0-(ap->distanceweighted)/(255.0*ap->weights));
+
+    //ap->similarity = (1.0-(ap->distance)/(255.0*ap->length));
+    ap->similarity = (1.0 - (ap->distanceweighted) / (255.0 * ap->weights));
     ap->prof1side = NULL;
     ap->prof2side = NULL;
 
@@ -2055,14 +2123,16 @@ PAP* GetFixedProfileAP(PROFILE* p1, PROFILE* p2, unsigned char* sm)
 
 
 
-PROFILE* GetReverseComplementProfile(PROFILE* original)
+PROFILE *GetReverseComplementProfile(PROFILE *original)
 {
-    PROFILE* newprof;
-    int i, *sourceptr,*destinptr;
+    PROFILE *newprof;
+    int i, *sourceptr, *destinptr;
 
     /* allocate the new PROFILE */
-    newprof = (PROFILE*) malloc(sizeof(PROFILE));
-    if(newprof==NULL) return NULL;
+    newprof = (PROFILE *) malloc(sizeof(PROFILE));
+
+    if (newprof == NULL) return NULL;
+
     newprof->key = original->key;
     newprof->patlen = original->patlen;
     newprof->copynum = original->copynum;
@@ -2070,18 +2140,18 @@ PROFILE* GetReverseComplementProfile(PROFILE* original)
     newprof->nextoffset = original->nextoffset;
     newprof->rcflag = !original->rcflag;
 
-    newprof->indices = (int*) malloc(sizeof(int)*newprof->proflen);
-    if(newprof->indices==NULL)
-    {
+    newprof->indices = (int *) malloc(sizeof(int) * newprof->proflen);
+
+    if (newprof->indices == NULL) {
         free(newprof);
         return NULL;
     }
 
     /* reverse complement the profile */
     sourceptr = original->indices;
-    destinptr = newprof->indices+newprof->proflen-1; /* place on last index */
-    for(i=0;i<newprof->proflen;i++)
-    {
+    destinptr = newprof->indices + newprof->proflen - 1; /* place on last index */
+
+    for (i = 0; i < newprof->proflen; i++) {
         *destinptr = GetComplementId(*sourceptr);
 
         /* update pointers */
@@ -2099,22 +2169,23 @@ PROFILE* GetReverseComplementProfile(PROFILE* original)
 
 
 
-void FreePAP(PAP* ap)
+void FreePAP(PAP *ap)
 {
-	if (NULL == ap) return;
+    if (NULL == ap) return;
+
     free(ap->prof2side);
     free(ap->prof1side);
-	free(ap);
-	return;
+    free(ap);
+    return;
 }
 
 
-void RescorePAP(PAP *ap, unsigned char* submatrix)
+void RescorePAP(PAP *ap, unsigned char *submatrix)
 {
     /*int i,distance,c,r;
 
     // this has to be changed with new alignment reweigting
-    // for every position add the distance 
+    // for every position add the distance
     for(i=distance=0;i<ap->length;i++)
     {
         c = ap->prof2side[i];
@@ -2134,115 +2205,127 @@ void RescorePAP(PAP *ap, unsigned char* submatrix)
 //#define SUBPATDEBUG
 
 /************************************************************************************************************/
-PAP* GetBestProfileAPSubpattern(PROFILE* p1, PROFILE* p2, unsigned char* submatrix, double target_homology) {
+PAP *GetBestProfileAPSubpattern(PROFILE *p1, PROFILE *p2, unsigned char *submatrix, double target_homology)
+{
 
-	PROFILE *pLargest,*pTemp,Temp;
+    PROFILE *pLargest, *pTemp, Temp;
     PAP *bestsofar = NULL, *ap;
-	int i,j,fe,*src,*dst,l;
-	int homology_int;
+    int i, j, fe, *src, *dst, l;
+    int homology_int;
 
 
-	/* must be set by the pvaluescore routine */
-	homology_int = (int)(target_homology*100);
+    /* must be set by the pvaluescore routine */
+    homology_int = (int)(target_homology * 100);
 
 #ifdef SUBPATDEBUG
-printf("\nTARGET_HOMOLOGY: %d\n\n",homology_int);
+    printf("\nTARGET_HOMOLOGY: %d\n\n", homology_int);
 
 #endif
 
-	/* pick smallest patter to be rotated and tiled, make a copy of it */
-	if (p1->proflen>p2->proflen) {
+    /* pick smallest patter to be rotated and tiled, make a copy of it */
+    if (p1->proflen > p2->proflen) {
 
-		pLargest = p1;
-		pTemp = CopyProfile(p2);
-	} else {
+        pLargest = p1;
+        pTemp = CopyProfile(p2);
+    }
+    else {
 
-		pLargest = p2;
-		pTemp = CopyProfile(p1);
-	}
-	if (NULL==pTemp) return NULL;
+        pLargest = p2;
+        pTemp = CopyProfile(p1);
+    }
+
+    if (NULL == pTemp) return NULL;
 
 #ifdef SUBPATDEBUG
-printf("largest: ");
-WriteSymbols(stdout, pLargest->indices, pLargest->proflen);
-printf("\n\n");
+    printf("largest: ");
+    WriteSymbols(stdout, pLargest->indices, pLargest->proflen);
+    printf("\n\n");
 
-printf("smallest: ");
-WriteSymbols(stdout, pTemp->indices, pTemp->proflen);
-printf("\n\n");
+    printf("smallest: ");
+    WriteSymbols(stdout, pTemp->indices, pTemp->proflen);
+    printf("\n\n");
 
 
-printf("tiled: ");
+    printf("tiled: ");
 #endif
 
-	/* circle though the smaller pattern */
-	Temp.indices = (int*) smalloc(sizeof(int)*(pLargest->proflen));
-	Temp.proflen = pLargest->proflen;
-	for (i=0; i<pTemp->proflen; i++) {
+    /* circle though the smaller pattern */
+    Temp.indices = (int *) smalloc(sizeof(int) * (pLargest->proflen));
+    Temp.proflen = pLargest->proflen;
 
-		/* tile the smaller pattern to larger pattern's length */
-		src = pTemp->indices; dst = Temp.indices;
-		for (j=0,l=0; j<pLargest->proflen; j++) {
-			*dst = src[l];
-			dst++; 
-			l++;
-			if (l>=pTemp->proflen) { l=0; }
-		}
-#ifdef SUBPATDEBUG
-WriteSymbols(stdout, pTemp->indices, pTemp->proflen);
-#endif
-		/* align */
-		if (NULL != bestsofar) {
-			ap = GetFixedProfileAPNarrowband(pLargest, &Temp, submatrix, homology_int);
+    for (i = 0; i < pTemp->proflen; i++) {
+
+        /* tile the smaller pattern to larger pattern's length */
+        src = pTemp->indices; dst = Temp.indices;
+
+        for (j = 0, l = 0; j < pLargest->proflen; j++) {
+            *dst = src[l];
+            dst++;
+            l++;
+
+            if (l >= pTemp->proflen) { l = 0; }
+        }
 
 #ifdef SUBPATDEBUG
-printf("dist: %d",ap->distance);
-printf("\n");
+        WriteSymbols(stdout, pTemp->indices, pTemp->proflen);
 #endif
 
-			if(ap->distance<bestsofar->distance)
-			{
-	            FreePAP(bestsofar);
-				bestsofar = ap;
-			} else {
-				FreePAP(ap);
-			}
-		} else {
-			//bestsofar =	GetFixedProfileAP(pLargest, &Temp, submatrix);
-			bestsofar =	GetFixedProfileAPNarrowband(pLargest, &Temp, submatrix, homology_int);
+        /* align */
+        if (NULL != bestsofar) {
+            ap = GetFixedProfileAPNarrowband(pLargest, &Temp, submatrix, homology_int);
 
 #ifdef SUBPATDEBUG
-printf("dist: %d",bestsofar->distance);
-printf("\n");
+            printf("dist: %d", ap->distance);
+            printf("\n");
 #endif
 
-		}
-
-		/* next rotation */
-		fe = pTemp->indices[0];
-		for (j=1; j<pTemp->proflen; j++) {
-			pTemp->indices[j-1] = pTemp->indices[j];
-		}
-		pTemp->indices[pTemp->proflen - 1] = fe;
-
-	}
-	sfree(Temp.indices);
-	
-	FreeProfile(pTemp);
+            if (ap->distance < bestsofar->distance) {
+                FreePAP(bestsofar);
+                bestsofar = ap;
+            }
+            else {
+                FreePAP(ap);
+            }
+        }
+        else {
+            //bestsofar =   GetFixedProfileAP(pLargest, &Temp, submatrix);
+            bestsofar = GetFixedProfileAPNarrowband(pLargest, &Temp, submatrix, homology_int);
 
 #ifdef SUBPATDEBUG
-printf("done!");
-exit(1);
+            printf("dist: %d", bestsofar->distance);
+            printf("\n");
+#endif
+
+        }
+
+        /* next rotation */
+        fe = pTemp->indices[0];
+
+        for (j = 1; j < pTemp->proflen; j++) {
+            pTemp->indices[j - 1] = pTemp->indices[j];
+        }
+
+        pTemp->indices[pTemp->proflen - 1] = fe;
+
+    }
+
+    sfree(Temp.indices);
+
+    FreeProfile(pTemp);
+
+#ifdef SUBPATDEBUG
+    printf("done!");
+    exit(1);
 #endif
 
     // set rc flag
-    if(p1->rcflag==p2->rcflag) bestsofar->rcflag = 0;
+    if (p1->rcflag == p2->rcflag) bestsofar->rcflag = 0;
     else bestsofar->rcflag = 1;
 
     // set similarity member
-    bestsofar->similarity = (1.0-(bestsofar->distance)/(255.0*bestsofar->length));
+    bestsofar->similarity = (1.0 - (bestsofar->distance) / (255.0 * bestsofar->length));
 
-	return bestsofar;
+    return bestsofar;
 }
 
 
