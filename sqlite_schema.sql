@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS `fasta_reads` (
   `qual` varchar(8000) DEFAULT NULL,
   UNIQUE (`head`)
 );
-# sequence data moved to external db
+-- sequence data moved to external db
 CREATE TABLE IF NOT EXISTS `fasta_ref_reps` (
   `rid` integer NOT NULL,
   `comment` varchar(500) DEFAULT NULL,

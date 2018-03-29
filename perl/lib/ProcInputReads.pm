@@ -26,7 +26,7 @@ use feature 'say';
 use Exporter qw(import);
 
 our @EXPORT_OK
-    = qw(fork_proc get_reader formats_regexs compressed_formats_regexs);
+    = qw(fork_proc init_bam get_reader formats_regexs compressed_formats_regexs);
 
 # List all supported file extensions and input formats here. Order of
 # input formats is in priority order: first format if found is used.
@@ -70,7 +70,7 @@ my %decompress_cmds;
     "xzcat "
 );
 
-my $records_before_split = 1e7;
+my $records_before_split = 1e8;
 
 =head2 Methods
 
@@ -85,6 +85,58 @@ used to determine it from a file name.
 
 sub formats_regexs {
     return %supported_formats;
+}
+
+=item C<check_trf_pipe_close>
+
+Checks the return status of the trf+trf2proclu pipe, and handles
+each case appropriately.
+
+=cut
+
+#** @function private check_trf_pipe_close ($errno, $child_err, $output_prefix, $current_file, $current_fragment)
+# @brief Checks the return status of the trf+trf2proclu pipe, and handles
+# each case appropriately.
+#
+# Wraps the perl error checking convention for calls to system
+# for our trf+trf2proclu pipe, and handles the possible exit states
+# of the command.
+# @params errno required integer - $!, the perl variable set after a failure by a system call
+# @params child_err required integer - $?, the perl variable for an error in a child process
+# @params output_prefix required string - A string indicating base name of a file produced by the pipe
+# @params current_file requred integer - Index of the currently running process
+# @params current_fragment required integer - Index of the current fragment of the input for this process
+# @retval integer or FALSE - Exits on error, return value of "unlink" on success.
+#*
+sub check_trf_pipe_close {
+    my ( $errno, $child_err, $output_prefix, $current_file,
+        $current_fragment )
+        = @_;
+    my $trf_pipe_es  = $child_err >> 8;
+    my $trf_pipe_sig = $child_err & 127;
+
+    # Here the process trf2proclu finished with non-0 AND there was some other
+    # problem, since $! is not 0.
+    if ($!) {
+        warn "Error closing trf+trf2proclu pipe: $!\n";
+        exit(255);
+    }
+
+    # TODO Fix: error 14 might be returned because of some error in TRF
+    elsif ( $trf_pipe_es == 1 || $trf_pipe_es == 14 ) {
+
+        # No TRs processed, remove files
+        warn
+            "Did not find any TRs (process $current_file, part $current_fragment). Removing leb36 file...\n";
+        unlink("$output_prefix.leb36");
+    }
+
+    # Here trf2proclu exited with non-0 status due to some error
+    elsif ( $trf_pipe_es > 1 ) {
+        warn "trf+trf2proclu pipe has returned $trf_pipe_es\n";
+        unlink("$output_prefix.leb36");
+        exit($trf_pipe_es);
+    }
 }
 
 =item C<compressed_formats_regexs>
@@ -151,6 +203,9 @@ sub fork_proc {
         my $reads_processed = 0;
         while ( my ( $header, $body ) = $reader->() ) {
 
+            # warn "header: $header\nbody: $body\n"
+            #     if ($ENV{DEBUG});
+
             # say $logfile $data[0] . "\n" . $data[1];
             pipe_to_trf( $reverse_read, $strip_454_TCAG, $warn_454_TCAG,
                 $trf_pipe, $header, $body );
@@ -158,7 +213,10 @@ sub fork_proc {
             # $trf_pipe, $header, $body, $debug_reads_processed );
             # $debug_reads_processed++;
             if ( ( $reads_processed++ % $records_before_split ) == 0 ) {
-                close $trf_pipe;
+                if ( !close $trf_pipe ) {
+                    check_trf_pipe_close( $!, $?, $output_prefix,
+                        $current_file, $current_fragment );
+                }
                 $output_prefix
                     = "$output_dir/${current_file}_" . ++$current_fragment;
                 open $trf_pipe,
@@ -166,34 +224,10 @@ sub fork_proc {
             }
         }
 
-  # Normally, close() returns false for failure of a pipe. If the only problem
-  # was that the exit status of the pipe was non-0, then $! == 0.
-  # Important because trf2proclu returns non-0 on success.
+        # Normally, close() returns false for failure of a pipe.
         if ( !close $trf_pipe ) {
-
-    # Here the process trf2proclu finished with non-0 AND there was some other
-    # problem, since $! is not 0.
-            if ($!) {
-                warn "Error closing trf+trf2proclu pipe: $!\n";
-                exit(1002);
-            }
-
-       # Here trf2proclu exited with non-0 status but that was the only issue,
-       # so just report that value.
-            elsif ( $? < -2 ) {
-                warn "trf+trf2proclu pipe has returned $?\n";
-                exit($?);
-            }
-
-            # TODO Doesn't account for TRF's negative return values
-        }
-
-# Check exit error
-# Here, check if log output file is empty. If so, delete the output for this fork
-        if ( -z "$output_prefix.log" || !( -e "$output_prefix.index" ) ) {
-
-# warn "Process $current_file did not find any VNTRs. Removing leb36 file...\n";
-            unlink("$output_prefix.leb36");
+            check_trf_pipe_close( $!, $?, $output_prefix, $current_file,
+                $current_fragment );
         }
 
         exit;
@@ -470,6 +504,10 @@ sub read_fastaq {
         return undef;
     }
 
+    warn "Using $main::install_dir for seqtk location.\n"
+        if ($ENV{DEBUG});
+    my $seqtk_bin = $main::install_dir . "/seqtk";
+
 # warn "Need to process " . scalar(@$filelist) . " files, working on $current_file\n";
 
     # Since we are using seqtk, use pipe open mode
@@ -482,10 +520,10 @@ sub read_fastaq {
         $filename
             = $decompress_cmds{$compression}
             . $filename
-            . "| seqtk seq -a -S";
+            . "| $seqtk_bin seq -a -S";
     }
     else {
-        $filename = "seqtk seq -a -S " . $filename;
+        $filename = "$seqtk_bin seq -a -S " . $filename;
     }
 
     # $current_file contains how many files processed so far.
@@ -515,6 +553,107 @@ sub read_fastaq {
     };
 }
 
+=item I<init_bam()>
+
+Initialize arrayref filelist for BAM file reader.
+
+Given the input dir, a flag indicating if the input is paired-end
+reads, and a list of all files, return a list of generated samtools
+commands for each portion on the input BAM file(s).
+
+The returned list can be used to replace filelist in the caller,
+which will then be passed to the rest of the program for running TRF.
+
+Requires samtools as an external dependency.
+
+=cut
+
+sub init_bam {
+    my ( $input_dir, $is_paired_end, $filelist ) = @_;
+    my @samcmds;
+
+    # $start is always 1
+    my $samviewcmd        = "samtools view";
+    my $unpairedflag      = "-F 1"; # Probably not required: only single-end fragments in a single-end template anyway
+    my $firstsegflag      = "-f 64";
+    my $lastsegflag       = "-f 128";
+    my $unmappedflag      = "-f 4";
+    my $badmapflag        = "-F 256 -F 2048";
+    my $unmapped_template = "*";
+
+    for my $file (@$filelist) {
+        next if ( $file =~ /\.bai$/ );
+        my $bamfile = "$input_dir/" . $file;
+
+        # warn "$bamfile\n";
+        # my $baifile = $bamfile . ".bai";
+
+        # warn "$baifile\n";
+
+# Check if .bai file exists and then run MakeBedFiles.jar
+# die
+#     "Error reading bam file: corresponding bai file required for processing bam files."
+#     unless ( -e -r $baifile );
+
+        # Requires samtools to be installed/available
+        # Get all regions in the bam file
+        my @regions = qx(
+                samtools idxstats "$bamfile"
+            );
+        if ( $? == -1 ) {
+            croak "failed to execute: $!\n";
+        }
+        elsif ( $? & 127 ) {
+            croak sprintf(
+                "command died while processing file '%s' with signal %d, %s coredump. Does a bai file exist?\n",
+                $bamfile,
+                ( $? & 127 ),
+                ( $? & 128 ) ? 'with' : 'without'
+            );
+        }
+
+        # Don't do more if we've exhausted the file list
+        # warn "Regions: " . scalar(@regions) . "\n";
+
+# We need to read the regions in the bam file and construct samtools commands
+# These are all saved in an array which are interated through like the FASTA files before.
+# Then we catch the output of these through a file handle, and process into FASTA.
+# DONE Modify this to label reads by which mate of a pair each read is, if this is a paired-end run. (We expect unique reads)
+# DONE Maybe also modify this so that only the longes/best(?) alignments for each read (we expect unique reads)
+# TODO Change how we segment these: should we divide the sequences into fixed read portions? Divide each chromosome into even parts? Etc..
+        for my $r (@regions) {
+            my ( $chr, $end, $num_aln, $num_unaln ) = split /\s+/, $r;
+            my $unmapped = ( $chr eq $unmapped_template );
+
+            # Don't save sequence with 0 reads
+            next if ( ( $num_aln + $num_unaln ) == 0 );
+
+            my $samviewflags = ($unmapped) ? $unmappedflag : $badmapflag;
+            my $region       = ($unmapped) ? ""            : "$chr:1-$end";
+
+            # my $sam2fastacmd = "| samtools sort -n - | samtools fasta -";
+            if ($is_paired_end) {
+                my $cmd = join( ' ',
+                    $samviewcmd, $samviewflags, $firstsegflag, $bamfile,
+                    $region );
+                push @samcmds, { cmd => $cmd, pair => "/1" };
+                $cmd = join( ' ',
+                    $samviewcmd, $samviewflags, $lastsegflag, $bamfile,
+                    $region );
+                push @samcmds, { cmd => $cmd, pair => "/2" };
+            }
+            else {
+                my $cmd = join( ' ',
+                    $samviewcmd, $samviewflags, $unpairedflag, $bamfile,
+                    $region );
+                push @samcmds, { cmd => $cmd, pair => "" };
+            }
+        }
+    }
+
+    return @samcmds;
+}
+
 =item I<read_bam()>
 
 BAM file reader.
@@ -528,71 +667,24 @@ This returned sub itself returns a list comprising a FASTA header and
 sequence each time it is called. When there are no more sequences to
 read, it returns an empty list.
 
-Requires samtools as an external dependency. This sub DOES modify the
-value of $files_to_process.
+Requires samtools as an external dependency.
 
 =cut
 
 sub read_bam {
-    my ( $input_dir, $compression, $current_file,
-        $files_to_process, $filelist )
+    my ( $input_dir, $compression, $current_idx, $files_to_process, $cmdlist )
         = @_;
-    my $bamfile = "$input_dir/" . $filelist->[0];
 
-    # warn "$bamfile\n";
-    my $baifile = $bamfile . ".bai";
+# Return undef if the index "$current_idx" exceeds the number of samtools commands
+    return undef
+        unless ( $current_idx < @$cmdlist );
 
-    # warn "$baifile\n";
-    my $unmapped_template = "*";
-    my @samcmds;
-
-    # Check if .bai file exists and then run MakeBedFiles.jar
-    die
-        "Error reading bam file: corresponding bai file required for processing bam files."
-        unless ( -e -r $baifile );
-
-    # Requires samtools to be installed/available
-    # Get all regions in the bam file
-    my @regions = qx(
-            samtools idxstats "$bamfile"
-        );
-
-    # Don't do more if we've exhausted the file list
-    # warn "Regions: " . scalar(@regions) . "\n";
-
-# We need to read the regions in the bam file and construct samtools commands
-# These are all saved in an array which are interated through like the FASTA files before.
-# Then we catch the output of these through a file handle, and process into FASTA.
-# TODO Modify this to label reads by which mate of a pair each read is, if this is a paired-end run. (We expect unique reads)
-# TODO Change how we segment these: should we divide the sequences into fixed read portions? Divide each chromosome into even parts? Etc..
-# TODO Maybe also modify this so that only the longes/best(?) alignments for each read (we expect unique reads)
-    for my $r (@regions) {
-        my ( $chr, $end, $num_aln, $num_unaln ) = split /\s+/, $r;
-        my $unmapped = ( $chr eq $unmapped_template );
-
-        # Don't save sequence with 0 reads
-        next if ( ( $num_aln + $num_unaln ) == 0 );
-
-        # $start is always 1
-        my $samflags  = ($unmapped) ? " -f 4" : "-F 256 -F 2048";
-        my $region    = ($unmapped) ? "" : "$chr:1-$end";
-        my $scmd      = "samtools view " . $samflags . $bamfile . $region;
-        push @samcmds, $scmd;
-    }
-
-    # Save the number of samtools commands we'll need to use
-    $$files_to_process = scalar @samcmds;
-
-    # Return undef if the index "$current_file" exceeds the number of regions
-    unless ( $current_file < @samcmds ) {
-        return undef;
-    }
-
-    # warn "$current_file\n";
-    warn "Processing bam chunk using: " . $samcmds[$current_file] . "\n";
+    # warn "$current_idx\n";
+    my $cmdhash = $cmdlist->[$current_idx];
+    warn "Processing bam chunk using: " . $cmdhash->{cmd} . "\n";
 
     local $SIG{PIPE} = sub { die "Error in samtools pipe: $?\n" };
-    open my $samout, "-|", $samcmds[ $current_file++ ]
+    open my $samout, "-|", $cmdhash->{cmd}
         or die "Error opening samtools pipe: $!\n";
     return sub {
         my $bam_rec = <$samout>;
@@ -602,7 +694,7 @@ sub read_bam {
         my ($header, undef, undef, undef, undef,
             undef,   undef, undef, undef, $seq
         ) = split( /\s+/, $bam_rec );
-        return ( ">" . $header, $seq );
+        return ( ">" . $header . $cmdhash->{pair}, $seq );
         }
 }
 

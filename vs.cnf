@@ -47,7 +47,7 @@ STRIP_454_KEYTAGS=0
 # data is paired reads
 # eg, 0 = no 
 # eg, 1 - yes
-IS_PAIRED_READS=0
+IS_PAIRED_READS=1
 
 # html directory (must be writable and executable!)
 # eg, /var/www/html/vntrview

@@ -11,7 +11,7 @@ use File::Basename;
 
 use lib "$FindBin::RealBin/lib";
 require "vutil.pm";
-use ProcInputReads qw(get_reader formats_regexs compressed_formats_regexs);
+use ProcInputReads qw(get_reader init_bam formats_regexs compressed_formats_regexs);
 
 use vutil qw(get_config get_dbh set_statistics get_trunc_query);
 
@@ -351,10 +351,16 @@ while ( my ( $sf, $pat_re ) = each %supported_formats_regexs ) {
     }
 }
 
-my $files_to_process = @filenames;
 unless ( @filenames > 0 ) {
     die "Error: no supported files found in $fastafolder. Exiting...\n";
 }
+
+# If BAM, init files list
+if ($input_format eq "bam") {
+    @filenames = init_bam($fastafolder, $IS_PAIRED_READS, \@filenames);
+}
+
+my $files_to_process = @filenames;
 
 if ( $run_conf{BACKEND} eq "mysql" ) {
     $sth

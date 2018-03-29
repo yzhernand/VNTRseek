@@ -520,7 +520,9 @@ sub make_refseq_db {
     my ($num_rows)
         = $dbh->selectrow_array(q{SELECT COUNT(*) FROM fasta_ref_reps});
 
-    if ( $num_rows == 0 || defined $redo ) {
+    warn "Rows in fasta_ref_reps == $num_rows, redo set to $redo\n"
+        if ($ENV{DEBUG});
+    if ( $num_rows == 0 || $redo ) {
         warn "Creating reference sequence database...\n";
         $dbh->do(q{DROP TABLE IF EXISTS fasta_ref_reps});
         $dbh->do(q{DROP TABLE IF EXISTS ref_profiles});
