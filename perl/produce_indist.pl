@@ -71,9 +71,8 @@ if (load_profiles_if_not_exists( $filtered_set, $opts{redo} ) )
 {
 
     #=<<Run redund.exe on the filtered file>>
-    # Since this is the filtered set, we're using it as the
-    # reference and need to negate the rid's, hence the last
-    # argument being 1
+    # Since this is the filtered set, we're not interested
+    # in keeping the files it creates, at this stage
     warn "Running redundancy elimination on filtered set.\n";
     run_redund( $filtered_set, "filtered.leb36", 0 );
 }
