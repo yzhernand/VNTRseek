@@ -15,9 +15,10 @@ use Carp;
 use FindBin;
 
 # this is where the pipeline is installed
-our $install_dir = "$FindBin::RealBin";
 use lib "$FindBin::RealBin/lib";    # must be same as install dir!
-use ProcInputReads qw(fork_proc init_bam formats_regexs compressed_formats_regexs);
+use ProcInputReads qw(fork_proc init_bam formats_regexs compressed_formats_regexs set_install_dir);
+our $install_dir = "$FindBin::RealBin";
+set_install_dir($install_dir);
 
 my $files_processed = 0;    # files processed
 my $files_to_process = 0;   # Either: the actual number of files to process

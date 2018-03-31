@@ -33,7 +33,7 @@ use File::Copy;
 use File::Basename;
 use File::Temp qw/ tempfile tempdir /;
 use lib "$FindBin::RealBin/lib";
-use vutil qw(make_refseq_db load_profiles_if_not_exists run_redund);
+use vutil qw(make_refseq_db load_refprofiles_db run_redund);
 use Data::Dumper;
 
 my %opts = (
@@ -67,7 +67,7 @@ make_refseq_db($filtered_set, $opts{redo});
 
 # check if the table exists in the database (do this for both reference sets)
 warn "Loading filtered set profiles (if needed).\n";
-if (load_profiles_if_not_exists( $filtered_set, $opts{redo} ) )
+if (load_refprofiles_db( $filtered_set, $opts{redo} ) )
 {
 
     #=<<Run redund.exe on the filtered file>>
@@ -88,18 +88,18 @@ my $filtered_dbh = DBI->connect(
     }
 ) or die "Could not connect to database: $DBI::errstr";
 
-$filtered_dbh->sqlite_create_function( 'mkflank', 2, sub {
-    my ($lflank, $rflank) = @_;
-    return substr($lflank, -60) . "|" . substr($rflank, 0, 60);
-    } );
+# $filtered_dbh->sqlite_create_function( 'mkflank', 2, sub {
+#     my ($lflank, $rflank) = @_;
+#     return substr($lflank, -60) . "|" . substr($rflank, 0, 60);
+#     } );
 
 # Get rotindex saved in db
 my $get_rotindex = q{SELECT rotindex
     FROM files};
 # For filtered set, fetch from the database, negate rid
 my $get_filtered_set_profiles = q{SELECT -rid, length(pattern) AS patsize,
-    round(copynum, 2), proflen, proflenrc, profile, profilerc, nA, nC, nG, nT,
-    mkflank(flankleft, flankright) AS flanks
+    printf("%.2f", copynum), proflen, proflenrc, profile, profilerc, nA, nC, nG, nT,
+    printf("%s|%s", upper(substr(flankleft, -60)), upper(substr(flankright, 0, 61))) AS flanks
     FROM fasta_ref_reps JOIN ref_profiles USING (rid)
         JOIN minreporder USING (rid)
     ORDER BY minreporder.idx ASC};
@@ -131,7 +131,7 @@ close $tmp_rotindex;
 #=<<Then for the full file>>
 my $tmp_full_dir;
 warn "Loading full set profiles (if needed).\n";
-if ( load_profiles_if_not_exists( $full_set, $opts{redo} ) ) {
+if ( load_refprofiles_db( $full_set, $opts{redo} ) ) {
 
     #=<<Run redund.exe on the full file>>
     warn "Running redundancy elimination on full set.\n";

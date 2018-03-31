@@ -38,7 +38,7 @@ my $argc = @ARGV;
 
 if ( $argc < 8 ) {
     die
-        "Usage: run_edges.pl reference_file edges_folder dbsuffix msdir MINPROFSCORE NPROCESSORS PSEARCH TMPDIR\nn";
+        "Usage: run_edges.pl reference_file edges_folder dbsuffix msdir MINPROFSCORE NPROCESSORS PSEARCH TMPDIR\n";
 }
 
 my $inputfile    = $ARGV[0];
@@ -51,14 +51,14 @@ my $PROCLU       = "$curdir/$ARGV[6]";
 my $tmp          = $ARGV[7];
 
 # set these mysql credentials in vs.cnf (in installation directory)
-my %run_conf = get_config( $MSDIR . "vs.cnf" );
+my %run_conf = get_config( $DBSUFFIX, $MSDIR . "vs.cnf" );
 my ( $LOGIN, $PASS, $HOST ) = @run_conf{qw(LOGIN PASS HOST)};
 
 my $clusters_processed = 0;
 my $totalRefReps       = 0;
 my $totalReadReps      = 0;
 
-my $dbh = get_dbh( $DBSUFFIX, $MSDIR . "vs.cnf" )
+my $dbh = get_dbh()
     or die "Could not connect to database: $DBI::errstr";
 
 my $sth;
@@ -117,9 +117,10 @@ while (<$input_fh>) {                               # read file into list
 close($input_fh);
 
 $clusters_processed = 0;
+
 # Do away with tempmap; use WHERE clusterlnk.repeatid IN
 # (SELECT DISTINCT (-refid) FROM map)?
-$query              = qq{
+$query = qq{
     SELECT repeatid,clusterid
     FROM clusterlnk
         LEFT OUTER JOIN replnk ON clusterlnk.repeatid=replnk.rid
@@ -243,6 +244,7 @@ print STDERR
 
 # print read leb files
 $clusters_processed = 0;
+
 # $query              = "select cid FROM clusters ORDER BY cid;";
 # $sth2               = $dbh->prepare($query);
 # $sth2->execute();
@@ -259,22 +261,20 @@ $sth->execute();
 my $myfile;
 while ( my @data2 = $sth->fetchrow_array() ) {
     $clusterid = $data2[1];
-    if ($clusterid != $clusteridold) {
-        unless ($clusteridold == -1) {
+    if ( $clusterid != $clusteridold ) {
+        unless ( $clusteridold == -1 ) {
             close($myfile);
             $clusters_processed++;
             print "$clusters_processed\n";
         }
+
         # TODO Change this to not produce one file per cluster
         $rightname = "reads.${clusterid}.leb36";
         open( $myfile, ">$folder/$rightname" )
             or die "\nCannot open file '$folder/$rightname'!\n";
     }
 
-
 #$query = "SELECT repeatid,clusterid,profile,profilerc,patsize,copynum FROM clusterlnk LEFT OUTER JOIN replnk ON clusterlnk.repeatid=replnk.rid INNER JOIN tempmap on clusterlnk.repeatid=tempmap.rid ORDER BY clusterid;";
-
-
 
     # $i = 0;
     # while ( my @data = $sth->fetchrow_array() ) {
@@ -295,7 +295,7 @@ while ( my @data2 = $sth->fetchrow_array() ) {
         print $myfile $pline;
     }
 
-        # $i++;
+    # $i++;
     # }
     # $sth->finish;
 
@@ -379,7 +379,9 @@ warn strftime( "\n\nend: %F %T\n\n", localtime );
 my %RHASH = ();
 my %SHASH = ();
 
-$dbh = get_dbh( $DBSUFFIX, $MSDIR . "vs.cnf" )
+chdir($curdir);
+
+$dbh = get_dbh()
     or die "Could not connect to database: $DBI::errstr";
 
 if ( $run_conf{BACKEND} eq "mysql" ) {
@@ -484,6 +486,7 @@ foreach (@tarballs) {
             #$sth->execute($1,$id);
 
             $pcd++;
+
             # warn "Inserting... $id, $i\n";
             if ( $run_conf{BACKEND} eq "mysql" ) {
                 print $TEMPFILE "$id,$1\n";
@@ -770,11 +773,9 @@ if ( $delfromtable != $count ) {
 
 $dbh->disconnect();
 set_statistics(
-    $DBSUFFIX,
-    (   "RANK_EDGES_OVERCUTOFF" => $j,
-        "RANK_REMOVED_SAMEREF"  => $count,
-        "RANK_REMOVED_SAMESEQ"  => $count,
-    )
+    "RANK_EDGES_OVERCUTOFF" => $j,
+    "RANK_REMOVED_SAMEREF"  => $count,
+    "RANK_REMOVED_SAMESEQ"  => $count
 );
 
 print STDERR "Finished. Deleted from rank using temptable: $delfromtable\n";

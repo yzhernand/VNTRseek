@@ -36,9 +36,9 @@ my $DBSUFFIX = $ARGV[1];
 my $MSDIR    = $ARGV[2];
 
 # set these mysql credentials in vs.cnf (in installation directory)
-my %run_conf = get_config( $MSDIR . "vs.cnf" );
+my %run_conf = get_config($DBSUFFIX, $MSDIR . "vs.cnf" );
 my ( $LOGIN, $PASS, $HOST ) = @run_conf{qw(LOGIN PASS HOST)};
-my $dbh = get_dbh( $DBSUFFIX, $MSDIR . "vs.cnf" )
+my $dbh = get_dbh()
     or die "Could not connect to database: $DBI::errstr";
 
 # create folder

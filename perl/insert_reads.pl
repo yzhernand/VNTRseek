@@ -11,7 +11,8 @@ use File::Basename;
 
 use lib "$FindBin::RealBin/lib";
 require "vutil.pm";
-use ProcInputReads qw(get_reader init_bam formats_regexs compressed_formats_regexs);
+use ProcInputReads qw(get_reader init_bam formats_regexs compressed_formats_regexs set_install_dir);
+set_install_dir("$FindBin::RealBin");
 
 use vutil qw(get_config get_dbh set_statistics get_trunc_query);
 
@@ -44,7 +45,7 @@ my $TEMPDIR         = $ARGV[8];
 my $IS_PAIRED_READS = $ARGV[9];
 
 # set these mysql credentials in vs.cnf (in installation directory)
-my %run_conf = get_config( $MSDIR . "vs.cnf" );
+my %run_conf = get_config($DBSUFFIX, $MSDIR . "vs.cnf" );
 my ( $LOGIN, $PASS, $HOST ) = @run_conf{qw(LOGIN PASS HOST)};
 
 my $totalReads = 0;
@@ -470,7 +471,7 @@ elsif ($run_conf{BACKEND} eq "sqlite") {
 # disconnect
 $dbh->disconnect();
 
-set_statistics( $DBSUFFIX, "NUMBER_READS", $totalReads );
+set_statistics( NUMBER_READS => $totalReads );
 
 # check
 if ( $inserted == keys(%HEADHASH) ) {

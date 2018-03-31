@@ -4,6 +4,7 @@ use Cwd;
 use DBI;
 use Carp;
 use FindBin;
+use File::Temp;
 use POSIX qw(strftime);
 
 if ( $ENV{DEBUG} ) {
@@ -12,7 +13,7 @@ if ( $ENV{DEBUG} ) {
 
 use base 'Exporter';
 our @EXPORT_OK
-    = qw(read_config_file get_config set_config set_credentials get_dbh write_mysql make_refseq_db load_profiles_if_not_exists run_redund write_sqlite set_statistics get_statistics stats_get set_datetime print_config trim create_blank_file get_trunc_query);
+    = qw(read_config_file get_config set_config set_credentials get_dbh write_mysql make_refseq_db load_refprofiles_db run_redund write_sqlite set_statistics get_statistics stats_get set_datetime print_config trim create_blank_file get_trunc_query);
 
 # vutil.pm
 # author: Yevgeniy Gelfand
@@ -287,10 +288,10 @@ sub set_credentials {
 ####################################
 sub set_statistics {
 
-    my $argc = @_;
-    if ( $argc < 2 ) {
-        die "set_statistics: expects at least 2 parameters, passed $argc !\n";
-    }
+# my $argc = @_;
+# if ( $argc < 2 ) {
+#     croak "set_statistics: expects at least 2 parameters, passed $argc !\n";
+# }
 
     my %stats = @_;
     my $dbh   = get_dbh( $VSCNF_FILE{DBSUFFIX},
@@ -336,14 +337,19 @@ sub set_datetime {
 ####################################
 sub get_statistics {
 
-    my $argc = @_;
-    if ( $argc < 2 ) {
-        die "get_statistics: expects at least 2 parameters, passed $argc !\n";
+  # my $argc = @_;
+  # if ( $argc < 2 ) {
+  #     die "get_statistics: expects at least 2 parameters, passed $argc !\n";
+  # }
+    unless ($VSREAD) {
+        carp
+            "Error: must call `get_config(dbsuffix, config_loc)` before this function.\n";
     }
 
-    my $DBSUFFIX = shift;
-    my @stats    = @_;
-    my $dbh = get_dbh( $DBSUFFIX, $ENV{HOME} . "/" . $DBSUFFIX . ".vs.cnf" );
+    # my $DBSUFFIX = shift;
+    my @stats = @_;
+    my $dbh   = get_dbh( $VSCNF_FILE{DBSUFFIX},
+        $ENV{HOME} . "/" . $VSCNF_FILE{DBSUFFIX} . ".vs.cnf" );
     my $sql_clause;
     if ( $ENV{DEBUG} ) {
         warn Dumper( \@stats ) . "\n";
@@ -432,8 +438,15 @@ sub get_dbh {
 # set it up. Then continue with grabbing the main DB, and attach the refseq db
 # to the connection.
 # REDO_REFDB option not yet implemented
-        my $redo = exists $VSCNF_FILE{REDO_REFDB};
+        my $redo
+            = ( exists $VSCNF_FILE{REDO_REFDB} )
+            ? $VSCNF_FILE{REDO_REFDB}
+            : 0;
         make_refseq_db( $VSCNF_FILE{REFERENCE_SEQ}, $redo );
+        load_refprofiles_db( $VSCNF_FILE{REFERENCE_FILE}, $redo );
+        # Always set redo flag back to 0 when done redoing
+        $VSCNF_FILE{REDO_REFDB} = 0;
+        print_config($ENV{HOME} . "/". $VSCNF_FILE{DBSUFFIX} . ".");
 
 # TODO First connect to a temp location, backup database to that location
 # then return handle to that location. This is primarily for running on clusters.
@@ -479,7 +492,10 @@ sub make_refseq_db {
     my $reffile   = shift;
     my $redo      = shift;
     my $refdbfile = $reffile =~ s/.(seq|leb36)$/.db/r;
-    my $dbh       = DBI->connect(
+    if ( $ENV{DEBUG} ) {
+        warn "Connecting to SQLite db at $refdbfile\n";
+    }
+    my $dbh = DBI->connect(
         "DBI:SQLite:dbname=$refdbfile",
         undef, undef,
         {   AutoCommit                 => 1,
@@ -488,12 +504,12 @@ sub make_refseq_db {
         }
     ) or die "Could not connect to database: $DBI::errstr";
 
-    if ( $ENV{DEBUG} ) {
-        warn "Connecting to SQLite db at $refdbfile\n";
-    }
+    warn "CWD = " . getcwd() . "\n"
+        if ( $ENV{DEBUG} );
 
     # Create the table in this new db.
-    my $create_fasta_ref_reps_q = q{CREATE TABLE IF NOT EXISTS `fasta_ref_reps` (
+    my $create_fasta_ref_reps_q
+        = q{CREATE TABLE IF NOT EXISTS `fasta_ref_reps` (
     `rid` integer NOT NULL,
     `firstindex` integer NOT NULL,
     `lastindex` integer NOT NULL,
@@ -505,9 +521,6 @@ sub make_refseq_db {
     `flankright` text COLLATE BINARY,
     `conserved` float DEFAULT NULL,
     `comment` varchar(500) DEFAULT NULL,
-    `is_singleton` integer NOT NULL DEFAULT '0',
-    `is_dist` integer NOT NULL DEFAULT '0',
-    `is_indist` integer NOT NULL DEFAULT '0',
     PRIMARY KEY (`rid`),
     UNIQUE (`rid`,`comment`))};
     my $fasta_ref_reps_index_q = q{CREATE INDEX IF NOT EXISTS
@@ -521,11 +534,10 @@ sub make_refseq_db {
         = $dbh->selectrow_array(q{SELECT COUNT(*) FROM fasta_ref_reps});
 
     warn "Rows in fasta_ref_reps == $num_rows, redo set to $redo\n"
-        if ($ENV{DEBUG});
+        if ( $ENV{DEBUG} );
     if ( $num_rows == 0 || $redo ) {
         warn "Creating reference sequence database...\n";
         $dbh->do(q{DROP TABLE IF EXISTS fasta_ref_reps});
-        $dbh->do(q{DROP TABLE IF EXISTS ref_profiles});
         $dbh->do($create_fasta_ref_reps_q);
         $dbh->do($fasta_ref_reps_index_q);
 
@@ -536,8 +548,9 @@ sub make_refseq_db {
         our $seq_rows = [];
 
         # my $installdir = "$FindBin::RealBin";
-        open my $refset, "<", $refdbfile =~ s/.db$/.seq/r
-            or croak "Error opening reference sequences file: $!\n";
+        open my $refset, "<", $reffile =~ s/.(seq|leb36)$/.seq/r
+            or confess
+            "Error opening reference sequences file $reffile: $!.\nStopped at";
 
         $dbh->begin_work;
 
@@ -596,7 +609,7 @@ sub make_refseq_db {
             $dbh->disconnect;
 
             # unlink($refdbfile);
-            croak
+            die
                 "Error inserting reference sequences into $refdbfile: inserted $num_rows but read "
                 . scalar(@$seq_rows)
                 . " lines from file. Aborting...";
@@ -625,7 +638,7 @@ sub get_trunc_query {
 
 ################################################################
 # Use this to load reference set db with profiles (leb36 file)
-sub load_profiles_if_not_exists {
+sub load_refprofiles_db {
     my ( $prof_file, $redo ) = @_;
     my $dbfile = $prof_file =~ s/.(seq|leb36)$/.db/r;
     my $dbh    = DBI->connect(
@@ -658,9 +671,9 @@ sub load_profiles_if_not_exists {
     # the profiles into the db.
     my ($num_rows)
         = $dbh->selectrow_array(q{SELECT COUNT(*) FROM ref_profiles});
-    if ( $num_rows == 0 || defined $redo ) {
+    if ( $num_rows == 0 || $redo ) {
         $dbh->begin_work();
-        $dbh->do(q{DROP TABLE `ref_profiles`});
+        $dbh->do(q{DROP TABLE IF EXISTS `ref_profiles`});
         $dbh->do($create_ref_profiles_q);
 
         # Read in ref leb36 file and create a virtual table out of it
@@ -725,8 +738,12 @@ sub load_profiles_if_not_exists {
         }
 
         $dbh->do(q{DROP TABLE temp.leb36tab});
+
+
         $dbh->commit;
         $dbh->disconnect;
+        # Run redund
+        run_redund( $prof_file, "reference.leb36", 0 );
         return 1;
     }
 
@@ -743,7 +760,7 @@ sub run_redund {
     # First, create a temporary directory and copy the filtered set there
     my $tmpdir      = File::Temp->newdir();
     my $tmpdir_name = $tmpdir->dirname;
-    my ( $input_refset, $output_basename, $keep_files ) = @_;
+    my ( $input_refset, $output_basename, $keep_files, $redo ) = @_;
     my $dbfile = $input_refset =~ s/.(seq|leb36)$/.db/r;
 
     # # Add - sign if negating for ref set and set new input to same
@@ -758,6 +775,23 @@ sub run_redund {
 
     #     # warn "New input: $input_refset\n";
     # }
+
+    # Check if we need to run redund, or are forcing a rerun
+    my $dbh = DBI->connect(
+        "DBI:SQLite:dbname=$dbfile",
+        undef, undef,
+        {   AutoCommit                 => 1,
+            RaiseError                 => 1,
+            sqlite_see_if_its_a_number => 1,
+        }
+    ) or die "Could not connect to database: $DBI::errstr";
+    my ($num_rows)
+        = $dbh->selectrow_array(
+        q{SELECT COUNT(*) FROM ref_profiles WHERE redund = 0});
+
+# Return if redund has already been run for this refset and were are not forcing a redo
+    return
+        unless ( $num_rows == 0 || $redo );
 
     #=<<Run redund.exe on the input leb36 files.>>
     # First run sorts by minimum representation
@@ -795,14 +829,6 @@ sub run_redund {
     # warn Dumper($unique_trs) ."\n";
 
     warn "Marking non-redundant TRs in database.\n";
-    my $dbh = DBI->connect(
-        "DBI:SQLite:dbname=$dbfile",
-        undef, undef,
-        {   AutoCommit                 => 1,
-            RaiseError                 => 1,
-            sqlite_see_if_its_a_number => 1,
-        }
-    ) or die "Could not connect to database: $DBI::errstr";
     $dbh->begin_work();
     $dbh->do(
         q{CREATE TEMPORARY TABLE temp.unique_trs
@@ -840,16 +866,19 @@ sub run_redund {
     if ( $ENV{DEBUG} ) {
         warn "Connecting to SQLite db at $minreporder_db\n";
     }
+
     # print "Press enter to continue...";
     # my $dummy = <STDIN>;
 
     $dbh->begin_work();
+
     # Copy the CREATE TABLE query for the minreporder table
     # and create the same table in the ref set db, copying
     # over the data
-    my ($minrep_sql) = $dbh->selectrow_array(q{SELECT sql FROM minrep.sqlite_master
-        WHERE name = 'minreporder'})
-        or carp "Couldn't do statement: $DBI::errstr\n";
+    my ($minrep_sql) = $dbh->selectrow_array(
+        q{SELECT sql FROM minrep.sqlite_master
+        WHERE name = 'minreporder'}
+    ) or carp "Couldn't do statement: $DBI::errstr\n";
     $minrep_sql =~ s/minreporder/main.minreporder/;
     $dbh->do(q{DROP TABLE IF EXISTS main.minreporder})
         or carp "Couldn't do statement: $DBI::errstr\n";
@@ -880,6 +909,7 @@ sub run_redund {
 
     warn "$unique_tr_count unique TRs in filtered set\n";
     $dbh->disconnect;
+    unlink($minreporder_db);
 
     if ($keep_files) {
         return $tmpdir;
@@ -1246,7 +1276,7 @@ sub print_config {
 
     my $argc = @_;
     if ( $argc < 1 ) {
-        die "print_config: expects 1 parameters, passed $argc!\n";
+        croak "print_config: expects 1 parameters, passed $argc!\n";
     }
 
     my $startdir = $_[0];
@@ -1348,6 +1378,11 @@ STRIP_454_KEYTAGS=$VSCNF_FILE{"STRIP_454_KEYTAGS"}
 # eg, 0 = no 
 # eg, 1 - yes
 IS_PAIRED_READS=$VSCNF_FILE{"IS_PAIRED_READS"}
+
+# Rebuild reference database
+# eg, 0 = no 
+# eg, 1 - yes
+REDO_REFDB=$VSCNF_FILE{"REDO_REFDB"}
 
 # html directory (must be writable and executable!)
 # eg, /var/www/html/vntrview

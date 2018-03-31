@@ -41,9 +41,9 @@ my $TEMPDIR      = $ARGV[5];
 my $KEEPPCRDUPS  = $ARGV[6];
 
 # set these mysql credentials in vs.cnf (in installation directory)
-my %run_conf = get_config( $MSDIR . "vs.cnf" );
+my %run_conf = get_config($DBSUFFIX, $MSDIR . "vs.cnf" );
 my ( $LOGIN, $PASS, $HOST ) = @run_conf{qw(LOGIN PASS HOST)};
-my $dbh = get_dbh( $DBSUFFIX, $MSDIR . "vs.cnf" )
+my $dbh = get_dbh()
     or die "Could not connect to database: $DBI::errstr";
 my %stats;
 
@@ -345,8 +345,8 @@ $stats{BBB_WITH_MAP_DUPS} = $i;
 warn "Making a list of ties (references)...\n";
 if ( open( my $fh, ">$pcleanfolder/result/$DBSUFFIX.ties.txt" ) ) {
     $query = qq{SELECT map.refid, max(bbb) as mbb,
-            (select head from fasta_ref_reps where rid=map.refid) as chr,
-            (select firstindex from fasta_ref_reps where rid=map.refid) as tind
+            (select head from refdb.fasta_ref_reps where rid=map.refid) as chr,
+            (select firstindex from refdb.fasta_ref_reps where rid=map.refid) as tind
         FROM map INNER JOIN rank ON rank.refid=map.refid AND rank.readid=map.readid
         INNER JOIN rankflank ON rankflank.refid=map.refid AND rankflank.readid=map.readid
         GROUP BY map.refid HAVING mbb=0 ORDER BY chr, tind};
@@ -416,7 +416,7 @@ if ( $delfromtable != $deleted ) {
 
 $dbh->disconnect();
 warn strftime( "\n\nend: %F %T\n\n", localtime );
-set_statistics($DBSUFFIX, %stats);
+set_statistics(%stats);
 
 1;
 

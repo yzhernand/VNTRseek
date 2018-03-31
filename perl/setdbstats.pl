@@ -16,87 +16,95 @@ use File::Basename;
 
 use List::Util qw[min max];
 
-use lib "$FindBin::RealBin/lib"; # must be same as install dir!
+use lib "$FindBin::RealBin/lib";    # must be same as install dir!
 
-use vutil qw( get_config set_statistics );
-
+use vutil qw( get_config get_dbh set_statistics );
 
 my $argc = @ARGV;
-if ($argc<6) { die "Usage: setdbstats.pl reference_file reads_profiles_folder reference_folder reads_profile_folder_clean dbsuffix msdir\n"; }
+if ( $argc < 6 ) {
+    die
+        "Usage: setdbstats.pl reference_file reads_profiles_folder reference_folder reads_profile_folder_clean dbsuffix msdir\n";
+}
 
-my $reffile = $ARGV[0];
-my $readpf = $ARGV[1];
+my $reffile   = $ARGV[0];
+my $readpf    = $ARGV[1];
 my $reffolder = $ARGV[2];
-my $rpfc = $ARGV[3];
-my $DBSUFFIX = $ARGV[4];
-my $MSDIR = $ARGV[5];
+my $rpfc      = $ARGV[3];
+my $DBSUFFIX  = $ARGV[4];
+my $MSDIR     = $ARGV[5];
 
 ####################################
 
 my %stats;
 my $exstring;
 my $input;
+my $rc;
 
-open($input, "-|", "wc -l $reffile | tail -1");
-my $rc = <$input>;
-if ($rc =~ /(\d+)/) {
-  $stats{NUMBER_REF_TRS} = $1;
-}
-close($input);
+my %run_conf = get_config($DBSUFFIX, $MSDIR . "vs.cnf" );
+my $dbh      = get_dbh();
 
-open($input, "-|", "wc -l $readpf/*.indexhist | tail -1");
+# open( $input, "-|", "wc -l $reffile | tail -1" );
+# my $rc = <$input>;
+# if ( $rc =~ /(\d+)/ ) {
+#     $stats{NUMBER_REF_TRS} = $1;
+# }
+# close($input);
+( $stats{NUMBER_REF_TRS} )
+    = $dbh->selectrow_array(q{SELECT COUNT(*) FROM fasta_ref_reps});
+
+# open($input, "-|", "wc -l $reffolder/reference.leb36.rotindex | tail -1");
+# $rc = <$input>;
+# if ($rc =~ /(\d+)/) {
+#   $stats{NUMBER_REFS_TRS_AFTER_REDUND} = $1;
+# }
+# close($input);
+
+( $stats{NUMBER_REFS_TRS_AFTER_REDUND} )
+    = $dbh->selectrow_array(
+    q{SELECT COUNT(*) FROM ref_profiles WHERE redund = 0});
+
+open( $input, "-|", "wc -l $readpf/*.indexhist | tail -1" );
 $rc = <$input>;
-if ($rc =~ /(\d+)/) {
-  $stats{NUMBER_TRS_IN_READS} = $1;
+if ( $rc =~ /(\d+)/ ) {
+    $stats{NUMBER_TRS_IN_READS} = $1;
 }
 close($input);
 
-open($input, "-|", "wc -l $reffolder/reference.leb36.rotindex | tail -1");
+open( $input, "-|", "wc -l $rpfc/*.rotindex | tail -1" );
 $rc = <$input>;
-if ($rc =~ /(\d+)/) {
-  $stats{NUMBER_REFS_TRS_AFTER_REDUND} = $1;
+if ( $rc =~ /(\d+)/ ) {
+    $stats{NUMBER_TRS_IN_READS_AFTER_REDUND} = $1;
 }
 close($input);
 
-open($input, "-|", "wc -l $rpfc/*.rotindex | tail -1");
-$rc = <$input>;
-if ($rc =~ /(\d+)/) {
-  $stats{NUMBER_TRS_IN_READS_AFTER_REDUND} = $1;
-}
-close($input);
-
-
-$stats{NUMBER_TRS_IN_READS_GE7} = 0;
-$stats{NUMBER_READS_WITHTRS_GE7} = 0;
-$stats{NUMBER_READS_WITHTRS} = 0;
+$stats{NUMBER_TRS_IN_READS_GE7}               = 0;
+$stats{NUMBER_READS_WITHTRS_GE7}              = 0;
+$stats{NUMBER_READS_WITHTRS}                  = 0;
 $stats{NUMBER_READS_WITHTRS_GE7_AFTER_REDUND} = 0;
 
 $rc = qx(./ge7.pl $readpf/*.index 2>/dev/null);
-if ($rc =~ /(\d+) (\d+) (\d+)/) {
-   $stats{NUMBER_TRS_IN_READS_GE7} = $1;
-   $stats{NUMBER_READS_WITHTRS_GE7} = $2;
-   $stats{NUMBER_READS_WITHTRS} = $3;
+if ( $rc =~ /(\d+) (\d+) (\d+)/ ) {
+    $stats{NUMBER_TRS_IN_READS_GE7}  = $1;
+    $stats{NUMBER_READS_WITHTRS_GE7} = $2;
+    $stats{NUMBER_READS_WITHTRS}     = $3;
 }
 close($input);
 
-
-open($input, "-|", "./ge7.pl $readpf/*.indexhist");
+open( $input, "-|", "./ge7.pl $readpf/*.indexhist" );
 $rc = <$input>;
-if ($rc =~ /(\d+) (\d+) (\d+)/) {
-  $stats{NUMBER_READS_WITHTRS} = $3;
+if ( $rc =~ /(\d+) (\d+) (\d+)/ ) {
+    $stats{NUMBER_READS_WITHTRS} = $3;
 }
 close($input);
 
-
-open($input, "-|", "cat $rpfc/*.rotindex | wc");
+open( $input, "-|", "cat $rpfc/*.rotindex | wc" );
 $rc = <$input>;
-if ($rc =~ /(\d+) (\d+) (\d+)/) {
-  $stats{NUMBER_READS_WITHTRS_GE7_AFTER_REDUND} = $1;
+if ( $rc =~ /(\d+) (\d+) (\d+)/ ) {
+    $stats{NUMBER_READS_WITHTRS_GE7_AFTER_REDUND} = $1;
 }
 close($input);
 
 # Get config for run and save stats
-my %run_conf = get_config($MSDIR . "vs.cnf");
 set_statistics(%stats);
 
 1;

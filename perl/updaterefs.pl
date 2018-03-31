@@ -40,7 +40,7 @@ my $VERSION              = $ARGV[10];
 my $TEMPDIR              = $ARGV[11];
 
 # set these mysql credentials in vs.cnf (in installation directory)
-my %run_conf = get_config( $MSDIR . "vs.cnf" );
+my %run_conf = get_config( $DBSUFFIX, $MSDIR . "vs.cnf" );
 my ( $LOGIN, $PASS, $HOST ) = @run_conf{qw(LOGIN PASS HOST)};
 
 ############################ Procedures ###############################################################
@@ -63,19 +63,6 @@ sub nowhitespace($) {
     my $string = shift;
     $string =~ s/\s+//g;
     return $string;
-}
-
-####################################
-sub GetStatistics {
-
-    my $argc = @_;
-    if ( $argc < 1 ) {
-        die "GetStatistics: expects 1 parameter, passed $argc !\n";
-    }
-
-    my $NAME = $_[0];
-
-    return stats_get( $DBSUFFIX, $LOGIN, $PASS, $HOST, $NAME );
 }
 
 ####################################
@@ -103,8 +90,8 @@ sub print_vcf {
         FOLDER_PROFILES
         NUMBER_READS
         NUMBER_TRS_IN_READS);
-    my $stat_hash = get_statistics( $DBSUFFIX, @stats );
-    my $dbh = get_dbh( $DBSUFFIX, $MSDIR . "vs.cnf" );
+    my $stat_hash = get_statistics(@stats);
+    my $dbh       = get_dbh();
 
     # Get total number of TRs supported
     my $numsup_sth
@@ -119,8 +106,7 @@ sub print_vcf {
     if ( !defined $numsup ) {
         die "Error getting number of supported TRs: " . $dbh->errstr;
     }
-
-    # $numsup_sth->finish;
+    $numsup_sth->finish;
 
     # Get number of VNTRs supported
     my $numvntrs_sth
@@ -185,17 +171,18 @@ sub print_vcf {
     my $allwithsupport_clause
         = ( ($allwithsupport) ? "" : "WHERE support_vntr>0" );
     my $get_supported_reftrs_query
-        = qq{SELECT fasta_ref_reps.rid, is_singleton, is_dist, firstindex,
-            (lastindex - firstindex) + 1 AS arlen, fasta_ref_reps.copynum, fasta_ref_reps.pattern, fasta_ref_reps.head,
+        = qq{SELECT reftab.rid, is_singleton, is_dist, firstindex,
+            (lastindex - firstindex) + 1 AS arlen, reftab.copynum, reftab.pattern, reftab.head,
             sequence, c1.direction AS refdir, copies, sameasref,
             support, first, last, dna, c2.direction AS readdir
-        FROM fasta_ref_reps INNER JOIN vntr_support ON -fasta_ref_reps.rid=vntr_support.refid
+        FROM refdb.fasta_ref_reps reftab INNER JOIN vntr_support ON -reftab.rid=vntr_support.refid
+        INNER JOIN main.fasta_ref_reps mainreftab ON -mainreftab.rid=vntr_support.refid
         INNER JOIN clusterlnk c1 ON vntr_support.refid=c1.repeatid
         INNER JOIN replnk ON vntr_support.representative=replnk.rid
         INNER JOIN clusterlnk c2 ON c2.repeatid=replnk.rid
         INNER JOIN fasta_reads ON replnk.sid=fasta_reads.sid
         $allwithsupport_clause
-        ORDER BY fasta_ref_reps.head ASC, fasta_ref_reps.firstindex ASC, sameasref DESC};
+        ORDER BY reftab.head ASC, reftab.firstindex ASC, sameasref DESC};
     my $get_supported_reftrs_sth = $dbh->prepare($get_supported_reftrs_query);
     $get_supported_reftrs_sth->execute()
         or die "Cannot execute: " . $get_supported_reftrs_sth->errstr();
@@ -215,7 +202,7 @@ sub print_vcf {
     );
 
     # Loop over all supported ref TRs
-    my $oldrefid               = -1;
+    my $oldrefid = -1;
     my ( $alleleWithSupportFound, $first, $subSameAsRef1, $j, $al, $patlen )
         = (0) x 6;
     my ( $subjectA, $subjectB, $subjectC, $subjectB1, $subjectC1, $alt )
@@ -257,6 +244,7 @@ sub print_vcf {
 
             $alleleWithSupportFound = 0;
         }
+
         # Loop over all allele supporting read TRs
         else {
             $seq = ($seq) ? uc( nowhitespace($seq) ) : "";
@@ -268,7 +256,7 @@ sub print_vcf {
             my $cdiff = $copies - $first;
             warn "\tAllele: $cdiff, support $support, alt: $alt\n"
                 if $ENV{DEBUG};
-                
+
             if ( $support >= $MIN_SUPPORT_REQUIRED ) {
                 $alleleWithSupportFound++;
                 $subjectB1     = "$support";
@@ -379,13 +367,13 @@ sub print_distr {
     print $distrfh
         "\n\nPatternSize, All, Span1, PercentageS1, Span${MIN_SUPPORT_REQUIRED}, PercentageS${MIN_SUPPORT_REQUIRED}, VntrSpan${MIN_SUPPORT_REQUIRED}, PercentageVS${MIN_SUPPORT_REQUIRED}\n";
 
-    my $dbh = get_dbh( $DBSUFFIX, $MSDIR . "vs.cnf" );
+    my $dbh = get_dbh();
 
     # 1 patsize (all)
-    my $sth
-        = $dbh->prepare(
-        "SELECT length(pattern) as patsize, count(*) FROM fasta_ref_reps GROUP BY patsize ORDER BY patsize ASC;"
-        ) or die "Couldn't prepare statement: " . $dbh->errstr;
+    my $sth = $dbh->prepare(
+        q{SELECT length(pattern) as patsize, count(*)
+        FROM refdb.fasta_ref_reps GROUP BY patsize ORDER BY patsize ASC}
+    ) or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
     my $i = 0;
     while ( my @data = $sth->fetchrow_array() ) {
@@ -400,10 +388,12 @@ sub print_distr {
     $sth->finish;
 
     # 2 patsize (span1)
-    $sth
-        = $dbh->prepare(
-        "SELECT length(pattern) as patsize, count(*) FROM fasta_ref_reps WHERE span1>0 GROUP BY patsize ORDER BY patsize ASC;"
-        ) or die "Couldn't prepare statement: " . $dbh->errstr;
+    $sth = $dbh->prepare(
+        q{SELECT length(pattern) as patsize, count(*)
+        FROM main.fasta_ref_reps mainreftab JOIN refdb.fasta_ref_reps reftab USING (rid)
+        WHERE mainreftab.span1>0
+            GROUP BY patsize ORDER BY patsize ASC}
+    ) or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
     while ( my @data = $sth->fetchrow_array() ) {
         if ( $data[0] < $LARGEST_PSIZE ) {
@@ -418,10 +408,11 @@ sub print_distr {
     $sth->finish;
 
     # 3 patsize (spanN)
-    $sth
-        = $dbh->prepare(
-        "SELECT length(pattern) as patsize, count(*) FROM fasta_ref_reps WHERE spanN>0 GROUP BY patsize ORDER BY patsize ASC;"
-        ) or die "Couldn't prepare statement: " . $dbh->errstr;
+    $sth = $dbh->prepare(
+        q{SELECT length(pattern) as patsize, count(*)
+        FROM main.fasta_ref_reps mainreftab JOIN refdb.fasta_ref_reps reftab USING (rid)
+        WHERE mainreftab.spanN>0 GROUP BY patsize ORDER BY patsize ASC}
+    ) or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
     while ( my @data = $sth->fetchrow_array() ) {
         if ( $data[0] < $LARGEST_PSIZE ) {
@@ -436,10 +427,11 @@ sub print_distr {
     $sth->finish;
 
     # 4 patsize (vntr spanN)
-    $sth
-        = $dbh->prepare(
-        "SELECT length(pattern) as patsize, count(*) FROM fasta_ref_reps WHERE support_vntr>0 GROUP BY patsize ORDER BY patsize ASC;"
-        ) or die "Couldn't prepare statement: " . $dbh->errstr;
+    $sth = $dbh->prepare(
+        q{SELECT length(pattern) as patsize, count(*)
+        FROM main.fasta_ref_reps mainreftab JOIN refdb.fasta_ref_reps reftab USING (rid)
+        WHERE support_vntr>0 GROUP BY patsize ORDER BY patsize ASC}
+    ) or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
     while ( my @data = $sth->fetchrow_array() ) {
         if ( $data[0] < $LARGEST_PSIZE ) {
@@ -565,10 +557,11 @@ sub print_distr {
     # 3
     print $distrfh
         "\n\nArraySize, All, Clustered, PercentageC, MappedFlanks, PercentageM, BBB, PercentageB, Span1, PercentageS\n";
-    $sth
-        = $dbh->prepare(
-        "SELECT (lastindex - firstindex + 1)  as arraysize, count(distinct fasta_ref_reps.rid) FROM fasta_ref_reps GROUP BY arraysize ORDER BY arraysize ASC;"
-        ) or die "Couldn't prepare statement: " . $dbh->errstr;
+    $sth = $dbh->prepare(
+        q{SELECT (lastindex - firstindex + 1)  as arraysize, count(distinct rid)
+        FROM refdb.fasta_ref_reps
+        GROUP BY arraysize ORDER BY arraysize ASC}
+    ) or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
     while ( my @data = $sth->fetchrow_array() ) {
         if ( $data[0] < $LARGEST_ASIZE ) {
@@ -583,10 +576,11 @@ sub print_distr {
     $sth->finish;
 
     # 4
-    $sth
-        = $dbh->prepare(
-        "SELECT (lastindex - firstindex + 1)  as arraysize, count(distinct fasta_ref_reps.rid) FROM fasta_ref_reps WHERE span1>0 GROUP BY arraysize ORDER BY arraysize ASC;"
-        ) or die "Couldn't prepare statement: " . $dbh->errstr;
+    $sth = $dbh->prepare(
+        q{SELECT (lastindex - firstindex + 1)  as arraysize, count(distinct mainreftab.rid)
+        FROM main.fasta_ref_reps mainreftab JOIN refdb.fasta_ref_reps reftab USING (rid)
+        WHERE mainreftab.span1>0 GROUP BY arraysize ORDER BY arraysize ASC}
+    ) or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
     while ( my @data = $sth->fetchrow_array() ) {
         if ( $data[0] < $LARGEST_ASIZE ) {
@@ -601,10 +595,12 @@ sub print_distr {
     $sth->finish;
 
     # bbb
-    $sth
-        = $dbh->prepare(
-        "SELECT (lastindex - firstindex + 1)  as arraysize, count(distinct fasta_ref_reps.rid) FROM fasta_ref_reps WHERE rid IN (select distinct map.refid FROM map WHERE bbb=1)  GROUP BY arraysize ORDER BY arraysize ASC;"
-        ) or die "Couldn't prepare statement: " . $dbh->errstr;
+    $sth = $dbh->prepare(
+        q{SELECT (lastindex - firstindex + 1)  as arraysize, count(distinct reftab.rid)
+        FROM refdb.fasta_ref_reps reftab
+        WHERE rid IN (SELECT DISTINCT map.refid FROM map WHERE bbb=1)
+        GROUP BY arraysize ORDER BY arraysize ASC}
+    ) or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
     while ( my @data = $sth->fetchrow_array() ) {
         if ( $data[0] < $LARGEST_ASIZE ) {
@@ -619,10 +615,11 @@ sub print_distr {
     $sth->finish;
 
     # percent clustered
-    $sth
-        = $dbh->prepare(
-        "SELECT (lastindex - firstindex + 1)  as arraysize, count(distinct fasta_ref_reps.rid) FROM fasta_ref_reps INNER JOIN clusterlnk ON fasta_ref_reps.rid=-clusterlnk.repeatid  GROUP BY arraysize ORDER BY arraysize ASC;"
-        ) or die "Couldn't prepare statement: " . $dbh->errstr;
+    $sth = $dbh->prepare(
+        q{SELECT (lastindex - firstindex + 1)  as arraysize, count(distinct reftab.rid)
+        FROM refdb.fasta_ref_reps reftab INNER JOIN clusterlnk ON reftab.rid=-clusterlnk.repeatid
+        GROUP BY arraysize ORDER BY arraysize ASC}
+    ) or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
     while ( my @data = $sth->fetchrow_array() ) {
         if ( $data[0] < $LARGEST_ASIZE ) {
@@ -637,10 +634,12 @@ sub print_distr {
     $sth->finish;
 
     # percent mapped
-    $sth
-        = $dbh->prepare(
-        "SELECT (lastindex - firstindex + 1)  as arraysize, count(distinct fasta_ref_reps.rid) FROM fasta_ref_reps WHERE rid IN (select distinct map.refid FROM map) GROUP BY arraysize ORDER BY arraysize ASC;"
-        ) or die "Couldn't prepare statement: " . $dbh->errstr;
+    $sth = $dbh->prepare(
+        q{SELECT (lastindex - firstindex + 1)  as arraysize, count(distinct reftab.rid)
+        FROM refdb.fasta_ref_reps reftab
+        WHERE rid IN (SELECT DISTINCT map.refid FROM map)
+        GROUP BY arraysize ORDER BY arraysize ASC}
+    ) or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
     while ( my @data = $sth->fetchrow_array() ) {
         if ( $data[0] < $LARGEST_ASIZE ) {
@@ -724,10 +723,11 @@ sub print_distr {
     my $total = 0;
     print $distrfh
         "\n\n(vntr support>=$MIN_SUPPORT_REQUIRED) Copies Gained, Frequency\n";
-    $sth
-        = $dbh->prepare(
-        "SELECT copies, count(*) FROM vntr_support WHERE copies!=0 AND support>=$MIN_SUPPORT_REQUIRED GROUP BY copies ORDER BY copies ASC;"
-        ) or die "Couldn't prepare statement: " . $dbh->errstr;
+    $sth = $dbh->prepare(
+        q{SELECT copies, COUNT(*)
+        FROM vntr_support
+        WHERE copies!=0 AND support>=$MIN_SUPPORT_REQUIRED GROUP BY copies ORDER BY copies ASC}
+    ) or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
 
     while ( my @data = $sth->fetchrow_array() ) {
@@ -742,10 +742,13 @@ sub print_distr {
     $total = 0;
     print $distrfh
         "\n\n(vntr support>=$MIN_SUPPORT_REQUIRED) PatternSize, Copies Gained, Frequency\n";
-    $sth
-        = $dbh->prepare(
-        "SELECT length(pattern) AS patsize, copies, count(*) FROM vntr_support INNER JOIN fasta_ref_reps ON fasta_ref_reps.rid = -vntr_support.refid  WHERE copies!=0 AND support>=$MIN_SUPPORT_REQUIRED GROUP BY patsize, copies ORDER BY patsize ASC, copies ASC;"
-        ) or die "Couldn't prepare statement: " . $dbh->errstr;
+    $sth = $dbh->prepare(
+        q{SELECT length(pattern) AS patsize, copies, count(*)
+        FROM vntr_support INNER JOIN refdb.fasta_ref_reps reftab ON reftab.rid = -vntr_support.refid
+        WHERE copies!=0 AND support>=$MIN_SUPPORT_REQUIRED
+        GROUP BY patsize, copies
+        ORDER BY patsize ASC, copies ASC}
+    ) or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
     while ( my @data = $sth->fetchrow_array() ) {
         print $distrfh $data[0] . "," . $data[1] . "," . $data[2] . "\n";
@@ -759,10 +762,12 @@ sub print_distr {
     $total = 0;
     print $distrfh
         "\n\n(vntr support>=$MIN_SUPPORT_REQUIRED) ArraySize, Copies Gained, Frequency\n";
-    $sth
-        = $dbh->prepare(
-        "SELECT (lastindex-firstindex+1) AS arraysize, copies, count(*) FROM vntr_support INNER JOIN fasta_ref_reps ON fasta_ref_reps.rid = -vntr_support.refid  WHERE copies!=0 AND support>=$MIN_SUPPORT_REQUIRED GROUP BY arraysize, copies ORDER BY arraysize ASC, copies ASC;"
-        ) or die "Couldn't prepare statement: " . $dbh->errstr;
+    $sth = $dbh->prepare(
+        q{SELECT (lastindex-firstindex+1) AS arraysize, copies, count(*)
+        FROM vntr_support INNER JOIN refdb.fasta_ref_reps reftab ON reftab.rid = -vntr_support.refid
+        WHERE copies!=0 AND support>=$MIN_SUPPORT_REQUIRED
+        GROUP BY arraysize, copies ORDER BY arraysize ASC, copies ASC}
+    ) or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
 
     while ( my @data = $sth->fetchrow_array() ) {
@@ -780,10 +785,11 @@ sub print_distr {
     my %SpanningIndist = ();
     my %SpanningBBB    = ();
 
-    $sth
-        = $dbh->prepare(
-        "SELECT refid,sum(support) FROM vntr_support INNER JOIN fasta_ref_reps ON fasta_ref_reps.rid = -vntr_support.refid WHERE is_singleton=1 GROUP BY refid;"
-        ) or die "Couldn't prepare statement: " . $dbh->errstr;
+    $sth = $dbh->prepare(
+        q{SELECT refid,sum(support)
+        FROM vntr_support INNER JOIN main.fasta_ref_reps mainreftab ON mainreftab.rid = -vntr_support.refid
+        WHERE is_singleton=1 GROUP BY refid}
+    ) or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
     while ( my @data = $sth->fetchrow_array() ) {
         $SpanningSing{ $data[1] }++;
@@ -791,10 +797,11 @@ sub print_distr {
     }
     $sth->finish;
 
-    $sth
-        = $dbh->prepare(
-        "SELECT refid,sum(support) FROM vntr_support INNER JOIN fasta_ref_reps ON fasta_ref_reps.rid = -vntr_support.refid WHERE is_dist=1 GROUP BY refid;"
-        ) or die "Couldn't prepare statement: " . $dbh->errstr;
+    $sth = $dbh->prepare(
+        q{SELECT refid,sum(support)
+        FROM vntr_support INNER JOIN main.fasta_ref_reps mainreftab ON mainreftab.rid = -vntr_support.refid
+        WHERE is_dist=1 GROUP BY refid}
+    ) or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
     my %SpanninDist;
 
@@ -804,10 +811,11 @@ sub print_distr {
     }
     $sth->finish;
 
-    $sth
-        = $dbh->prepare(
-        "SELECT refid,sum(support) FROM vntr_support INNER JOIN fasta_ref_reps ON fasta_ref_reps.rid = -vntr_support.refid WHERE is_indist=1 GROUP BY refid;"
-        ) or die "Couldn't prepare statement: " . $dbh->errstr;
+    $sth = $dbh->prepare(
+        q{SELECT refid,sum(support)
+        FROM vntr_support INNER JOIN main.fasta_ref_reps mainreftab ON mainreftab.rid = -vntr_support.refid
+            WHERE is_indist=1 GROUP BY refid}
+    ) or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
     while ( my @data = $sth->fetchrow_array() ) {
         $SpanningIndist{ $data[1] }++;
@@ -815,10 +823,11 @@ sub print_distr {
     }
     $sth->finish;
 
-    $sth
-        = $dbh->prepare(
-        "SELECT refid,sum(support) FROM vntr_support INNER JOIN fasta_ref_reps ON fasta_ref_reps.rid = -vntr_support.refid GROUP BY refid;"
-        ) or die "Couldn't prepare statement: " . $dbh->errstr;
+    $sth = $dbh->prepare(
+        q{SELECT refid,sum(support)
+        FROM vntr_support INNER JOIN refdb.fasta_ref_reps reftab ON reftab.rid = -vntr_support.refid
+        GROUP BY refid}
+    ) or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
     while ( my @data = $sth->fetchrow_array() ) {
         $SpanningBBB{ $data[1] }++;
@@ -885,10 +894,11 @@ sub print_distr {
     my %AllelesIndist = ();
     my %AllelesBBB    = ();
 
-    $sth
-        = $dbh->prepare(
-        "SELECT refid,copies,support FROM vntr_support INNER JOIN fasta_ref_reps ON fasta_ref_reps.rid = -vntr_support.refid WHERE is_singleton=1;"
-        ) or die "Couldn't prepare statement: " . $dbh->errstr;
+    $sth = $dbh->prepare(
+        q{SELECT refid,copies,support
+        FROM vntr_support INNER JOIN main.fasta_ref_reps mainreftab ON mainreftab.rid = -vntr_support.refid
+        WHERE is_singleton=1}
+    ) or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
     while ( my @data = $sth->fetchrow_array() ) {
         $AllelesSing{ $data[2] }++;
@@ -896,10 +906,11 @@ sub print_distr {
     }
     $sth->finish;
 
-    $sth
-        = $dbh->prepare(
-        "SELECT refid,copies,support FROM vntr_support INNER JOIN fasta_ref_reps ON fasta_ref_reps.rid = -vntr_support.refid WHERE is_dist=1;"
-        ) or die "Couldn't prepare statement: " . $dbh->errstr;
+    $sth = $dbh->prepare(
+        q{SELECT refid,copies,support
+        FROM vntr_support INNER JOIN main.fasta_ref_reps mainreftab ON mainreftab.rid = -vntr_support.refid
+        WHERE is_dist=1}
+    ) or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
     while ( my @data = $sth->fetchrow_array() ) {
         $AllelesDist{ $data[2] }++;
@@ -907,10 +918,11 @@ sub print_distr {
     }
     $sth->finish;
 
-    $sth
-        = $dbh->prepare(
-        "SELECT refid,copies,support FROM vntr_support INNER JOIN fasta_ref_reps ON fasta_ref_reps.rid = -vntr_support.refid WHERE is_indist=1;"
-        ) or die "Couldn't prepare statement: " . $dbh->errstr;
+    $sth = $dbh->prepare(
+        q{SELECT refid,copies,support
+        FROM vntr_support INNER JOIN main.fasta_ref_reps mainreftab ON mainreftab.rid = -vntr_support.refid
+        WHERE is_indist=1}
+    ) or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
     while ( my @data = $sth->fetchrow_array() ) {
         $AllelesIndist{ $data[2] }++;
@@ -918,10 +930,10 @@ sub print_distr {
     }
     $sth->finish;
 
-    $sth
-        = $dbh->prepare(
-        "SELECT refid,copies,support FROM vntr_support INNER JOIN fasta_ref_reps ON fasta_ref_reps.rid = -vntr_support.refid;"
-        ) or die "Couldn't prepare statement: " . $dbh->errstr;
+    $sth = $dbh->prepare(
+        q{SELECT refid,copies,support
+        FROM vntr_support INNER JOIN main.fasta_ref_reps mainreftab ON mainreftab.rid = -vntr_support.refid}
+    ) or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
     while ( my @data = $sth->fetchrow_array() ) {
         $AllelesBBB{ $data[2] }++;
@@ -988,10 +1000,11 @@ sub print_distr {
     %AllelesIndist = ();
     %AllelesBBB    = ();
 
-    $sth
-        = $dbh->prepare(
-        "SELECT refid,copies,support FROM vntr_support INNER JOIN fasta_ref_reps ON fasta_ref_reps.rid = -vntr_support.refid WHERE  support_vntr>0 AND is_singleton=1;"
-        ) or die "Couldn't prepare statement: " . $dbh->errstr;
+    $sth = $dbh->prepare(
+        q{SELECT refid,copies,support
+        FROM vntr_support INNER JOIN main.fasta_ref_reps mainreftab ON mainreftab.rid = -vntr_support.refid
+        WHERE  support_vntr>0 AND mainreftab.is_singleton=1}
+    ) or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
     while ( my @data = $sth->fetchrow_array() ) {
         $AllelesSing{ $data[2] }++;
@@ -999,10 +1012,11 @@ sub print_distr {
     }
     $sth->finish;
 
-    $sth
-        = $dbh->prepare(
-        "SELECT refid,copies,support FROM vntr_support INNER JOIN fasta_ref_reps ON fasta_ref_reps.rid = -vntr_support.refid WHERE support_vntr>0 AND is_dist=1;"
-        ) or die "Couldn't prepare statement: " . $dbh->errstr;
+    $sth = $dbh->prepare(
+        q{SELECT refid,copies,support
+        FROM vntr_support INNER JOIN main.fasta_ref_reps mainreftab ON mainreftab.rid = -vntr_support.refid
+        WHERE support_vntr>0 AND mainreftab.is_dist=1}
+    ) or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
     while ( my @data = $sth->fetchrow_array() ) {
         $AllelesDist{ $data[2] }++;
@@ -1010,10 +1024,12 @@ sub print_distr {
     }
     $sth->finish;
 
-    $sth
-        = $dbh->prepare(
-        "SELECT refid,copies,support FROM vntr_support INNER JOIN fasta_ref_reps ON fasta_ref_reps.rid = -vntr_support.refid WHERE support_vntr>0 AND is_indist=1;"
-        ) or die "Couldn't prepare statement: " . $dbh->errstr;
+    $sth = $dbh->prepare(
+        q{SELECT refid,copies,support
+        FROM vntr_support INNER JOIN main.fasta_ref_reps mainreftab ON mainreftab.rid = -vntr_support.refid
+        INNER JOIN refdb.fasta_ref_reps reftab ON reftab.rid = -vntr_support.refid
+        WHERE support_vntr>0 AND mainreftab.is_indist=1}
+    ) or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
     while ( my @data = $sth->fetchrow_array() ) {
         $AllelesIndist{ $data[2] }++;
@@ -1021,10 +1037,11 @@ sub print_distr {
     }
     $sth->finish;
 
-    $sth
-        = $dbh->prepare(
-        "SELECT refid,copies,support FROM vntr_support INNER JOIN fasta_ref_reps ON fasta_ref_reps.rid = -vntr_support.refid WHERE support_vntr>0;"
-        ) or die "Couldn't prepare statement: " . $dbh->errstr;
+    $sth = $dbh->prepare(
+        q{SELECT refid,copies,support
+        FROM vntr_support INNER JOIN main.fasta_ref_reps mainreftab ON mainreftab.rid = -vntr_support.refid
+        WHERE support_vntr>0}
+    ) or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
     while ( my @data = $sth->fetchrow_array() ) {
         $AllelesBBB{ $data[2] }++;
@@ -1090,10 +1107,11 @@ sub print_distr {
     my %AllelesBBBObs   = ();
     my %AllelesBBBTotal = ();
 
-    $sth
-        = $dbh->prepare(
-        "SELECT refid,copies,support FROM vntr_support INNER JOIN fasta_ref_reps ON fasta_ref_reps.rid = -vntr_support.refid WHERE support_vntr>0 AND homez_diff=1;"
-        ) or die "Couldn't prepare statement: " . $dbh->errstr;
+    $sth = $dbh->prepare(
+        q{SELECT refid,copies,support
+        FROM vntr_support INNER JOIN main.fasta_ref_reps mainreftab ON mainreftab.rid = -vntr_support.refid
+        WHERE support_vntr>0 AND mainreftab.homez_diff=1}
+    ) or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
     while ( my @data = $sth->fetchrow_array() ) {
         $AllelesBBBInf{ $data[2] }++;
@@ -1101,10 +1119,11 @@ sub print_distr {
     }
     $sth->finish;
 
-    $sth
-        = $dbh->prepare(
-        "SELECT refid,copies,support FROM vntr_support INNER JOIN fasta_ref_reps ON fasta_ref_reps.rid = -vntr_support.refid WHERE support_vntr>0 AND (hetez_same=1 OR hetez_diff=1 OR hetez_multi=1);"
-        ) or die "Couldn't prepare statement: " . $dbh->errstr;
+    $sth = $dbh->prepare(
+        q{SELECT refid,copies,support
+        FROM vntr_support INNER JOIN main.fasta_ref_reps mainreftab ON mainreftab.rid = -vntr_support.refid
+        WHERE support_vntr>0 AND (mainreftab.hetez_same=1 OR mainreftab.hetez_diff=1 OR mainreftab.hetez_multi=1)}
+    ) or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
     while ( my @data = $sth->fetchrow_array() ) {
         $AllelesBBBObs{ $data[2] }++;
@@ -1163,40 +1182,44 @@ sub print_distr {
 
     # counts for support 1 alleles
     print $distrfh "\n1A: ";
-    $sth
-        = $dbh->prepare(
-        "SELECT count(distinct refid) FROM vntr_support INNER JOIN fasta_ref_reps ON fasta_ref_reps.rid = -vntr_support.refid WHERE copies!=0 AND has_support=0 AND support_vntr=0 AND support=1;"
-        );
+    $sth = $dbh->prepare(
+        q{SELECT count(distinct refid)
+        FROM vntr_support INNER JOIN main.fasta_ref_reps mainreftab ON mainreftab.rid = -vntr_support.refid
+        WHERE copies!=0 AND mainreftab.has_support=0 AND support_vntr=0 AND support=1}
+    );
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
     if ( my @data = $sth->fetchrow_array() ) {
         print $distrfh $data[0];
     }
     $sth->finish;
     print $distrfh "\n1B: ";
-    $sth
-        = $dbh->prepare(
-        "SELECT count(distinct refid) FROM vntr_support INNER JOIN fasta_ref_reps ON fasta_ref_reps.rid = -vntr_support.refid WHERE copies!=0 AND has_support=1 AND support_vntr=0 AND support=1;"
-        );
+    $sth = $dbh->prepare(
+        q{SELECT count(distinct refid)
+        FROM vntr_support INNER JOIN main.fasta_ref_reps mainreftab ON mainreftab.rid = -vntr_support.refid
+        WHERE copies!=0 AND has_support=1 AND support_vntr=0 AND support=1}
+    );
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
     if ( my @data = $sth->fetchrow_array() ) {
         print $distrfh $data[0];
     }
     $sth->finish;
     print $distrfh "\n2A: ";
-    $sth
-        = $dbh->prepare(
-        "SELECT count(distinct refid) FROM vntr_support INNER JOIN fasta_ref_reps ON fasta_ref_reps.rid = -vntr_support.refid WHERE homez_diff=1 and support=1;"
-        );
+    $sth = $dbh->prepare(
+        q{SELECT count(distinct refid)
+        FROM vntr_support INNER JOIN main.fasta_ref_reps mainreftab ON mainreftab.rid = -vntr_support.refid
+        WHERE homez_diff=1 and support=1}
+    );
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
     if ( my @data = $sth->fetchrow_array() ) {
         print $distrfh $data[0];
     }
     $sth->finish;
     print $distrfh "\n2B: ";
-    $sth
-        = $dbh->prepare(
-        "SELECT count(distinct refid) FROM vntr_support INNER JOIN fasta_ref_reps ON fasta_ref_reps.rid = -vntr_support.refid WHERE (hetez_same=1 OR hetez_diff=1 OR hetez_multi=1) AND support=1;"
-        );
+    $sth = $dbh->prepare(
+        q{SELECT count(distinct refid)
+        FROM vntr_support INNER JOIN main.fasta_ref_reps mainreftab ON mainreftab.rid = -vntr_support.refid
+        WHERE (hetez_same=1 OR hetez_diff=1 OR hetez_multi=1) AND support=1}
+    );
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
     if ( my @data = $sth->fetchrow_array() ) {
         print $distrfh $data[0];
@@ -1244,6 +1267,9 @@ sub print_distr {
 sub print_latex {
     my $ReadTRsSupport = shift;
 
+    # warn "Read TRs supported: $ReadTRsSupport\n"
+    #     if ($ENV{DEBUG});
+
     my $sum_has_support  = 0;
     my $sum_span1        = 0;
     my $sum_spanN        = 0;
@@ -1266,12 +1292,14 @@ sub print_latex {
         NUMBER_REFS_TRS_AFTER_REDUND
         CLUST_NUMBER_OF_REF_REPS_IN_CLUSTERS
         CLUST_NUMBER_OF_REFS_WITH_PREDICTED_VNTR);
-    my $stat_hash = get_statistics( $DBSUFFIX, @stats );
+    my $stat_hash = get_statistics(@stats);
 
-    my $dbh = get_dbh( $DBSUFFIX, $MSDIR . "vs.cnf" );
+    my $dbh = get_dbh();
     my $sth
         = $dbh->prepare(
-        "SELECT sum(has_support),sum(span1),sum(spanN),sum(homez_same),sum(homez_diff),sum(hetez_same),sum(hetez_diff),sum(hetez_multi),sum(support_vntr) FROM fasta_ref_reps;"
+        q{SELECT sum(has_support),sum(span1),sum(spanN),sum(homez_same),sum(homez_diff),
+            sum(hetez_same),sum(hetez_diff),sum(hetez_multi),sum(support_vntr)
+            FROM main.fasta_ref_reps}
         ) or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
     if ( my @data = $sth->fetchrow_array() ) {
@@ -1947,13 +1975,13 @@ sub calc_entropy {
         ) + (
             ( $diversity[1] == 0 ) ? 0
             : ( $diversity[1] * ( log( $diversity[1] ) / log(2) ) )
-            ) + (
+        ) + (
             ( $diversity[2] == 0 ) ? 0
             : ( $diversity[2] * ( log( $diversity[2] ) / log(2) ) )
-            ) + (
+        ) + (
             ( $diversity[3] == 0 ) ? 0
             : ( $diversity[3] * ( log( $diversity[3] ) / log(2) ) )
-            )
+        )
     );
 
     if ( $entropy < 0 ) { $entropy = -$entropy; }
@@ -1983,16 +2011,19 @@ my %REPHASH = ();
 #  }
 #}
 
-set_statistics( $DBSUFFIX, ( N_MIN_SUPPORT => $MIN_SUPPORT_REQUIRED ) );
+set_statistics( N_MIN_SUPPORT => $MIN_SUPPORT_REQUIRED );
 
-my $dbh = get_dbh( $DBSUFFIX, $MSDIR . "vs.cnf" )
-    || die "Could not connect to database: $DBI::errstr";
+my $dbh = get_dbh()
+    or die "Could not connect to database: $DBI::errstr";
 
 #goto AAA;
 
 my $sth1
     = $dbh->prepare(
-    'UPDATE fasta_ref_reps SET alleles_sup=0,allele_sup_same_as_ref=0,entropy=0,has_support=0,span1=0,spanN=0,homez_same=0,homez_diff=0,hetez_same=0,hetez_diff=0,hetez_multi=0,support_vntr=0,support_vntr_span1=0;'
+    q{UPDATE main.fasta_ref_reps
+    SET alleles_sup=0,allele_sup_same_as_ref=0,entropy=0,has_support=0,span1=0,
+        spanN=0,homez_same=0,homez_diff=0,hetez_same=0,hetez_diff=0,
+        hetez_multi=0,support_vntr=0,support_vntr_span1=0}
     ) or die "Couldn't prepare statement: " . $dbh->errstr;
 $sth1->execute() or die "Cannot execute: " . $sth1->errstr();
 $sth1->finish;
@@ -2047,7 +2078,7 @@ elsif ( $run_conf{BACKEND} eq "sqlite" ) {
     # my $placeholders = join ",", ("?") x 14;
     # $query = qq{INSERT INTO updtable VALUES($placeholders)};
     # For SQLite we'll just update fasta_ref_reps immediately.
-    $query = qq{UPDATE fasta_ref_reps
+    $query = qq{UPDATE main.fasta_ref_reps
         SET alleles_sup=?, allele_sup_same_as_ref=?,
         entropy=?, has_support=?, span1=?,
         spanN=?, homez_same=?, homez_diff=?,
@@ -2062,7 +2093,7 @@ elsif ( $run_conf{BACKEND} eq "sqlite" ) {
 $sth1 = $dbh->prepare($query)
     or die "Couldn't prepare statement: " . $dbh->errstr;
 
-my $sth = $dbh->prepare('SELECT rid,pattern FROM fasta_ref_reps;')
+my $sth = $dbh->prepare('SELECT rid,pattern FROM refdb.fasta_ref_reps;')
     or die "Couldn't prepare statement: " . $dbh->errstr;
 
 #my $sth2 = $dbh->prepare('select clusterid,count(*),AVG(entropy) from fasta_ref_reps INNER JOIN clusterlnk ON rid=-repeatid GROUP BY clusterid;')

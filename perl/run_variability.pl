@@ -41,7 +41,7 @@ my $MIN_FLANK_REQUIRED = $ARGV[4];
 my $TEMPDIR            = $ARGV[5];
 
 warn strftime( "\n\nstart: %F %T\n\n", localtime );
-my %run_conf = get_config( $MSDIR . "vs.cnf" );
+my %run_conf = get_config( $DBSUFFIX, $MSDIR . "vs.cnf" );
 my ( $LOGIN, $PASS, $HOST ) = @run_conf{qw(LOGIN PASS HOST)};
 my $dbh = get_dbh( $DBSUFFIX, $MSDIR . "vs.cnf" )
     or die "Could not connect to database: $DBI::errstr";
@@ -110,7 +110,7 @@ if ( $run_conf{BACKEND} eq "mysql" ) {
 # prepare statments
 $sth = $dbh->prepare(
     q{SELECT rid,flankleft,sequence,flankright,pattern,copynum,(lastindex-firstindex+1) AS arlen
-  FROM fasta_ref_reps
+  FROM refdb.fasta_ref_reps
   WHERE rid = ?}
 ) or die "Couldn't prepare statement: " . $dbh->errstr;
 $sth1 = $dbh->prepare(
@@ -293,6 +293,9 @@ while (<$fh>) {
 
 }
 
+warn "VNTR_SUPPORT hash:\n", Dumper(\%VNTR_SUPPORT), "\n"
+    if ($ENV{DEBUG});
+
 close($fh);
 $sth->finish;
 $sth1->finish;
@@ -355,7 +358,8 @@ if ( $run_conf{BACKEND} eq "mysql" ) {
 }
 elsif ( $run_conf{BACKEND} eq "sqlite" ) {
     $dbh->commit;
-    # ($updfromtable) = $dbh->selectrow_array(q{SELECT COUNT(*) FROM map WHERE reserved=1});
+
+# ($updfromtable) = $dbh->selectrow_array(q{SELECT COUNT(*) FROM map WHERE reserved=1});
     $query = q{INSERT INTO vntr_support VALUES(?, ?, ?, ?, ?, ?)};
 }
 $sth = $dbh->prepare($query)
@@ -394,8 +398,10 @@ $query = q{CREATE TEMPORARY TABLE ctr (
     )};
 if ( $run_conf{BACKEND} eq "mysql" ) {
     close($TEMPFILE);
+
     # Count insertions from previous prepare
     $supInsert = $sth->execute;
+
     # Finish next query statement
     $query .= " ENGINE=INNODB";
     $dbh->do('ALTER TABLE vntr_support ENABLE KEYS;')
@@ -476,10 +482,8 @@ print STDERR
     "Processing complete -- processed $clusters_processed cluster(s), support entries created = $supInsert.\n";
 
 set_statistics(
-    $DBSUFFIX,
-    (   CLUST_NUMBER_OF_REFS_WITH_PREDICTED_VNTR     => $updCLNKfromfile,
-        CLUST_NUMBER_OF_CLUSTERS_WITH_PREDICTED_VNTR => $updatedClustersCount
-    )
+    CLUST_NUMBER_OF_REFS_WITH_PREDICTED_VNTR     => $updCLNKfromfile,
+    CLUST_NUMBER_OF_CLUSTERS_WITH_PREDICTED_VNTR => $updatedClustersCount
 );
 
 warn strftime( "\n\nend: %F %T\n\n", localtime );
@@ -648,7 +652,7 @@ sub VNTR_YES_NO {
                         }
                     }
                     elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-                        if($ENV{DEBUG}) {
+                        if ( $ENV{DEBUG} ) {
                             warn "mapr insert: " . -$val . ", $key\n";
                         }
                         $sth7->execute( -$val, $key );
@@ -681,7 +685,7 @@ sub VNTR_YES_NO {
         }
         elsif ( $run_conf{BACKEND} eq "sqlite" ) {
             $sth6->execute( $clusterid, $val, $change );
-            if($ENV{DEBUG}) {
+            if ( $ENV{DEBUG} ) {
                 warn "ctrlnk insert: $clusterid, $val, $change\n";
             }
         }

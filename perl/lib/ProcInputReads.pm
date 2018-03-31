@@ -26,7 +26,9 @@ use feature 'say';
 use Exporter qw(import);
 
 our @EXPORT_OK
-    = qw(fork_proc init_bam get_reader formats_regexs compressed_formats_regexs);
+    = qw(fork_proc init_bam get_reader formats_regexs compressed_formats_regexs set_install_dir);
+
+my $install_dir;
 
 # List all supported file extensions and input formats here. Order of
 # input formats is in priority order: first format if found is used.
@@ -75,6 +77,21 @@ my $records_before_split = 1e8;
 =head2 Methods
 
 =over 12
+
+=item C<set_install_dir>
+
+Returns a hash of sequence format names and the regular expressions
+used to determine it from a file name.
+
+=cut
+
+sub set_install_dir {
+    $install_dir = shift;
+    croak "Argument to set_install_dir must be a defined and non-empty path to the install directory."
+        unless ((defined $install_dir) && ($install_dir ne ""));
+    warn "Set install_dir to $install_dir"
+        if ($ENV{DEBUG})
+}
 
 =item C<formats_regexs>
 
@@ -173,6 +190,7 @@ sub fork_proc {
         $warn_454_TCAG,    $format,           $compression,
         $current_file,     $files_to_process, $filelist
     ) = @_;
+    
     defined( my $pid = fork() )
         or die "Unable to fork: $!\n";
     if ( $pid == 0 ) {    #Child
@@ -251,6 +269,9 @@ sub get_reader {
     my ( $input_dir, $format, $compression, $current_file,
         $files_to_process, $filelist )
         = @_;
+
+    croak "Calling script must call set_install_dir with the install dir path before using other functions in this package\n"
+        unless ((defined $install_dir) && ($install_dir ne ""));
 
     my $reader = $reader_table{$format}->(
         $input_dir, $compression, $current_file, $files_to_process, $filelist
@@ -504,9 +525,9 @@ sub read_fastaq {
         return undef;
     }
 
-    warn "Using $main::install_dir for seqtk location.\n"
+    warn "Using $install_dir for seqtk location.\n"
         if ($ENV{DEBUG});
-    my $seqtk_bin = $main::install_dir . "/seqtk";
+    my $seqtk_bin = $install_dir . "/seqtk";
 
 # warn "Need to process " . scalar(@$filelist) . " files, working on $current_file\n";
 

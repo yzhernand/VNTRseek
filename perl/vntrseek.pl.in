@@ -51,7 +51,7 @@ my $install_dir = "$FindBin::RealBin";
 use lib "$FindBin::RealBin/lib";    # must be same as install dir!
 
 use vutil
-    qw(get_config set_config set_statistics set_credentials write_mysql write_sqlite get_dbh stats_get set_datetime print_config create_blank_file);
+    qw(get_config set_config set_statistics set_credentials write_mysql write_sqlite get_dbh stats_get set_datetime print_config create_blank_file run_redund);
 
 my $DOALLSTEPS = 0
     ; # set to 0 to do one step at a time (recommended for test run), 1 to run though all steps (THIS IS OTIONAL AS SPECIFYING END STEP IS POSSIBLE)
@@ -124,6 +124,7 @@ GetOptions(
     "SERVER=s",
     "STRIP_454_KEYTAGS=i",
     "IS_PAIRED_READS=i",
+    "REDO_REFDB=i",
     "HTML_DIR=s",
     "FASTA_DIR=s",
     "OUTPUT_ROOT=s",
@@ -617,41 +618,43 @@ if ( $STEP == 3 ) {
     print STDERR
         "\n\nExecuting step #$STEP (eliminating cyclic redundancies)...";
 
-    system(
-        "./redund.exe $reference_folder/start.leb36 $reference_folder/start2.leb36 -s -i"
-    );
-    if ( $? == -1 ) {
-        SetError( $STEP, "command failed: $!", -1 );
-        die "command failed: $!\n";
-    }
-    else {
-        my $rc = ( $? >> 8 );
-        if ( 0 != $rc ) {
-            SetError( $STEP, "calling redund.exe on start.leb36 failed",
-                $rc );
-            die "command exited with value $rc";
-        }
-    }
+    run_redund( $opts{REFERENCE_FILE}, "reference.leb36", 0 );
 
-    system(
-        "./redund.exe $reference_folder/start2.leb36 $reference_folder/reference.leb36 -n -i"
-    );
-    if ( $? == -1 ) {
-        SetError( $STEP, "command failed: $!", -1 );
-        die "command failed: $!\n";
-    }
-    else {
-        my $rc = ( $? >> 8 );
-        if ( 0 != $rc ) {
-            SetError( $STEP, "calling redund.exe on start2.leb36 failed",
-                $rc );
-            die "command exited with value $rc";
-        }
-    }
+    # system(
+    #     "./redund.exe $reference_folder/start.leb36 $reference_folder/start2.leb36 -s -i"
+    # );
+    # if ( $? == -1 ) {
+    #     SetError( $STEP, "command failed: $!", -1 );
+    #     die "command failed: $!\n";
+    # }
+    # else {
+    #     my $rc = ( $? >> 8 );
+    #     if ( 0 != $rc ) {
+    #         SetError( $STEP, "calling redund.exe on start.leb36 failed",
+    #             $rc );
+    #         die "command exited with value $rc";
+    #     }
+    # }
 
-    system("rm -f $reference_folder/start.leb36");
+    # system(
+    #     "./redund.exe $reference_folder/start2.leb36 $reference_folder/reference.leb36 -n -i"
+    # );
+    # if ( $? == -1 ) {
+    #     SetError( $STEP, "command failed: $!", -1 );
+    #     die "command failed: $!\n";
+    # }
+    # else {
+    #     my $rc = ( $? >> 8 );
+    #     if ( 0 != $rc ) {
+    #         SetError( $STEP, "calling redund.exe on start2.leb36 failed",
+    #             $rc );
+    #         die "command exited with value $rc";
+    #     }
+    # }
 
-    system("rm -f $reference_folder/start2.leb36");
+    # system("rm -f $reference_folder/start.leb36");
+
+    # system("rm -f $reference_folder/start2.leb36");
 
     if ( !mkdir("$read_profiles_folder_clean") ) {
         warn "\nWarning: Failed to create output directory!\n";
@@ -771,6 +774,44 @@ if ( $STEP == 4 ) {
     # TODO Maybe rewrite run_proclu and psearch to use SQLite db.
     # psearch output can still be files but this step will then collect them and
     # insert into the db. (Maybe merge in next step's `join_clusters.exe`)
+    # For now, extract the file we need using the database
+    my $dbfile = $opts{REFERENCE_SEQ} =~ s/.(seq|leb36)$/.db/r;
+    my $dbh = DBI->connect(
+        "DBI:SQLite:dbname=$dbfile",
+        undef, undef,
+        {   AutoCommit                 => 1,
+            RaiseError                 => 1,
+            sqlite_see_if_its_a_number => 1,
+        }
+    ) or die "Could not connect to database: $DBI::errstr";
+    # Must negate rids for refset
+    my $get_ref_leb36 = q{SELECT -rid, length(pattern) AS patsize,
+    printf("%.2f", copynum), proflen, proflenrc, profile, profilerc, nA, nC, nG, nT,
+    printf("%s|%s", upper(substr(flankleft, -60)), upper(substr(flankright, 0, 61))) AS flanks
+    FROM fasta_ref_reps JOIN ref_profiles USING (rid)
+        JOIN minreporder USING (rid)
+    ORDER BY minreporder.idx ASC};
+
+    # Filtered file, ordered by min representation as given by redund
+    my $get_filtered_set_profiles_sth = $dbh->prepare($get_ref_leb36);
+    $get_filtered_set_profiles_sth->execute;
+    open my $tmp_filt_file_fh, ">", "$reference_folder/reference.leb36";
+    while (my @fields = $get_filtered_set_profiles_sth->fetchrow_array) {
+        say $tmp_filt_file_fh join(" ", @fields)
+    };
+    close $tmp_filt_file_fh;
+    # Get rotindex saved in db
+    my $get_rotindex = q{SELECT rotindex
+        FROM files};
+    my ($rotindex_str) = $dbh->selectrow_array($get_rotindex);
+    die "Error getting rotindex file from filtered set. Try rerunning with --redo option\n"
+        unless ($rotindex_str);
+    open my $tmp_rotindex, ">", "$reference_folder/reference.leb36.rotindex";
+    # Need to negate all indices
+    $rotindex_str =~ s/(\d+)/-$1/g;
+    print $tmp_rotindex $rotindex_str;
+    close $tmp_rotindex;
+
     $exstring
         = "./run_proclu.pl 1 $read_profiles_folder_clean $reference_folder \"$CLUST_PARAMS\" $opts{NPROCESSES} '$PROCLU_EXECUTABLE' "
         . 0
@@ -1143,7 +1184,7 @@ if ( $STEP == 11 ) {
     # parameters (apparently constant at max_errors = 5 and trim_to = 50, is
     # this ever used??)
     print STDERR "\n\n(updating database with dist/indist info)...";
-    $exstring = "./vntrpipe_xml2sql.pl";
+    $exstring = "./update_indist.pl";
     my @exargs
         = ( qw(-r -k5 -t50 -d), $opts{DBSUFFIX}, "-u", $MSDIR );
     system( $exstring, @exargs );
@@ -1406,35 +1447,6 @@ if ( $STEP == 19 ) {
     $timestart = time();
     print STDERR "\n\nExecuting step #$STEP (final database update)...";
 
-    # copy vs.cnf for reading purposes, remove login and pass
-    my $thisfile = $MSDIR . "/" . "vs.cnf";
-    if ( open( my $mfread, "<", "$thisfile" ) ) {
-        open( my $mfwrite, ">",
-            "${read_profiles_folder_clean}/result/master.txt" );
-        if ( !$mfwrite ) {
-            SetError(
-                $STEP,
-                "cannot open ${read_profiles_folder_clean}/result/master.txt for writing",
-                -1
-            );
-            die
-                "cannot open ${read_profiles_folder_clean}/result/master.txt for writing!";
-        }
-        while (<$mfread>) {
-            if ( index( $_, "LOGIN" ) != -1 ) {
-                print $mfwrite "LOGIN=\n";
-            }
-            elsif ( index( $_, "PASS" ) != -1 ) {
-                print $mfwrite "PASS=\n";
-            }
-            else {
-                print $mfwrite $_;
-            }
-        }
-        close($mfwrite);
-        close($mfread);
-    }
-
 # lets do this setdbstats again (sometimes when copying databases steps are omited so this might not have been executed)
     print STDERR "setting additional statistics...\n";
     system(
@@ -1486,14 +1498,8 @@ if ( $STEP == 19 ) {
     }
 
     # create sim link to html dir so can be browsed from internet
-    $exstring
-        = "ln -s ${read_profiles_folder_clean}/result $opts{HTML_DIR}/$opts{DBSUFFIX}";
-    system($exstring);
-    if ( $? == -1 ) { warn "command failed: $!\n"; }
-    else {
-        my $rc = ( $? >> 8 );
-        if ( 0 != $rc ) { warn "command exited with value $rc"; }
-    }
+    symlink("${read_profiles_folder_clean}/result", "$opts{HTML_DIR}/$opts{DBSUFFIX}")
+        unless (-e "$opts{HTML_DIR}/$opts{DBSUFFIX}/result");
 
     # cleanup
     print STDERR "Cleanup...\n";

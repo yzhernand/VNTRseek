@@ -42,7 +42,7 @@ my $DBSUFFIX  = $ARGV[3];
 my $MSDIR     = $ARGV[4];
 
 # set these mysql credentials in vs.cnf (in installation directory)
-my %run_conf = get_config( $MSDIR . "vs.cnf" );
+my %run_conf = get_config( $DBSUFFIX, $MSDIR . "vs.cnf" );
 
 my $clusters_processed = 0;
 
@@ -463,11 +463,9 @@ if ( $delfromtable != $count ) {
 
 $dbh->disconnect();
 set_statistics(
-    $DBSUFFIX,
-    (   "RANKFLANK_EDGES_INSERTED"  => $j,
-        "RANKFLANK_REMOVED_SAMEREF" => $count,
-        "RANKFLANK_REMOVED_SAMESEQ" => $count,
-    )
+    "RANKFLANK_EDGES_INSERTED"  => $j,
+    "RANKFLANK_REMOVED_SAMEREF" => $count,
+    "RANKFLANK_REMOVED_SAMESEQ" => $count
 );
 
 print STDERR "\n\n";

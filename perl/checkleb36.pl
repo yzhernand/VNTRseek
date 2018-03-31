@@ -33,19 +33,19 @@ chdir($tgz_dir);
 
 
 # make sure the ids are unique (renumbering was not ran correctly)
-print STDERR "Checking reference leb36 file...\n";
-my %uhash = ();
-open FILE, "<$reffolder/reference.leb36" or die $!;
-while (<FILE>) {
-  if (/^(\d+)/) {
-      if (exists $uhash{$1}) { die "Non-unique id ($1) detected in reads. Were steps 2 and 3 executed?\n"; }
-      $uhash{$1} = 1;
-  }
-}
-close FILE;
+# print STDERR "Checking reference leb36 file...\n";
+# my %uhash = ();
+# open FILE, "<$reffolder/reference.leb36" or die $!;
+# while (<FILE>) {
+#   if (/^(\d+)/) {
+#       if (exists $uhash{$1}) { die "Non-unique id ($1) detected in reads. Were steps 2 and 3 executed?\n"; }
+#       $uhash{$1} = 1;
+#   }
+# }
+# close FILE;
 
 print STDERR "Checking read leb36 files...\n";
-%uhash = ();
+my %uhash = ();
 foreach my $ifile (@tarballs) {
   open FILE, "<$ifile" or die $!;
   while (<FILE>) {

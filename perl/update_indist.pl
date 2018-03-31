@@ -42,7 +42,7 @@ sub enter_new_paramset {
 
 sub set_indist {
     my ($dbh, $refid) = @_;
-    $dbh->do(qq{UPDATE fasta_ref_reps SET is_singleton=0,is_indist=1 WHERE rid=$refid})
+    $dbh->do(qq{UPDATE main.fasta_ref_reps SET is_singleton=0,is_indist=1 WHERE rid=$refid})
     	or die $dbh->errstr;
 }
 
@@ -71,10 +71,10 @@ OPTIONS
 }
 
 # set these mysql credentials in vs.cnf (in installation directory)
-my %run_conf = get_config( $opts{u} . "vs.cnf" );
+my %run_conf = get_config($opts{d}, $opts{u} . "vs.cnf" );
 my ( $LOGIN, $PASS, $HOST, $indistfile ) = @run_conf{qw(LOGIN PASS HOST REFERENCE_INDIST)};
 
-my $dbh = get_dbh($opts{d}, $opts{u} . "vs.cnf");
+my $dbh = get_dbh();
 if ($opts{r}) {
 	warn "Clearing old tables\n";
 	$dbh->do( get_trunc_query( $run_conf{BACKEND}, "flank_params" ) )
@@ -109,6 +109,7 @@ while (<FILE>) {
    $val = trim($val);
 
    if ($val < 0) {
+   	# Indist file has negative rids
 	set_indist($dbh, -$val); 
    }
  }
