@@ -12,6 +12,7 @@ use File::Basename;
 use lib "$FindBin::RealBin/lib";
 require "vutil.pm";
 use ProcInputReads qw(get_reader init_bam formats_regexs compressed_formats_regexs);
+our $install_dir = "$FindBin::RealBin";
 
 use vutil qw(get_credentials write_mysql stats_set);
 
