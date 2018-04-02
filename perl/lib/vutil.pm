@@ -357,7 +357,7 @@ sub get_statistics {
 
     $sql_clause = join ", ", @stats;
     if ( $ENV{DEBUG} ) {
-        warn "Setting stats: " . $sql_clause . "\n";
+        warn "Getting stats: " . $sql_clause . "\n";
     }
 
     my $sql_res = $dbh->selectrow_hashref("SELECT $sql_clause FROM stats")
@@ -444,9 +444,31 @@ sub get_dbh {
             : 0;
         make_refseq_db( $VSCNF_FILE{REFERENCE_SEQ}, $redo );
         load_refprofiles_db( $VSCNF_FILE{REFERENCE_FILE}, $redo );
-        # Always set redo flag back to 0 when done redoing
-        $VSCNF_FILE{REDO_REFDB} = 0;
-        print_config($ENV{HOME} . "/". $VSCNF_FILE{DBSUFFIX} . ".");
+
+# TODO This was grafted in here. Need to make sure caller tries to catch this to set error.
+        if ($redo) {
+            # Always set redo flag back to 0 when done redoing
+            $VSCNF_FILE{REDO_REFDB} = 0;
+            print_config( $ENV{HOME} . "/" . $VSCNF_FILE{DBSUFFIX} . "." );
+            print STDERR "\n\n(updating database with dist/indist info)...";
+            my $installdir = "$FindBin::RealBin";
+            my $exstring   = "$installdir/update_indist.pl";
+            my @exargs     = (
+                qw(-r -k5 -t50 -d),
+                $VSCNF_FILE{DBSUFFIX}, "-u", $ENV{HOME} . "/" . $VSCNF_FILE{DBSUFFIX} . "."
+            );
+            system( $exstring, @exargs );
+            if ( $? == -1 ) {
+                die "command failed: $!\n";
+            }
+            else {
+                my $rc = ( $? >> 8 );
+                if ( 0 != $rc ) {
+                    die "updating database with dist/undist info failed $rc";
+                }
+            }
+        }
+        # END TODO
 
 # TODO First connect to a temp location, backup database to that location
 # then return handle to that location. This is primarily for running on clusters.
@@ -521,6 +543,9 @@ sub make_refseq_db {
     `flankright` text COLLATE BINARY,
     `conserved` float DEFAULT NULL,
     `comment` varchar(500) DEFAULT NULL,
+    `is_singleton` integer NOT NULL DEFAULT '0',
+    `is_dist` integer NOT NULL DEFAULT '0',
+    `is_indist` integer NOT NULL DEFAULT '0',
     PRIMARY KEY (`rid`),
     UNIQUE (`rid`,`comment`))};
     my $fasta_ref_reps_index_q = q{CREATE INDEX IF NOT EXISTS
@@ -739,9 +764,9 @@ sub load_refprofiles_db {
 
         $dbh->do(q{DROP TABLE temp.leb36tab});
 
-
         $dbh->commit;
         $dbh->disconnect;
+
         # Run redund
         run_redund( $prof_file, "reference.leb36", 0 );
         return 1;

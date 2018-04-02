@@ -42,7 +42,7 @@ sub enter_new_paramset {
 
 sub set_indist {
     my ($dbh, $refid) = @_;
-    $dbh->do(qq{UPDATE main.fasta_ref_reps SET is_singleton=0,is_indist=1 WHERE rid=$refid})
+    $dbh->do(qq{UPDATE refdb.fasta_ref_reps SET is_singleton=0,is_indist=1 WHERE rid=$refid})
     	or die $dbh->errstr;
 }
 
@@ -83,7 +83,7 @@ if ($opts{r}) {
 		or die "Couldn't do statement: " . $dbh->errstr;
 	# Assumes fasta_ref_reps is populated, sets values for ALL rows.
 	warn "Resetting singleton/indist flags\n";
-	$dbh->do("UPDATE fasta_ref_reps SET is_dist=0,is_singleton=1,is_indist=0;") 
+	$dbh->do("UPDATE refdb.fasta_ref_reps SET is_dist=0,is_singleton=1,is_indist=0;") 
         or die "Couldn't do statement: " . $dbh->errstr;
 }
 my $paramsetid = enter_new_paramset($dbh, $run_conf{BACKEND},  $opts{'k'}, $opts{'t'});

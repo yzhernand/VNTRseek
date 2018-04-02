@@ -50,7 +50,7 @@ my $dbh      = get_dbh();
 # }
 # close($input);
 ( $stats{NUMBER_REF_TRS} )
-    = $dbh->selectrow_array(q{SELECT COUNT(*) FROM fasta_ref_reps});
+    = $dbh->selectrow_array(q{SELECT COUNT(*) FROM refdb.fasta_ref_reps});
 
 # open($input, "-|", "wc -l $reffolder/reference.leb36.rotindex | tail -1");
 # $rc = <$input>;
@@ -97,9 +97,9 @@ if ( $rc =~ /(\d+) (\d+) (\d+)/ ) {
 }
 close($input);
 
-open( $input, "-|", "cat $rpfc/*.rotindex | wc" );
+open( $input, "-|", "wc -l $rpfc/*.rotindex | tail -1" );
 $rc = <$input>;
-if ( $rc =~ /(\d+) (\d+) (\d+)/ ) {
+if ( $rc =~ /^(\d+)/) {
     $stats{NUMBER_READS_WITHTRS_GE7_AFTER_REDUND} = $1;
 }
 close($input);
