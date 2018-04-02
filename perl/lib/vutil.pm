@@ -485,7 +485,7 @@ sub get_dbh {
         $dbh->do("PRAGMA cache_size = 800000");
 
         # Attach reference set database
-        my $refdbfile = $VSCNF_FILE{REFERENCE_SEQ} =~ s/.seq$/.db/r;
+        (my $refdbfile = $VSCNF_FILE{REFERENCE_SEQ}) =~ s/.seq$/.db/;
         if ( $ENV{DEBUG} ) {
             warn "Attaching refseq db at $refdbfile\n";
         }
@@ -513,7 +513,7 @@ sub make_refseq_db {
     # TODO DBI error checking
     my $reffile   = shift;
     my $redo      = shift;
-    my $refdbfile = $reffile =~ s/.(seq|leb36)$/.db/r;
+    (my $refdbfile = $reffile) =~ s/.(seq|leb36)$/.db/;
     if ( $ENV{DEBUG} ) {
         warn "Connecting to SQLite db at $refdbfile\n";
     }
@@ -573,7 +573,8 @@ sub make_refseq_db {
         our $seq_rows = [];
 
         # my $installdir = "$FindBin::RealBin";
-        open my $refset, "<", $reffile =~ s/.(seq|leb36)$/.seq/r
+        (my $refseqfile = $reffile) =~ s/.(seq|leb36)$/.seq/;
+        open my $refset, "<", $refseqfile
             or confess
             "Error opening reference sequences file $reffile: $!.\nStopped at";
 
@@ -665,7 +666,7 @@ sub get_trunc_query {
 # Use this to load reference set db with profiles (leb36 file)
 sub load_refprofiles_db {
     my ( $prof_file, $redo ) = @_;
-    my $dbfile = $prof_file =~ s/.(seq|leb36)$/.db/r;
+    (my $dbfile = $prof_file) =~ s/.(seq|leb36)$/.db/;
     my $dbh    = DBI->connect(
         "DBI:SQLite:dbname=$dbfile",
         undef, undef,
@@ -786,7 +787,7 @@ sub run_redund {
     my $tmpdir      = File::Temp->newdir();
     my $tmpdir_name = $tmpdir->dirname;
     my ( $input_refset, $output_basename, $keep_files, $redo ) = @_;
-    my $dbfile = $input_refset =~ s/.(seq|leb36)$/.db/r;
+    (my $dbfile = $input_refset) =~ s/.(seq|leb36)$/.db/;
 
     # # Add - sign if negating for ref set and set new input to same
     # # file path as the final output
