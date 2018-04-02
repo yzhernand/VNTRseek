@@ -50,8 +50,8 @@ die
 
 my ( $full_set, $filtered_set, $flanklengths, $cutoff ) = @ARGV;
 my $install_dir       = $FindBin::Bin;
-my $full_sqlitedb     = $full_set =~ s/.leb36$/.db/r;
-my $filtered_sqlitedb = $filtered_set =~ s/.leb36$/.db/r;
+(my $full_sqlitedb     = $full_set) =~ s/.leb36$/.db/;
+(my $filtered_sqlitedb = $filtered_set) =~ s/.leb36$/.db/;
 
 my $redund_executable = "$install_dir/redund.exe";
 

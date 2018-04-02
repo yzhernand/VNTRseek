@@ -775,7 +775,7 @@ if ( $STEP == 4 ) {
     # psearch output can still be files but this step will then collect them and
     # insert into the db. (Maybe merge in next step's `join_clusters.exe`)
     # For now, extract the file we need using the database
-    my $dbfile = $opts{REFERENCE_SEQ} =~ s/.(seq|leb36)$/.db/r;
+    (my $dbfile = $opts{REFERENCE_SEQ}) =~ s/.(seq|leb36)$/.db/;
     my $dbh = DBI->connect(
         "DBI:SQLite:dbname=$dbfile",
         undef, undef,
