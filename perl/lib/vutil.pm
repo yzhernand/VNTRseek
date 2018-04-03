@@ -529,6 +529,10 @@ sub make_refseq_db {
     warn "CWD = " . getcwd() . "\n"
         if ( $ENV{DEBUG} );
 
+    # Set some pragmas to make this part faster
+    $dbh->do(q{PRAGMA synchronous = OFF});
+    $dbh->do(q{PRAGMA journal_mode = WAL});
+    
     # Create the table in this new db.
     my $create_fasta_ref_reps_q
         = q{CREATE TABLE IF NOT EXISTS `fasta_ref_reps` (
@@ -643,6 +647,9 @@ sub make_refseq_db {
 
         $dbh->commit;
     }
+
+    # Set journal mode back to default "DELETE"
+    $dbh->do(q{PRAGMA journal_mode = DELETE});
     $dbh->disconnect;
 }
 
@@ -675,6 +682,9 @@ sub load_refprofiles_db {
             sqlite_see_if_its_a_number => 1,
         }
     ) or die "Could not connect to database: $DBI::errstr";
+    # Set some pragmas to make this part faster
+    $dbh->do(q{PRAGMA synchronous = OFF});
+    $dbh->do(q{PRAGMA journal_mode = WAL});
 
     # By default, set redund flag to 1 so we can set
     # non-redundant trs to 0 later;
@@ -766,6 +776,8 @@ sub load_refprofiles_db {
         $dbh->do(q{DROP TABLE temp.leb36tab});
 
         $dbh->commit;
+        # Set journal mode back to default "DELETE"
+        $dbh->do(q{PRAGMA journal_mode = DELETE});
         $dbh->disconnect;
 
         # Run redund
@@ -773,6 +785,8 @@ sub load_refprofiles_db {
         return 1;
     }
 
+    # Set journal mode back to default "DELETE"
+    $dbh->do(q{PRAGMA journal_mode = DELETE});
     $dbh->disconnect;
     return 0;
 }
@@ -811,6 +825,10 @@ sub run_redund {
             sqlite_see_if_its_a_number => 1,
         }
     ) or die "Could not connect to database: $DBI::errstr";
+    # Set some pragmas to make this part faster
+    $dbh->do(q{PRAGMA synchronous = OFF});
+    $dbh->do(q{PRAGMA journal_mode = WAL});
+
     my ($num_rows)
         = $dbh->selectrow_array(
         q{SELECT COUNT(*) FROM ref_profiles WHERE redund = 0});
@@ -934,6 +952,8 @@ sub run_redund {
     $load_rotindex_sth->execute;
 
     warn "$unique_tr_count unique TRs in filtered set\n";
+    # Set journal mode back to default "DELETE"
+    $dbh->do(q{PRAGMA journal_mode = DELETE});
     $dbh->disconnect;
     unlink($minreporder_db);
 
@@ -960,23 +980,6 @@ sub write_sqlite {
         = "sqlite3 $VSCNF_FILE{OUTPUT_ROOT}/vntr_$VSCNF_FILE{DBSUFFIX}/$VSCNF_FILE{DBSUFFIX}.db < $installdir/sqlite_schema.sql";
     warn "Executing: $exestring\n";
     system($exestring);
-
-# read_config_file($config_loc)
-#   unless ($VSREAD);
-# open my $schema_fh, "<", "$installdir/sqlite_schema.sql"
-#   or croak "Error opening SQLite schema file '$installdir/sqlite_schema.sql': $?";
-# my $sqlite_schema;
-# while (<$schema_fh>) {
-#   # chomp;
-#   $sqlite_schema .= $_;
-# }
-# close $schema_fh;
-
-    # my $dbh = get_dbh($dbsuffix, $config_loc)
-    #   or croak "Could not connect to database: $DBI::errstr";
-    # $dbh->do($sqlite_schema)
-    #   or croak "Error creating tables in database: $DBI::errstr";
-    # $dbh->commit;
 }
 
 ################################################################

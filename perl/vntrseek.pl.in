@@ -1177,27 +1177,27 @@ if ( $STEP == 11 ) {
         if ( !chdir("$install_dir") ) {
             { die("Install directory does not exist!"); }
         }
-    }
 
-    # update DB
-    # TODO Replace this with a script which simply sets the flank comparison
-    # parameters (apparently constant at max_errors = 5 and trim_to = 50, is
-    # this ever used??)
-    print STDERR "\n\n(updating database with dist/indist info)...";
-    $exstring = "./update_indist.pl";
-    my @exargs
-        = ( qw(-r -k5 -t50 -d), $opts{DBSUFFIX}, "-u", $MSDIR );
-    system( $exstring, @exargs );
-    if ( $? == -1 ) {
-        SetError( $STEP, "command failed: $!", -1 );
-        die "command failed: $!\n";
-    }
-    else {
-        my $rc = ( $? >> 8 );
-        if ( 0 != $rc ) {
-            SetError( $STEP,
-                "updating database with dist/undist info failed", $rc );
-            die "command exited with value $rc";
+        # update DB
+        # TODO Replace this with a script which simply sets the flank comparison
+        # parameters (apparently constant at max_errors = 5 and trim_to = 50, is
+        # this ever used??)
+        print STDERR "\n\n(updating database with dist/indist info)...";
+        $exstring = "./update_indist.pl";
+        my @exargs
+            = ( qw(-r -k5 -t50 -d), $opts{DBSUFFIX}, "-u", $MSDIR );
+        system( $exstring, @exargs );
+        if ( $? == -1 ) {
+            SetError( $STEP, "command failed: $!", -1 );
+            die "command failed: $!\n";
+        }
+        else {
+            my $rc = ( $? >> 8 );
+            if ( 0 != $rc ) {
+                SetError( $STEP,
+                    "updating database with dist/undist info failed", $rc );
+                die "command exited with value $rc";
+            }
         }
     }
 
