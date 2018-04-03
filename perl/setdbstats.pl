@@ -105,6 +105,6 @@ if ( $rc =~ /^(\d+)/) {
 close($input);
 
 # Get config for run and save stats
-set_statistics(%stats);
+set_statistics(\%stats);
 
 1;

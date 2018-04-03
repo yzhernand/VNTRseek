@@ -2061,7 +2061,7 @@ my %REPHASH = ();
 #  }
 #}
 
-set_statistics( N_MIN_SUPPORT => $MIN_SUPPORT_REQUIRED );
+set_statistics( { N_MIN_SUPPORT => $MIN_SUPPORT_REQUIRED } );
 
 my $dbh = get_dbh()
     or die "Could not connect to database: $DBI::errstr";

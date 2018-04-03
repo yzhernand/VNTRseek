@@ -416,7 +416,7 @@ if ( $delfromtable != $deleted ) {
 
 $dbh->disconnect();
 warn strftime( "\n\nend: %F %T\n\n", localtime );
-set_statistics(%stats);
+set_statistics(\%stats);
 
 1;
 

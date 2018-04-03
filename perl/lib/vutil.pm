@@ -293,15 +293,15 @@ sub set_statistics {
 #     croak "set_statistics: expects at least 2 parameters, passed $argc !\n";
 # }
 
-    my %stats = @_;
+    my $stats = shift;
     my $dbh   = get_dbh( $VSCNF_FILE{DBSUFFIX},
         $ENV{HOME} . "/" . $VSCNF_FILE{DBSUFFIX} . ".vs.cnf" );
     my ( $sql_clause, @sql_qual, @sql_bind );
     if ( $ENV{DEBUG} ) {
-        warn Dumper( \%stats ) . "\n";
+        warn Dumper( $stats ) . "\n";
     }
 
-    while ( my ( $key, $val ) = each %stats ) {
+    while ( my ( $key, $val ) = each %$stats ) {
         if ( $ENV{DEBUG} ) {
             warn "Setting stat: $key to $val\n";
         }
@@ -331,7 +331,7 @@ sub set_datetime {
     my $NAME = shift;
     my $VALUE = strftime( "%F %T", localtime );
 
-    return set_statistics( $NAME, $VALUE );
+    return set_statistics( {$NAME, $VALUE} );
 }
 
 ####################################
@@ -447,9 +447,6 @@ sub get_dbh {
 
 # TODO This was grafted in here. Need to make sure caller tries to catch this to set error.
         if ($redo) {
-            # Always set redo flag back to 0 when done redoing
-            $VSCNF_FILE{REDO_REFDB} = 0;
-            print_config( $ENV{HOME} . "/" . $VSCNF_FILE{DBSUFFIX} . "." );
             print STDERR "\n\n(updating database with dist/indist info)...";
             my $installdir = "$FindBin::RealBin";
             my $exstring   = "$installdir/update_indist.pl";
@@ -469,6 +466,9 @@ sub get_dbh {
             }
         }
         # END TODO
+        # Always set redo flag back to 0 when done redoing
+        $VSCNF_FILE{REDO_REFDB} = 0;
+        print_config( $ENV{HOME} . "/" . $VSCNF_FILE{DBSUFFIX} . "." );
 
 # TODO First connect to a temp location, backup database to that location
 # then return handle to that location. This is primarily for running on clusters.
@@ -483,6 +483,8 @@ sub get_dbh {
 
         # 800MB cache
         $dbh->do("PRAGMA cache_size = 800000");
+        # Set default journal to write-ahead log
+        $dbh->do(q{PRAGMA journal_mode = WAL});
 
         # Attach reference set database
         (my $refdbfile = $VSCNF_FILE{REFERENCE_SEQ}) =~ s/.seq$/.db/;

@@ -11,7 +11,8 @@ use File::Basename;
 
 use lib "$FindBin::RealBin/lib";
 require "vutil.pm";
-use ProcInputReads qw(get_reader init_bam formats_regexs compressed_formats_regexs set_install_dir);
+use ProcInputReads
+    qw(get_reader init_bam formats_regexs compressed_formats_regexs set_install_dir);
 set_install_dir("$FindBin::RealBin");
 
 use vutil qw(get_config get_dbh set_statistics get_trunc_query);
@@ -45,7 +46,7 @@ my $TEMPDIR         = $ARGV[8];
 my $IS_PAIRED_READS = $ARGV[9];
 
 # set these mysql credentials in vs.cnf (in installation directory)
-my %run_conf = get_config($DBSUFFIX, $MSDIR . "vs.cnf" );
+my %run_conf = get_config( $DBSUFFIX, $MSDIR . "vs.cnf" );
 my ( $LOGIN, $PASS, $HOST ) = @run_conf{qw(LOGIN PASS HOST)};
 
 my $totalReads = 0;
@@ -242,9 +243,9 @@ foreach my $ifile (@indexfiles) {
                         $pattern, $profile,           $profilerc,
                         $proflen );
 
-                    if ( $processed % $RECORDS_PER_INFILE_INSERT == 0 )
-                    {
-                        open( my $TEMPFILE, ">", "$TEMPDIR/replnk_$DBSUFFIX.txt" )
+                    if ( $processed % $RECORDS_PER_INFILE_INSERT == 0 ) {
+                        open( my $TEMPFILE, ">",
+                            "$TEMPDIR/replnk_$DBSUFFIX.txt" )
                             or die $!;
                         for my $row (@replnk_rows) {
                             say $TEMPFILE $row;
@@ -266,6 +267,7 @@ foreach my $ifile (@indexfiles) {
                 }
 
             }
+
             #if ($i>10) { last; }
         }
 
@@ -357,8 +359,8 @@ unless ( @filenames > 0 ) {
 }
 
 # If BAM, init files list
-if ($input_format eq "bam") {
-    @filenames = init_bam($fastafolder, $IS_PAIRED_READS, \@filenames);
+if ( $input_format eq "bam" ) {
+    @filenames = init_bam( $fastafolder, $IS_PAIRED_READS, \@filenames );
 }
 
 my $files_to_process = @filenames;
@@ -370,7 +372,9 @@ if ( $run_conf{BACKEND} eq "mysql" ) {
         ) or die "Couldn't prepare statement: " . $dbh->errstr;
 }
 elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-    $sth = $dbh->prepare( qq{INSERT INTO fasta_reads (sid, head, dna) VALUES(?, ?, ?)} )
+    $sth
+        = $dbh->prepare(
+        qq{INSERT INTO fasta_reads (sid, head, dna) VALUES(?, ?, ?)})
         or die "Couldn't prepare statement: " . $dbh->errstr;
 }
 
@@ -402,14 +406,14 @@ while ( $files_processed < $files_to_process ) {
                     . $headstr . ")\n";
             }
 
-
             if ( $run_conf{BACKEND} eq "mysql" ) {
                 push @fasta_reads_rows,
-                    join( "\t", $HEADHASH{"$headstr"}, "$headstr", "$dnastr" );
+                    join( "\t", $HEADHASH{"$headstr"}, "$headstr",
+                    "$dnastr" );
 
-                if ( $processed % $RECORDS_PER_INFILE_INSERT == 0 )
-                {
-                    open( my $TEMPFILE, ">", "$TEMPDIR/fastareads_$DBSUFFIX.txt" )
+                if ( $processed % $RECORDS_PER_INFILE_INSERT == 0 ) {
+                    open( my $TEMPFILE, ">",
+                        "$TEMPDIR/fastareads_$DBSUFFIX.txt" )
                         or die $!;
                     for my $row (@fasta_reads_rows) {
                         say $TEMPFILE $row;
@@ -442,12 +446,13 @@ if ( ( $run_conf{BACKEND} eq "mysql" ) && @fasta_reads_rows ) {
     $inserted += $count;
     @fasta_reads_rows = ();
 }
+
 # $sth->finish;
 $dbh->commit;
 unlink("$TEMPDIR/fastareads_$DBSUFFIX.txt");
 
 # reenable indices
-if ($run_conf{BACKEND} eq "mysql") {
+if ( $run_conf{BACKEND} eq "mysql" ) {
     $sth = $dbh->do('SET AUTOCOMMIT = 1;')
         or die "Couldn't do statement: " . $dbh->errstr;
 
@@ -463,7 +468,7 @@ if ($run_conf{BACKEND} eq "mysql") {
     $sth = $dbh->do('ALTER TABLE replnk ENABLE KEYS;')
         or die "Couldn't do statement: " . $dbh->errstr;
 }
-elsif ($run_conf{BACKEND} eq "sqlite") {
+elsif ( $run_conf{BACKEND} eq "sqlite" ) {
     $dbh->{AutoCommit} = 1;
     $dbh->do("PRAGMA foreign_keys = ON");
 }
@@ -471,7 +476,7 @@ elsif ($run_conf{BACKEND} eq "sqlite") {
 # disconnect
 $dbh->disconnect();
 
-set_statistics( NUMBER_READS => $totalReads );
+set_statistics( { NUMBER_READS => $totalReads } );
 
 # check
 if ( $inserted == keys(%HEADHASH) ) {

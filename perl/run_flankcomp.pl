@@ -356,7 +356,7 @@ my %stats = (
     CLUST_NUMBER_OF_REF_REPS_IN_CLUSTERS           => $totalRefReps,
     CLUST_NUMBER_OF_READ_REPS_IN_CLUSTERS          => $totalReadReps,
 );
-set_statistics( %stats);
+set_statistics(\%stats);
 
 print STDERR
     "Processing complete -- processed $clusters_processed cluster(s).\n";

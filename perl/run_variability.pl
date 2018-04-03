@@ -293,8 +293,8 @@ while (<$fh>) {
 
 }
 
-warn "VNTR_SUPPORT hash:\n", Dumper(\%VNTR_SUPPORT), "\n"
-    if ($ENV{DEBUG});
+warn "VNTR_SUPPORT hash:\n", Dumper( \%VNTR_SUPPORT ), "\n"
+    if ( $ENV{DEBUG} );
 
 close($fh);
 $sth->finish;
@@ -482,8 +482,9 @@ print STDERR
     "Processing complete -- processed $clusters_processed cluster(s), support entries created = $supInsert.\n";
 
 set_statistics(
-    CLUST_NUMBER_OF_REFS_WITH_PREDICTED_VNTR     => $updCLNKfromfile,
-    CLUST_NUMBER_OF_CLUSTERS_WITH_PREDICTED_VNTR => $updatedClustersCount
+    {   CLUST_NUMBER_OF_REFS_WITH_PREDICTED_VNTR     => $updCLNKfromfile,
+        CLUST_NUMBER_OF_CLUSTERS_WITH_PREDICTED_VNTR => $updatedClustersCount
+    }
 );
 
 warn strftime( "\n\nend: %F %T\n\n", localtime );

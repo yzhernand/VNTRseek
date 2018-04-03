@@ -773,9 +773,10 @@ if ( $delfromtable != $count ) {
 
 $dbh->disconnect();
 set_statistics(
-    "RANK_EDGES_OVERCUTOFF" => $j,
-    "RANK_REMOVED_SAMEREF"  => $count,
-    "RANK_REMOVED_SAMESEQ"  => $count
+    {   RANK_EDGES_OVERCUTOFF => $j,
+        RANK_REMOVED_SAMEREF  => $count,
+        RANK_REMOVED_SAMESEQ  => $count
+    }
 );
 
 print STDERR "Finished. Deleted from rank using temptable: $delfromtable\n";

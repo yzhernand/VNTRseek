@@ -463,9 +463,10 @@ if ( $delfromtable != $count ) {
 
 $dbh->disconnect();
 set_statistics(
-    "RANKFLANK_EDGES_INSERTED"  => $j,
-    "RANKFLANK_REMOVED_SAMEREF" => $count,
-    "RANKFLANK_REMOVED_SAMESEQ" => $count
+    {   RANKFLANK_EDGES_INSERTED  => $j,
+        RANKFLANK_REMOVED_SAMEREF => $count,
+        RANKFLANK_REMOVED_SAMESEQ => $count
+    }
 );
 
 print STDERR "\n\n";
