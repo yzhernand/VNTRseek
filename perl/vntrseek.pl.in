@@ -686,7 +686,7 @@ if ( $STEP == 3 ) {
     print STDERR
         "\n\nExecuting step #$STEP (eliminating cyclic redundancies)...";
 
-    run_redund( $opts{REFERENCE_FILE}, "reference.leb36", 0 );
+    # run_redund( $opts{REFERENCE_FILE}, "reference.leb36", 0 );
 
 # system(
 #     "./redund.exe $reference_folder/start.leb36 $reference_folder/start2.leb36 -s -i"

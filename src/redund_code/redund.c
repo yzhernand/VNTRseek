@@ -524,6 +524,17 @@ int main(int argc, char **argv)
                     return 1;
                 }
 
+                rc = sqlite3_exec(db, "PRAGMA journal_mode = MEMORY", 0, 0, &err_msg);
+
+                if (rc != SQLITE_OK) {
+                    fprintf(stderr, "SQL error: %s\n", err_msg);
+
+                    sqlite3_free(err_msg);
+                    sqlite3_close(db);
+
+                    return 1;
+                }
+
                 rc = sqlite3_exec(db,
                                   "CREATE TABLE minreporder (`rid` integer PRIMARY KEY,"
                                   "`idx` integer)", 0, 0, &err_msg);
