@@ -3,7 +3,7 @@
 # sets a number of db stat variables
 #
 # command line usage example:
-#  ./setdbstats.pl reference_file reads_profiles_folder reference_folder reads_profile_folder_clean dbname dblogin dbpass dbhost
+#  ./setdbstats.pl reads_profiles_folder reference_folder reads_profile_folder_clean dbname dblogin dbpass dbhost
 # where inputfile is the main cluster file
 #
 
@@ -21,17 +21,15 @@ use lib "$FindBin::RealBin/lib";    # must be same as install dir!
 use vutil qw( get_config get_dbh set_statistics );
 
 my $argc = @ARGV;
-if ( $argc < 6 ) {
+if ( $argc < 4 ) {
     die
-        "Usage: setdbstats.pl reference_file reads_profiles_folder reference_folder reads_profile_folder_clean dbsuffix msdir\n";
+        "Usage: setdbstats.pl reads_profiles_folder reads_profile_folder_clean dbsuffix msdir\n";
 }
 
-my $reffile   = $ARGV[0];
-my $readpf    = $ARGV[1];
-my $reffolder = $ARGV[2];
-my $rpfc      = $ARGV[3];
-my $DBSUFFIX  = $ARGV[4];
-my $MSDIR     = $ARGV[5];
+my $readpf    = $ARGV[0];
+my $rpfc      = $ARGV[1];
+my $DBSUFFIX  = $ARGV[2];
+my $MSDIR     = $ARGV[3];
 
 ####################################
 

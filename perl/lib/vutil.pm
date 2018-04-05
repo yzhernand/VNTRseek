@@ -325,7 +325,7 @@ sub set_datetime {
 
     my $argc = @_;
     if ( $argc < 1 ) {
-        die "set_datetime: expects 1 parameter, passed $argc !\n";
+        croak "set_datetime: expects 1 parameter, passed $argc !\n";
     }
 
     my $NAME = shift;
@@ -422,7 +422,7 @@ sub stats_get {
 
 sub get_dbh {
     unless ($VSREAD) {
-        carp
+        croak
             "Error: must call `get_config(dbsuffix, config_loc)` before this function.\n";
     }
 
@@ -479,12 +479,14 @@ sub get_dbh {
                 RaiseError                 => 1,
                 sqlite_see_if_its_a_number => 1,
             }
-        ) or croak "Could not connect to database: $DBI::errstr";
+        ) or die "Could not connect to database $dbfile: $DBI::errstr";
 
-        # 800MB cache
-        $dbh->do("PRAGMA cache_size = 800000");
         # Set default journal to write-ahead log
-        $dbh->do(q{PRAGMA journal_mode = WAL});
+        $dbh->do(q{PRAGMA journal_mode = WAL})
+            or die "Could not do statement on database $dbfile: $DBI::errstr";
+        # 800MB cache
+        $dbh->do("PRAGMA cache_size = 800000")
+            or die "Could not do statement on database $dbfile: $DBI::errstr";
 
         # Attach reference set database
         (my $refdbfile = $VSCNF_FILE{REFERENCE_SEQ}) =~ s/.seq$/.db/;
@@ -492,7 +494,7 @@ sub get_dbh {
             warn "Attaching refseq db at $refdbfile\n";
         }
         $dbh->do(qq{ATTACH DATABASE "$refdbfile" AS refdb})
-            or croak "Could not attach refseq db: $DBI::errstr";
+            or die "Could not attach refseq db: $DBI::errstr";
     }
     else {
         $dbh = DBI->connect(

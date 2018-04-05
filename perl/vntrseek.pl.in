@@ -35,6 +35,7 @@ use 5.010;
 use FindBin;
 use File::Basename;
 use File::Copy;
+use File::Temp;
 use POSIX qw(strftime);
 use Data::Dumper;
 
@@ -51,7 +52,7 @@ my $install_dir = "$FindBin::RealBin";
 use lib "$FindBin::RealBin/lib";    # must be same as install dir!
 
 use vutil
-    qw(get_config set_config set_statistics set_credentials write_mysql write_sqlite get_dbh stats_get set_datetime print_config create_blank_file run_redund);
+    qw(get_config set_config set_statistics get_statistics set_credentials write_mysql write_sqlite get_dbh stats_get set_datetime print_config create_blank_file run_redund trim);
 
 my $DOALLSTEPS = 0
     ; # set to 0 to do one step at a time (recommended for test run), 1 to run though all steps (THIS IS OTIONAL AS SPECIFYING END STEP IS POSSIBLE)
@@ -198,9 +199,6 @@ my $read_profiles_folder = "$output_folder/data_out/";
 # this is where renumbered and cyclicly removed reundancy leb36 files will go
 my $read_profiles_folder_clean = "$output_folder/data_out_clean/";
 
-# this is where cyclicly removed reundancy leb36 reference will go (also negated index)
-my $reference_folder = "$output_folder/reference/";
-
 # this is where edges are calculated
 my $edges_folder = "$opts{TMPDIR}/vntr_$opts{DBSUFFIX}/edges/";
 
@@ -253,13 +251,6 @@ unless ( -x $install_dir ) {
 #unless (-x "$opts{HTML_DIR}/malign") { die("File '$opts{HTML_DIR}/malign' not executable!"); }
 
 ################################################################
-sub trim {
-    my $string = shift;
-    $string =~ s/^\s+//;
-    $string =~ s/\s+$//;
-    return $string;
-}
-
 sub SetError {
 
     my $argc = @_;
@@ -341,146 +332,46 @@ sub ClearError {
     return 0;
 }
 
-sub GetErrorStep {
+sub GetError {
 
-    my $rc = int(
-        stats_get(
-            $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS},
-            $opts{HOST},     "ERROR_STEP"
-        )
-    );
-    return $rc;
-}
-
-sub GetErrorDesc {
-
-    my $rc = stats_get(
-        $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS},
-        $opts{HOST},     "ERROR_DESC"
-    );
-    return $rc;
-}
-
-sub GetErrorCode {
-
-    my $rc = int(
-        stats_get(
-            $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS},
-            $opts{HOST},     "ERROR_CODE"
-        )
-    );
-    return $rc;
+    my $err_hash = get_statistics(qw(ERROR_STEP ERROR_DESC ERROR_CODE));
+    return $err_hash;
 }
 
 sub GetNextStep {
 
-    my $rc;
-
     # note: this will return 0 regardless if step 0 has been completed or not
-
-    $rc = stats_get(
-        $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS},
-        $opts{HOST},     "DATE_REPORTS"
+    my $rc;
+    my @stats = qw(
+        DATE_MYSQLCREATE
+        DATE_TRF
+        DATE_RENUMB
+        DATE_REDUND
+        DATE_PROCLU
+        DATE_JOINCLUST
+        DATE_JOINCLUST
+        DATE_DB_INSTERT_REFS
+        DATE_DB_INSTERT_READS
+        DATE_WRITE_FLANKS
+        DATE_MAP_FLANKS
+        DATE_MAP_REFFLANKS
+        DATE_MAP_INSERT
+        DATE_EDGES
+        DATE_INDEX_PCR
+        DATE_PCR_DUP
+        DATE_MAP_DUP
+        DATE_MAP_DUP
+        DATE_VNTR_PREDICT
+        DATE_ASSEMBLYREQ
+        DATE_REPORTS
     );
-    if ( "" ne $rc ) { return 20; }
 
-    $rc = stats_get(
-        $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS},
-        $opts{HOST},     "DATE_VNTR_PREDICT"
-    );
-    if ( "" ne $rc ) { return 19; }
-
-    $rc = stats_get(
-        $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS},
-        $opts{HOST},     "DATE_MAP_DUP"
-    );
-    if ( "" ne $rc ) { return 17; }
-
-    $rc = stats_get(
-        $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS},
-        $opts{HOST},     "DATE_PCR_DUP"
-    );
-    if ( "" ne $rc ) { return 16; }
-
-    $rc = stats_get(
-        $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS},
-        $opts{HOST},     "DATE_INDEX_PCR"
-    );
-    if ( "" ne $rc ) { return 15; }
-
-    $rc = stats_get(
-        $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS},
-        $opts{HOST},     "DATE_EDGES"
-    );
-    if ( "" ne $rc ) { return 14; }
-
-    $rc = stats_get(
-        $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS},
-        $opts{HOST},     "DATE_MAP_INSERT"
-    );
-    if ( "" ne $rc ) { return 13; }
-
-    $rc = stats_get(
-        $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS},
-        $opts{HOST},     "DATE_MAP_REFFLANKS"
-    );
-    if ( "" ne $rc ) { return 12; }
-
-    $rc = stats_get(
-        $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS},
-        $opts{HOST},     "DATE_MAP_FLANKS"
-    );
-    if ( "" ne $rc ) { return 11; }
-
-    $rc = stats_get(
-        $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS},
-        $opts{HOST},     "DATE_WRITE_FLANKS"
-    );
-    if ( "" ne $rc ) { return 10; }
-
-    $rc = stats_get( $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS}, $opts{HOST},
-        "DATE_DB_INSTERT_READS" );
-    if ( "" ne $rc ) { return 9; }
-
-    $rc = stats_get( $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS}, $opts{HOST},
-        "DATE_DB_INSTERT_REFS" );
-    if ( "" ne $rc ) { return 8; }
-
-    $rc = stats_get(
-        $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS},
-        $opts{HOST},     "DATE_JOINCLUST"
-    );
-    if ( "" ne $rc ) { return 7; }
-
-    $rc = stats_get(
-        $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS},
-        $opts{HOST},     "DATE_PROCLU"
-    );
-    if ( "" ne $rc ) { return 5 }
-
-    $rc = stats_get(
-        $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS},
-        $opts{HOST},     "DATE_REDUND"
-    );
-    if ( "" ne $rc ) { return 4; }
-
-    $rc = stats_get(
-        $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS},
-        $opts{HOST},     "DATE_RENUMB"
-    );
-    if ( "" ne $rc ) { return 3; }
-
-    $rc = stats_get(
-        $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS},
-        $opts{HOST},     "DATE_TRF"
-    );
-    if ( "" ne $rc ) { return 2; }
-
-    $rc = stats_get(
-        $opts{DBSUFFIX}, $opts{LOGIN}, $opts{PASS},
-        $opts{HOST},     "DATE_MYSQLCREATE"
-    );
-    if ( "" ne $rc ) { return 1; }
+    my %stat_hash = %{ get_statistics(@stats) };
+    my @vals      = @stat_hash{@stats};
+    for ( my $idx = @vals - 1; $idx > 0; --$idx ) {
+        return $idx
+            if $vals[$idx] ne "";
+    }
 
     return 0;
 }
@@ -497,7 +388,7 @@ if ( $STEP != 0 ) {
         if   ( $STEPEND >= 0 && $STEPEND <= 19 ) { ClearError($STEPEND); }
         else                                     { ClearError(); }
 
-        print STDERR "\n\nPipeline error cleared!\n";
+        warn "Pipeline error cleared!\n";
         exit 0;
     }
 
@@ -506,12 +397,14 @@ if ( $STEP != 0 ) {
         exit GetNextStep();
     }
 
-    my $rc = GetErrorStep();
-    if ( 0 != $rc ) {
-        my $rc2 = GetErrorDesc();
-        my $rc3 = GetErrorCode();
-        die
-            "\n\nPipeline error detected at step $rc (CODE:$rc3,'$rc2'). Call this program with step 100 to clear error.\n";
+    my $err_hash = GetError();
+    if ( $err_hash->{ERROR_STEP} != 0 ) {
+        die printf(
+            "Pipeline error detected at step %d (code: %d, description: '%s'). Call this program with step 100 to clear error.\n",
+            $err_hash->{ERROR_STEP},
+            $err_hash->{ERROR_CODE},
+            $err_hash->{ERROR_DESC}
+        );
     }
 
 }
@@ -607,9 +500,6 @@ if ( $STEP == 2 ) {
     print STDERR "\n\nExecuting step #$STEP (reassigning IDs to repeats)...";
     $timestart = time();
 
-    my $exstring = "rm -f $reference_folder -R";
-    system($exstring);
-
     system("./renumber.pl $read_profiles_folder");
     if ( $? == -1 ) {
         SetError( $STEP, "command failed: $!", -1 );
@@ -624,44 +514,8 @@ if ( $STEP == 2 ) {
         }
     }
 
-    if ( !mkdir("$reference_folder") ) {
-        warn "\nWarning: Failed to create output directory!\n";
-    }
-
-    copy( "$opts{REFERENCE_FILE}", "$reference_folder/start.leb36" );
-    if ( $? == -1 ) {
-        SetError( $STEP, "command failed: $!", -1 );
-        die "command failed: $!\n";
-    }
-    else {
-        my $rc = ( $? >> 8 );
-        if ( 0 != $rc ) {
-            SetError(
-                $STEP,
-                "copying reference leb36 profile file into reference profiles folder",
-                $rc
-            );
-            die "command exited with value $rc";
-        }
-    }
-
-    system("./renumber.pl -r -n  $reference_folder");
-    if ( $? == -1 ) {
-        SetError( $STEP, "command failed: $!", -1 );
-        die "command failed: $!\n";
-    }
-    else {
-        my $rc = ( $? >> 8 );
-        if ( 0 != $rc ) {
-            SetError( $STEP,
-                "calling renumber.pl on reference profiles folder", $rc );
-            die "command exited with value $rc";
-        }
-    }
-
     set_statistics(
-        {   FOLDER_REFERENCE   => $reference_folder,
-            FILE_REFERENCE_LEB => $opts{REFERENCE_FILE},
+        {   FILE_REFERENCE_LEB => $opts{REFERENCE_FILE},
             FILE_REFERENCE_SEQ => $opts{REFERENCE_SEQ},
             TIME_RENUMB        => time() - $timestart,
         }
@@ -685,44 +539,6 @@ if ( $STEP == 3 ) {
     # generates an leb36 file with the right ref set seqs.
     print STDERR
         "\n\nExecuting step #$STEP (eliminating cyclic redundancies)...";
-
-    # run_redund( $opts{REFERENCE_FILE}, "reference.leb36", 0 );
-
-# system(
-#     "./redund.exe $reference_folder/start.leb36 $reference_folder/start2.leb36 -s -i"
-# );
-# if ( $? == -1 ) {
-#     SetError( $STEP, "command failed: $!", -1 );
-#     die "command failed: $!\n";
-# }
-# else {
-#     my $rc = ( $? >> 8 );
-#     if ( 0 != $rc ) {
-#         SetError( $STEP, "calling redund.exe on start.leb36 failed",
-#             $rc );
-#         die "command exited with value $rc";
-#     }
-# }
-
-# system(
-#     "./redund.exe $reference_folder/start2.leb36 $reference_folder/reference.leb36 -n -i"
-# );
-# if ( $? == -1 ) {
-#     SetError( $STEP, "command failed: $!", -1 );
-#     die "command failed: $!\n";
-# }
-# else {
-#     my $rc = ( $? >> 8 );
-#     if ( 0 != $rc ) {
-#         SetError( $STEP, "calling redund.exe on start2.leb36 failed",
-#             $rc );
-#         die "command exited with value $rc";
-#     }
-# }
-
-    # system("rm -f $reference_folder/start.leb36");
-
-    # system("rm -f $reference_folder/start2.leb36");
 
     if ( !mkdir("$read_profiles_folder_clean") ) {
         warn "\nWarning: Failed to create output directory!\n";
@@ -778,9 +594,9 @@ if ( $STEP == 3 ) {
         die("install dir does not exist!");
     }
 
-    print STDERR "setting additional statistics...\n";
+    warn "setting additional statistics...\n";
     system(
-        "./setdbstats.pl $opts{REFERENCE_FILE} $read_profiles_folder $reference_folder $read_profiles_folder_clean $opts{DBSUFFIX} $MSDIR"
+        "./setdbstats.pl $read_profiles_folder $read_profiles_folder_clean $opts{DBSUFFIX} $MSDIR"
     );
     if ( $? == -1 ) {
         SetError( $STEP, "command failed: $!", -1 );
@@ -823,8 +639,7 @@ if ( $STEP == 4 ) {
     print STDERR
         "\n\nExecuting step #$STEP (performing bipartite clustering of tandem repeats profiles)...";
 
-    $exstring
-        = "./checkleb36.pl $read_profiles_folder_clean $reference_folder";
+    $exstring = "./checkleb36.pl $read_profiles_folder_clean";
     system($exstring);
     if ( $? == -1 ) {
         SetError( $STEP, "command failed: $!", -1 );
@@ -837,8 +652,6 @@ if ( $STEP == 4 ) {
             die "command exited with value $rc";
         }
     }
-
-#$exstring = "./run_proclu.pl 1 $read_profiles_folder_clean $reference_folder \"$CLUST_PARAMS\" $opts{NPROCESSES} '$PROCLU_EXECUTABLE' " . max( 4, int(0.4 * $opts{MIN_FLANK_REQUIRED} + .01)) . " $opts{MAX_FLANK_CONSIDERED}";
 
 # 0 for maxerror, means psearch will pick maxerror based on individual flanklength
 # TODO Maybe rewrite run_proclu and psearch to use SQLite db.
@@ -866,6 +679,7 @@ if ( $STEP == 4 ) {
     # Filtered file, ordered by min representation as given by redund
     my $get_filtered_set_profiles_sth = $dbh->prepare($get_ref_leb36);
     $get_filtered_set_profiles_sth->execute;
+    my $reference_folder = File::Temp->newdir();
     open my $tmp_filt_file_fh, ">", "$reference_folder/reference.leb36";
     while ( my @fields = $get_filtered_set_profiles_sth->fetchrow_array ) {
         say $tmp_filt_file_fh join( " ", @fields );
@@ -885,6 +699,7 @@ if ( $STEP == 4 ) {
     $rotindex_str =~ s/(\d+)/-$1/g;
     print $tmp_rotindex $rotindex_str;
     close $tmp_rotindex;
+    $dbh->disconnect();
 
     $exstring
         = "./run_proclu.pl 1 $read_profiles_folder_clean $reference_folder \"$CLUST_PARAMS\" $opts{NPROCESSES} '$PROCLU_EXECUTABLE' "
@@ -1032,6 +847,33 @@ if ( $STEP == 8 ) {
     print STDERR
         "\n\nExecuting step #$STEP (inserting READS flanks into database)...";
     my $extra_param = ( $opts{STRIP_454_KEYTAGS} ) ? '1' : '0';
+
+    ( my $dbfile = $opts{REFERENCE_SEQ} ) =~ s/.(seq|leb36)$/.db/;
+    my $dbh = DBI->connect(
+        "DBI:SQLite:dbname=$dbfile",
+        undef, undef,
+        {   AutoCommit                 => 1,
+            RaiseError                 => 1,
+            sqlite_see_if_its_a_number => 1,
+        }
+    ) or die "Could not connect to database: $DBI::errstr";
+    my $reference_folder = File::Temp->newdir();
+
+    # Get rotindex saved in db
+    my $get_rotindex = q{SELECT rotindex
+        FROM files};
+    my ($rotindex_str) = $dbh->selectrow_array($get_rotindex);
+    die
+        "Error getting rotindex file from filtered set. Try rerunning with --redo_refdb option\n"
+        unless ($rotindex_str);
+    open my $tmp_rotindex, ">", "$reference_folder/reference.leb36.rotindex";
+
+    # Need to negate all indices
+    $rotindex_str =~ s/(\d+)/-$1/g;
+    print $tmp_rotindex $rotindex_str;
+    close $tmp_rotindex;
+    $dbh->disconnect();
+
     my $exstring
         = "./insert_reads.pl $read_profiles_folder_clean/all.clusters $read_profiles_folder  $opts{FASTA_DIR} $read_profiles_folder_clean $reference_folder/reference.leb36.rotindex $extra_param $opts{DBSUFFIX} $MSDIR $opts{TMPDIR} $opts{IS_PAIRED_READS}";
     system($exstring);
@@ -1134,138 +976,133 @@ if ( $STEP == 11 ) {
 
     print STDERR "\n\nExecuting step #$STEP (aligning ref-ref flanks)...";
 
-    system("rm -Rf ${read_profiles_folder_clean}/result");
+  # TODO Don't use this. Change so that the new produce_indist script is used.
+  # Will require new param
+  # if ( $opts{REFERENCE_INDIST_PRODUCE} ) {
+  #     print STDERR "\n\n(generating indist file)...";
 
-    if ( !mkdir("${read_profiles_folder_clean}/result") ) {
-        warn "\nWarning: Failed to create output result directory!\n";
-    }
+    #     # enter result dir
+    #     if ( !chdir("${read_profiles_folder_clean}/result") ) {
+    #         { die("result directory does not exist!"); }
+    #     }
 
-# TODO Change this so that the new produce_indist script is used. Will require new param
-    if ( $opts{REFERENCE_INDIST_PRODUCE} ) {
-        print STDERR "\n\n(generating indist file)...";
+#     # copy reference file to result dir
+#     # TODO change so that referece file does not need to be in install dir
+#     system("cp ${install_dir}/$opts{REFERENCE_FILE} .");
+#     if ( $? == -1 ) {
+#         SetError( $STEP, "command failed: $!", -1 );
+#         die "command failed: $!\n";
+#     }
+#     else {
+#         my $rc = ( $? >> 8 );
+#         if ( 0 != $rc ) {
+#             SetError(
+#                 $STEP,
+#                 "copying reference leb36 profile file into reference profiles folder",
+#                 $rc
+#             );
+#             die "command exited with value $rc";
+#         }
+#     }
 
-        # enter result dir
-        if ( !chdir("${read_profiles_folder_clean}/result") ) {
-            { die("result directory does not exist!"); }
-        }
+    #     $exstring
+    #         = "${install_dir}/$PROCLU_EXECUTABLE" . " "
+    #         . "${reference_folder}/reference.leb36" . " "
+    #         . "$opts{REFERENCE_FILE}" . " "
+    #         . "${install_dir}/eucledian.dst" . " "
+    #         . $CLUST_PARAMS . " "
+    #         . 5
+    #         . " 0  -r 50 2> "
+    #         . "ref_to_ref.proclu_log";
+    #     print "\nrunning: $exstring\n";
+    #     system($exstring);
+    #     if ( $? == -1 ) {
+    #         SetError( $STEP, "command failed: $!", -1 );
+    #         die "command failed: $!\n";
+    #     }
+    #     else {
+    #         my $rc = ( $? >> 8 );
+    #         if ( 0 != $rc ) {
+    #             SetError( $STEP, "aligning ref-ref flanks failed", $rc );
+    #             die "command exited with value $rc";
+    #         }
+    #     }
 
-        # copy reference file to result dir
-        # TODO change so that referece file does not need to be in install dir
-        system("cp ${install_dir}/$opts{REFERENCE_FILE} .");
-        if ( $? == -1 ) {
-            SetError( $STEP, "command failed: $!", -1 );
-            die "command failed: $!\n";
-        }
-        else {
-            my $rc = ( $? >> 8 );
-            if ( 0 != $rc ) {
-                SetError(
-                    $STEP,
-                    "copying reference leb36 profile file into reference profiles folder",
-                    $rc
-                );
-                die "command exited with value $rc";
-            }
-        }
+    #     my $refclusfile = "$opts{REFERENCE_FILE}.clu";
+    #     system("mv $refclusfile ${install_dir}/");
+    #     if ( $? == -1 ) {
+    #         SetError( $STEP, "command failed: $!", -1 );
+    #         die "command failed: $!\n";
+    #     }
+    #     else {
+    #         my $rc = ( $? >> 8 );
+    #         if ( 0 != $rc ) {
+    #             SetError( $STEP, "aligning ref-ref flanks failed", $rc );
+    #             die "command exited with value $rc";
+    #         }
+    #     }
+    #     $refclusfile = "${install_dir}/$refclusfile";
 
-        $exstring
-            = "${install_dir}/$PROCLU_EXECUTABLE" . " "
-            . "${reference_folder}/reference.leb36" . " "
-            . "$opts{REFERENCE_FILE}" . " "
-            . "${install_dir}/eucledian.dst" . " "
-            . $CLUST_PARAMS . " "
-            . 5
-            . " 0  -r 50 2> "
-            . "ref_to_ref.proclu_log";
-        print "\nrunning: $exstring\n";
-        system($exstring);
-        if ( $? == -1 ) {
-            SetError( $STEP, "command failed: $!", -1 );
-            die "command failed: $!\n";
-        }
-        else {
-            my $rc = ( $? >> 8 );
-            if ( 0 != $rc ) {
-                SetError( $STEP, "aligning ref-ref flanks failed", $rc );
-                die "command exited with value $rc";
-            }
-        }
+    #     # create final indist file
+    #     my $indist_withpath = "${install_dir}/$opts{REFERENCE_INDIST}";
+    #     open my $tofile, ">", "$indist_withpath" or die $!;
+    #     open my $file,   "<", "$refclusfile"     or die $!;
+    #     while (<$file>) {
+    #         my @values = split( ' ', $_ );
+    #         my $repcount = @values - 1;
 
-        my $refclusfile = "$opts{REFERENCE_FILE}.clu";
-        system("mv $refclusfile ${install_dir}/");
-        if ( $? == -1 ) {
-            SetError( $STEP, "command failed: $!", -1 );
-            die "command failed: $!\n";
-        }
-        else {
-            my $rc = ( $? >> 8 );
-            if ( 0 != $rc ) {
-                SetError( $STEP, "aligning ref-ref flanks failed", $rc );
-                die "command exited with value $rc";
-            }
-        }
-        $refclusfile = "${install_dir}/$refclusfile";
+    #         my $i = 0;
+    #         foreach my $val (@values) {
 
-        # create final indist file
-        my $indist_withpath = "${install_dir}/$opts{REFERENCE_INDIST}";
-        open my $tofile, ">", "$indist_withpath" or die $!;
-        open my $file,   "<", "$refclusfile"     or die $!;
-        while (<$file>) {
-            my @values = split( ' ', $_ );
-            my $repcount = @values - 1;
+    #             $i++;
+    #             $val = trim($val);
 
-            my $i = 0;
-            foreach my $val (@values) {
+    #             if ( my $ch = ( $val =~ m/(\-*\d+)([\-\+])$/g ) ) {
+    #                 if ( $1 < 0 && $repcount > 2 ) {
+    #                     print $tofile $1 . "\n";
+    #                 }
+    #             }
 
-                $i++;
-                $val = trim($val);
+    #         }
 
-                if ( my $ch = ( $val =~ m/(\-*\d+)([\-\+])$/g ) ) {
-                    if ( $1 < 0 && $repcount > 2 ) {
-                        print $tofile $1 . "\n";
-                    }
-                }
+    #     }
+    #     close($file);
+    #     close($tofile);
 
-            }
+#     # remove working files
+#     system(
+#         "rm -f ${read_profiles_folder_clean}/result/$opts{REFERENCE_FILE} -f"
+#     );
+#     system(
+#         "rm -f ${read_profiles_folder_clean}/result/ref_to_ref.proclu_log -f"
+#     );
 
-        }
-        close($file);
-        close($tofile);
+    #     # go back to install dir
+    #     if ( !chdir("$install_dir") ) {
+    #         { die("Install directory does not exist!"); }
+    #     }
 
-        # remove working files
-        system(
-            "rm -f ${read_profiles_folder_clean}/result/$opts{REFERENCE_FILE} -f"
-        );
-        system(
-            "rm -f ${read_profiles_folder_clean}/result/ref_to_ref.proclu_log -f"
-        );
-
-        # go back to install dir
-        if ( !chdir("$install_dir") ) {
-            { die("Install directory does not exist!"); }
-        }
-
-      # update DB
-      # TODO Replace this with a script which simply sets the flank comparison
-      # parameters (apparently constant at max_errors = 5 and trim_to = 50, is
-      # this ever used??)
-        print STDERR "\n\n(updating database with dist/indist info)...";
-        $exstring = "./update_indist.pl";
-        my @exargs = ( qw(-r -k5 -t50 -d), $opts{DBSUFFIX}, "-u", $MSDIR );
-        system( $exstring, @exargs );
-        if ( $? == -1 ) {
-            SetError( $STEP, "command failed: $!", -1 );
-            die "command failed: $!\n";
-        }
-        else {
-            my $rc = ( $? >> 8 );
-            if ( 0 != $rc ) {
-                SetError( $STEP,
-                    "updating database with dist/undist info failed", $rc );
-                die "command exited with value $rc";
-            }
-        }
-    }
+  #   # update DB
+  #   # TODO Replace this with a script which simply sets the flank comparison
+  #   # parameters (apparently constant at max_errors = 5 and trim_to = 50, is
+  #   # this ever used??)
+  #     print STDERR "\n\n(updating database with dist/indist info)...";
+  #     $exstring = "./update_indist.pl";
+  #     my @exargs = ( qw(-r -k5 -t50 -d), $opts{DBSUFFIX}, "-u", $MSDIR );
+  #     system( $exstring, @exargs );
+  #     if ( $? == -1 ) {
+  #         SetError( $STEP, "command failed: $!", -1 );
+  #         die "command failed: $!\n";
+  #     }
+  #     else {
+  #         my $rc = ( $? >> 8 );
+  #         if ( 0 != $rc ) {
+  #             SetError( $STEP,
+  #                 "updating database with dist/undist info failed", $rc );
+  #             die "command exited with value $rc";
+  #         }
+  #     }
+  # }
 
     set_statistics( { TIME_MAP_REFFLANKS => time() - $timestart } );
     set_datetime("DATE_MAP_REFFLANKS");
@@ -1278,6 +1115,12 @@ if ( $STEP == 11 ) {
 if ( $STEP == 12 ) {
 
     $timestart = time();
+
+    system("rm -Rf ${read_profiles_folder_clean}/result");
+
+    if ( !mkdir("${read_profiles_folder_clean}/result") ) {
+        warn "\nWarning: Failed to create output result directory!\n";
+    }
 
     if ( !chdir("$install_dir") ) {
         { die("Install directory does not exist!"); }
@@ -1504,8 +1347,7 @@ if ( $STEP == 19 ) {
 # lets do this setdbstats again (sometimes when copying databases steps are omited so this might not have been executed)
     print STDERR "setting additional statistics...\n";
     system(
-        "./setdbstats.pl",             "$opts{REFERENCE_FILE}",
-        "$read_profiles_folder",       "$reference_folder",
+        "./setdbstats.pl",             "$read_profiles_folder",
         "$read_profiles_folder_clean", "$opts{DBSUFFIX}",
         "$MSDIR"
     );
