@@ -368,7 +368,7 @@ sub GetNextStep {
     my @vals      = @stat_hash{@stats};
     for ( my $idx = @vals - 1; $idx > 0; --$idx ) {
         return $idx
-            if $vals[$idx] ne "";
+            if (defined $vals[$idx] && $vals[$idx] ne "");
     }
 
     return 0;
