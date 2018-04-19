@@ -508,7 +508,7 @@ int main(int argc, char **argv)
 
         if (i != 1) {
             fclose(fp);
-            fputs("Could not read TRF header. Aborting.\n", stderr);
+            fputs("Could not read TRF header. No TRs in input?\n", stderr);
             return (14);
         }
 

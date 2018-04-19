@@ -3,12 +3,7 @@
 # THE SYSTEM FROM LEARNING YOUR MYSQL CREDENTIALS.
 
 # Database backend
-BACKEND=mysql
-
-# mysql credentials
-LOGIN=
-PASS=
-HOST=localhost
+BACKEND=sqlite
 
 # set this to the number of processors on your system 
 # (or less if sharing the system with others or RAM is limited)
@@ -86,10 +81,3 @@ REFERENCE_INDIST=t26__.indist
 # eg, 1 - generate
 # eg, 0 - don't generate
 REFERENCE_INDIST_PRODUCE=0
-
-# total number of reference TRs prior to filtering
-# this is a fixed number to be printed in the latex file
-# set to 0 if it is not applicable
-# eg, 1188939 - human
-REFS_TOTAL=1188939 
-

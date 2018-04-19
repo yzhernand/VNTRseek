@@ -13,16 +13,16 @@ use Data::Dumper;
 use lib "$FindBin::RealBin/lib";
 
 use vutil
-    qw(get_config get_dbh get_trunc_query stats_get set_statistics get_statistics);
+    qw(get_config get_dbh get_ref_dbh get_trunc_query stats_get set_statistics get_statistics);
 
 #use GD::Graph::linespoints;
 
 # Argument parsing & set up
 my $argc = @ARGV;
 
-if ( $argc < 12 ) {
+if ( $argc < 7 ) {
     die
-        "Usage: updaterefs.pl read_profiles_folder read_profiles_folder_clean dbname msdir file_representative latexfile REFS_TOTAL REFS_REDUND HTTPSERVER MIN_SUPPORT_REQUIRED VERSION TEMPDIR\n";
+        "Usage: updaterefs.pl read_profiles_folder read_profiles_folder_clean dbname msdir file_representative latexfile VERSION\n";
 }
 
 my $curdir        = getcwd;
@@ -32,17 +32,12 @@ my $DBSUFFIX      = $ARGV[2];
 my $MSDIR         = $ARGV[3];
 my $filerep       = $ARGV[4];
 my $result_prefix = $ARGV[5];
-
-my $REFS_TOTAL           = $ARGV[6];
-my $REFS_REDUND          = $ARGV[7];
-my $HTTPSERVER           = $ARGV[8];
-my $MIN_SUPPORT_REQUIRED = $ARGV[9];
-my $VERSION              = $ARGV[10];
-my $TEMPDIR              = $ARGV[11];
+my $VERSION       = $ARGV[6];
 
 # set these mysql credentials in vs.cnf (in installation directory)
 my %run_conf = get_config( $DBSUFFIX, $MSDIR . "vs.cnf" );
-my ( $LOGIN, $PASS, $HOST ) = @run_conf{qw(LOGIN PASS HOST)};
+my ( $LOGIN, $PASS, $HOST, $HTTPSERVER, $MIN_SUPPORT_REQUIRED, $TEMPDIR )
+    = @run_conf{qw(LOGIN PASS HOST SERVER MIN_SUPPORT_REQUIRED TMPDIR)};
 
 ############################ Procedures ###############################################################
 sub RC {
@@ -119,6 +114,59 @@ sub write_vcf_rec {
     }
 }
 
+####################################
+sub update_ref_table {
+    croak "update_ref_table requires two arguments"
+        unless @_ == 2;
+    my ( $ref, $update_sth ) = @_;
+    return
+        unless exists $ref->{refid};
+
+    if ( $ref->{readsum} >= 1 ) {
+        $ref->{span1} = 1;
+    }
+    if ( $ref->{readsum} >= $MIN_SUPPORT_REQUIRED ) {
+        $ref->{spanN} = 1;
+    }
+
+    # hetez_multi is true if there is support
+    # for more than one allele
+    # Other genotype classes can only be true if hetez_multi
+    # is false.
+    # TODO Add global config for ploidy. Replace '2'
+    # below with the value for the ploidy (eg, haploid == 1)
+    # Modify last branch to deal with special haploid case
+    if ( $ref->{nsupport} > 2 ) {
+        $ref->{hetez_multi} = 1;
+    }
+    elsif ( $ref->{nsupport} == 2 ) {
+        $ref->{hetez_same} = 1 * ( $ref->{nsameasref} );
+        $ref->{hetez_diff} = 1 * !( $ref->{nsameasref} );
+    }
+    elsif ( $ref->{nsupport} == 1 ) {
+        $ref->{homez_same} = 1 * ( $ref->{nsameasref} );
+        $ref->{homez_diff} = 1 * !( $ref->{nsameasref} );
+    }
+
+    $ref->{support_vntr}
+        = 1 * ($ref->{homez_diff}
+            || $ref->{hetez_same}
+            || $ref->{hetez_diff}
+            || $ref->{hetez_multi} );
+
+    warn "Updating fasta_ref_reps table with: ", Dumper($ref), "\n"
+        if ( $ENV{DEBUG} );
+    $update_sth->execute(
+        $ref->{refid},        $ref->{nsupport},
+        $ref->{nsameasref},   $ref->{entr},
+        $ref->{has_support},  $ref->{span1},
+        $ref->{spanN},        $ref->{homez_same},
+        $ref->{homez_diff},   $ref->{hetez_same},
+        $ref->{hetez_diff},   $ref->{hetez_multi},
+        $ref->{support_vntr}, $ref->{support_vntr_span1}
+    ) or die "Cannot execute: " . $update_sth->errstr;
+}
+
 #open (VCFFILE2, ">", "${latex}.span2.vcf") or die "Can't open for reading ${latex}.vcf.";
 
 ####################################
@@ -154,7 +202,7 @@ sub print_vcf {
         NUMBER_READS
         NUMBER_TRS_IN_READS);
     my $stat_hash = get_statistics(@stats);
-    my $dbh       = get_dbh();
+    my $dbh = get_dbh( { readonly => 1, userefdb => 1 } );
 
     # Get total number of TRs supported
     my $numsup_sth
@@ -186,13 +234,6 @@ sub print_vcf {
     if ( !defined $numsup ) {
         die "Error getting number of supported VNTRs: " . $dbh->errstr;
     }
-
-    # update spanN number on stats
-    my $update_spanN_sth
-        = $dbh->prepare('UPDATE stats SET NUMBER_REFS_VNTR_SPAN_N = ?;')
-        or die "Couldn't prepare statement: " . $dbh->errstr;
-    $update_spanN_sth->execute($numvntrs)
-        or die "Cannot execute: " . $update_spanN_sth->errstr();
 
     # $update_spanN_sth->finish;
     my $filename
@@ -231,14 +272,14 @@ sub print_vcf {
 
 # Get information on all VNTRs
 # "SELECT rid,alleles_sup,allele_sup_same_as_ref,is_singleton,is_dist,is_indist,firstindex,lastindex,copynum,pattern,clusterid,reserved,reserved2,head,sequence,flankleft,direction FROM fasta_ref_reps INNER JOIN clusterlnk ON fasta_ref_reps.rid=-clusterlnk.repeatid INNER JOIN clusters ON clusters.cid=clusterlnk.clusterid WHERE support_vntr>0 ORDER BY head, firstindex;"
-    $dbh->sqlite_create_function(
-        'mkflank',
-        2,
-        sub {
-            my ( $lflank, $rflank ) = @_;
-            return substr( $lflank, -60 ) . "|" . substr( $rflank, 0, 60 );
-        }
-    );
+# $dbh->sqlite_create_function(
+#     'mkflank',
+#     2,
+#     sub {
+#         my ( $lflank, $rflank ) = @_;
+#         return substr( $lflank, -60 ) . "|" . substr( $rflank, 0, 60 );
+#     }
+# );
     my $allwithsupport_clause
         = ( ($allwithsupport) ? "" : "WHERE support_vntr>0" );
     my $get_supported_reftrs_query
@@ -410,7 +451,7 @@ sub print_distr {
     print $distrfh
         "\n\nPatternSize, All, Span1, PercentageS1, Span${MIN_SUPPORT_REQUIRED}, PercentageS${MIN_SUPPORT_REQUIRED}, VntrSpan${MIN_SUPPORT_REQUIRED}, PercentageVS${MIN_SUPPORT_REQUIRED}\n";
 
-    my $dbh = get_dbh();
+    my $dbh = get_dbh( { readonly => 1, userefdb => 1 } );
 
     # 1 patsize (all)
     my $sth = $dbh->prepare(
@@ -1345,7 +1386,7 @@ sub print_latex {
         CLUST_NUMBER_OF_REFS_WITH_PREDICTED_VNTR);
     my $stat_hash = get_statistics(@stats);
 
-    my $dbh = get_dbh();
+    my $dbh = get_dbh( { readonly => 1, userefdb => 1 } );
     my $sth = $dbh->prepare(
         q{SELECT sum(has_support),sum(span1),sum(spanN),sum(homez_same),sum(homez_diff),
             sum(hetez_same),sum(hetez_diff),sum(hetez_multi),sum(support_vntr)
@@ -1424,10 +1465,6 @@ sub print_latex {
             = $data[0];    # INITIAL READ-TRs RDE GE7 PC ADDBACK MAP TIE-OK
     }
     $sth->finish();
-
-    my $totalRefTRs = $REFS_TOTAL;    # INITIAL REF-TRs (hard coded variable)
-    my $refTRsAfterRedundancyElimination
-        = $REFS_REDUND;               # another hard coded variable
 
     my $refTRsAREWithPatternGE7
         = $stat_hash->{NUMBER_REF_TRS};    # INITIAL REF-TRs RDE GE7
@@ -1534,43 +1571,6 @@ sub print_latex {
     }
     $sth->finish();
 
-    my $mapped;
-    my $rank;
-    my $rankfank;
-    my $data;
-
-    $sth = $dbh->prepare("SELECT count(*) FROM map;")
-        or die "Couldn't prepare statement: " . $dbh->errstr;
-    $sth->execute() or die "Cannot execute: " . $sth->errstr();
-    if ( my @data = $sth->fetchrow_array() ) {
-        $mapped = $data[0];
-    }
-    $sth->finish();
-
-    $sth = $dbh->prepare("SELECT count(*) FROM rank;")
-        or die "Couldn't prepare statement: " . $dbh->errstr;
-    $sth->execute() or die "Cannot execute: " . $sth->errstr();
-    if ( my @data = $sth->fetchrow_array() ) {
-        $rank = $data[0];
-    }
-    $sth->finish();
-
-    $sth = $dbh->prepare("SELECT count(*) FROM rankflank;")
-        or die "Couldn't prepare statement: " . $dbh->errstr;
-    $sth->execute() or die "Cannot execute: " . $sth->errstr();
-    my $rankflank;
-    if ( my @data = $sth->fetchrow_array() ) {
-        $rankflank = $data[0];
-    }
-    $sth->finish();
-
-    $sth
-        = $dbh->prepare(
-        "UPDATE stats SET NUMBER_MAPPED=$mapped, NUMBER_RANK=$rank, NUMBER_RANKFLANK = $rankflank;"
-        ) or die "Couldn't prepare statement: " . $dbh->errstr;
-    $sth->execute() or die "Cannot execute: " . $sth->errstr();
-    $sth->finish;
-
     my $VNTRasSingleton
         = -666;    # INITIAL REF-TRs RDE GE7 PC ADDBACK MAP SINGLETON VNTR
     my $VNTRasDistinguishable
@@ -1642,9 +1642,6 @@ sub print_latex {
     my $form_readTRsMappedToIndistinguishable
         = commify($readTRsMappedToIndistinguishable);
 
-    my $form_totalRefTRs = commify($totalRefTRs);
-    my $form_refTRsAfterRedundancyElimination
-        = commify($refTRsAfterRedundancyElimination);
     my $form_refTRsAREWithPatternGE7 = commify($refTRsAREWithPatternGE7);
     my $form_refTRsAREWPGE7AfterCyclicRedundancyElimination
         = commify($refTRsAREWPGE7AfterCyclicRedundancyElimination);
@@ -1890,7 +1887,7 @@ sub print_latex {
             . "\n&&Input&&\\\\"
             . "\n&Total&(After Filters)&Mapped&\\%%\\\\"
             . "\n\\hline"
-            . "\nReference TRs&%s&%s&%s&%s\\\\"
+            . "\nReference TRs&---&%s&%s&%s\\\\"
             . "\n\\hline"
             . "\nRead TRs&%s&%s&%s&%s\\\\"
             . "\n\\hline"
@@ -1941,7 +1938,6 @@ sub print_latex {
             . "\n\\caption{{\\bf VNTRseek Results.} }"
             . "\n\\label{table:mapping and mapped by reference category}"
             . "\n\\end{table}\%%" . "\n",
-        $form_totalRefTRs,
         $form_refTRsAREWithPatternGE7,
         $form_refTRsMapped,
         $percentRefTRsMapped,
@@ -2070,76 +2066,77 @@ my $dbh = get_dbh()
 
 # create temp table for updates
 my $query;
-my $TEMPFILE;
-if ( $run_conf{BACKEND} eq "mysql" ) {
-    $dbh->do(
-        q{UPDATE main.fasta_ref_reps
-        SET alleles_sup=0,allele_sup_same_as_ref=0,entropy=0,has_support=0,span1=0,
-            spanN=0,homez_same=0,homez_diff=0,hetez_same=0,hetez_diff=0,
-            hetez_multi=0,support_vntr=0,support_vntr_span1=0}
-    ) or die "Couldn't do statement: " . $dbh->errstr;
-    $query = q{CREATE TEMPORARY TABLE updtable (
-    `rid` INT(11) NOT NULL PRIMARY KEY,
-    `alleles_sup` INT(11) NULL,
-    `allele_sup_same_as_ref` INT(11) NULL,
-    `entropy` FLOAT(11) NOT NULL,
-    `has_support` INT(11) NULL,
-    `span1` INT(11) NULL,
-    `spanN` INT(11) NULL,
-    `homez_same` INT(11) NULL,
-    `homez_diff` INT(11) NULL,
-    `hetez_same` INT(11) NULL,
-    `hetez_diff` INT(11) NULL,
-    `hetez_multi` INT(11) NULL,
-    `support_vntr` INT(11) NULL,
-    `support_vntr_span1` INT(11) NULL
-    ) ENGINE=INNODB};
-    $dbh->do($query)
-        or die "Couldn't do statement: " . $dbh->errstr;
-    $dbh->prepare('ALTER TABLE updtable DISABLE KEYS;')
-        or die "Couldn't prepare statement: " . $dbh->errstr;
 
-    # to make insertions faster
-    $dbh->prepare('SET AUTOCOMMIT = 0;')
-        or die "Couldn't prepare statement: " . $dbh->errstr;
+$dbh->do("PRAGMA foreign_keys = OFF");
+$dbh->do( get_trunc_query( $run_conf{BACKEND}, "main.fasta_ref_reps" ) )
+    or die "Couldn't do statement: " . $dbh->errstr;
 
-    $dbh->prepare('SET FOREIGN_KEY_CHECKS = 0;')
-        or die "Couldn't prepare statement: " . $dbh->errstr;
+# warn "\nTurning off AutoCommit\n";
+$dbh->begin_work;
 
-    $dbh->prepare('SET UNIQUE_CHECKS = 0;')
-        or die "Couldn't prepare statement: " . $dbh->errstr;
-    open( $TEMPFILE, ">$TEMPDIR/updaterefs_$DBSUFFIX.txt" ) or die $!;
-    $query = q{LOAD DATA LOCAL INFILE '$TEMPDIR/updaterefs_$DBSUFFIX.txt'
-    INTO TABLE updtable FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n'};
-}
-elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-    $dbh->do("PRAGMA foreign_keys = OFF");
-    $dbh->do( get_trunc_query( $run_conf{BACKEND}, "main.fasta_ref_reps" ) )
-        or die "Couldn't do statement: " . $dbh->errstr;
-
-    # warn "\nTurning off AutoCommit\n";
-    $dbh->{AutoCommit} = 0;
-
-    # my $placeholders = join ",", ("?") x 14;
-    # $query = qq{INSERT INTO updtable VALUES($placeholders)};
-    # For SQLite we'll just update fasta_ref_reps immediately.
-    $query = qq{INSERT INTO main.fasta_ref_reps
+# my $placeholders = join ",", ("?") x 14;
+# $query = qq{INSERT INTO updtable VALUES($placeholders)};
+# For SQLite we'll just update fasta_ref_reps immediately.
+$query = qq{INSERT INTO main.fasta_ref_reps
         (rid, alleles_sup, allele_sup_same_as_ref, entropy,
             has_support, span1, spanN, homez_same, homez_diff,
             hetez_same, hetez_diff, hetez_multi, support_vntr,
             support_vntr_span1)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     };
-}
 
 ##############################
 
-my $sth1 = $dbh->prepare($query)
+my $update_ref_table_sth = $dbh->prepare($query)
     or die "Couldn't prepare statement: " . $dbh->errstr;
 
-my $sth = $dbh->prepare(
+# Select all refids from vntr_support table.
+# Must negate refid to match.
+our $supported_refs = $dbh->selectcol_arrayref(
+    q{SELECT -refid
+    FROM vntr_support}
+) or die "Couldn't select from supported VNTRs: " . $dbh->errstr;
+
+( $ENV{DEBUG} )
+    && warn "Supported ref tr ids:\n"
+    . Dumper($supported_refs) . "\n";
+
+# Connect to refdb
+my $ref_dbh = get_ref_dbh(
+    @run_conf{qw( REFERENCE_SEQ REFERENCE_FILE REFERENCE_INDIST )}, 0 );
+
+# register the module and declare the virtual table
+$ref_dbh->sqlite_create_module(
+    perl => "DBD::SQLite::VirtualTable::PerlData" );
+$ref_dbh->do(
+    q{CREATE VIRTUAL TABLE temp.vntr_support
+    USING perl(rid INT, colref="main::supported_refs")}
+);
+
+# now we can SELECT from reference TR table, using the virtual table
+# as a constraint.
+our $supported_reftr_patterns = $ref_dbh->selectall_arrayref(
+    q{SELECT rid, pattern
+    FROM fasta_ref_reps INNER JOIN vntr_support USING (rid)
+    ORDER BY rid ASC}
+    )
+    or die "Couldn't get supported VNTR patterns from reference DB: "
+    . $ref_dbh->errstr;
+$ref_dbh->disconnect;
+
+( $ENV{DEBUG} )
+    && warn "Supported ref tr patterns:\n"
+    . Dumper($supported_reftr_patterns) . "\n";
+
+$dbh->sqlite_create_module( perl => "DBD::SQLite::VirtualTable::PerlData" );
+$dbh->do(
+    q{CREATE VIRTUAL TABLE temp.supported_vntr_data
+    USING perl(rid INT, pattern TEXT, arrayrefs="main::supported_reftr_patterns")}
+);
+
+my $get_supported_reftrs_sth = $dbh->prepare(
     q{SELECT rid,pattern,copies,sameasref,support
-    FROM refdb.fasta_ref_reps reftab INNER JOIN vntr_support ON reftab.rid=-vntr_support.refid
+    FROM supported_vntr_data INNER JOIN vntr_support ON (rid=-refid)
     ORDER BY rid ASC}
 ) or die "Couldn't prepare statement: " . $dbh->errstr;
 
@@ -2155,77 +2152,14 @@ my $ref;
 
 # my $refid = -1;
 my $entr;
-$sth->execute() or die "Cannot execute: " . $sth->errstr();
+$get_supported_reftrs_sth->execute()
+    or die "Cannot execute: " . $get_supported_reftrs_sth->errstr();
 $i = 0;
-while ( my @data = $sth->fetchrow_array() ) {
+while ( my @data = $get_supported_reftrs_sth->fetchrow_array() ) {
     warn "Row $i: ", join( ", ", @data ), "\n"
         if ( $ENV{DEBUG} );
     if ( ( !exists $ref->{refid} ) || ( $ref->{refid} != $data[0] ) ) {
-        if ( exists $ref->{refid} ) {
-            if ( $ref->{readsum} >= 1 ) {
-                $ref->{span1} = 1;
-            }
-            if ( $ref->{readsum} >= $MIN_SUPPORT_REQUIRED ) {
-                $ref->{spanN} = 1;
-            }
-
-            if ( $ref->{nsupport} == 1 && $ref->{nsameasref} > 0 ) {
-                $ref->{homez_same} = 1;
-            }
-            elsif ( $ref->{nsupport} == 1 && 0 == $ref->{nsameasref} ) {
-                $ref->{homez_diff} = 1;
-            }
-            elsif ( $ref->{nsupport} >= 2 && $ref->{nsameasref} > 0 ) {
-                $ref->{hetez_same} = 1;
-            }
-            elsif ( $ref->{nsupport} >= 2 && 0 == $ref->{nsameasref} ) {
-                $ref->{hetez_diff} = 1;
-            }
-
-            if ( $ref->{nsupport} > 2 ) {
-                $ref->{homez_same}  = 0;
-                $ref->{homez_diff}  = 0;
-                $ref->{hetez_same}  = 0;
-                $ref->{hetez_diff}  = 0;
-                $ref->{hetez_multi} = 1;
-            }
-
-            if (   $ref->{homez_diff}
-                || $ref->{hetez_same}
-                || $ref->{hetez_diff}
-                || $ref->{hetez_multi} )
-            {
-                $ref->{support_vntr} = 1;
-            }
-
-            if ( $run_conf{BACKEND} eq "mysql" ) {
-                print $TEMPFILE $ref->{refid}, ",", $ref->{nsupport}, ",",
-                    $ref->{nsameasref}, ",",
-                    $ref->{entr},
-                    ",", $ref->{has_support}, ",", $ref->{span1}, ",",
-                    $ref->{spanN}, ",", $ref->{homez_same},
-                    ",",
-                    $ref->{homez_diff}, ",", $ref->{hetez_same}, ",",
-                    $ref->{hetez_diff}, ",",
-                    $ref->{hetez_multi},
-                    ",", $ref->{support_vntr}, ",",
-                    $ref->{support_vntr_span1}, "\n";
-            }
-            elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-                warn "Updating fasta_ref_reps table with: ", Dumper($ref),
-                    "\n"
-                    if ( $ENV{DEBUG} );
-                $sth1->execute(
-                    $ref->{refid},        $ref->{nsupport},
-                    $ref->{nsameasref},   $ref->{entr},
-                    $ref->{has_support},  $ref->{span1},
-                    $ref->{spanN},        $ref->{homez_same},
-                    $ref->{homez_diff},   $ref->{hetez_same},
-                    $ref->{hetez_diff},   $ref->{hetez_multi},
-                    $ref->{support_vntr}, $ref->{support_vntr_span1}
-                ) or die "Cannot execute: " . $sth1->errstr;
-            }
-        }
+        update_ref_table( $ref, $update_ref_table_sth );
 
         # Note: refid is positive
         $ref = {
@@ -2246,39 +2180,12 @@ while ( my @data = $sth->fetchrow_array() ) {
             support_vntr_span1 => 0
         };
 
-        # $entr = calc_entropy( $data[1] );
-        # $ref->{refid} = $data[0];
         $i++;
     }
 
-    #print $i . " " . $data[0]. " " . $entr . " " . $data[1]."\n";
-
-    # $sth6->execute( -$data[0] ) or die "Cannot execute: " . $sth6->errstr();
-
-    # my $allele_sup_same_as_ref = 0;
-
-    # my $homez_same   = 0;
-    # my $homez_diff   = 0;
-    # my $hetez_same   = 0;
-    # my $hetez_diff   = 0;
-    # my $hetez_multi  = 0;
-    # my $support_vntr = 0;
-    # my $span1        = 0;
-    # my $spanN        = 0;
-
-    # my $nsupport    = 0;
-    # my $has_support = 0;
-    # my $nsameasref  = 0;
-    # my $readsum     = 0;
-
-    # my $support_vntr_span1 = 0;
-
-    # while ( my @data2 = $sth6->fetchrow_array() ) {
     my $copies    = $data[2];
     my $sameasref = $data[3];
     my $support   = $data[4];
-
-    #print "\n-$data[0] $data2[0] $data2[1] $data2[2]";
 
     if ( $support >= $MIN_SUPPORT_REQUIRED ) {
 
@@ -2297,139 +2204,19 @@ while ( my @data = $sth->fetchrow_array() ) {
     }
 
     $ref->{readsum} += $support;
-
-    # $j++;
-    # }
 }
 
-my $refsInRefsTable = $sth->rows;
-$sth->finish;
+my $refsInRefsTable = $get_supported_reftrs_sth->rows;
+$get_supported_reftrs_sth->finish;
 
 # $sth6->finish;
 my $updfromtable;
 
-if ( $run_conf{BACKEND} eq "mysql" ) {
-
-    # load the file into temp table
-    close($TEMPFILE);
-    $sth1->execute();
-    $dbh->do('ALTER TABLE updtable ENABLE KEYS;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-    $query = q{UPDATE updtable p, fasta_ref_reps pp
-    SET pp.alleles_sup = p.alleles_sup, pp.allele_sup_same_as_ref=p.allele_sup_same_as_ref,
-        pp.entropy=p.entropy, pp.has_support=p.has_support, pp.span1=p.span1,
-        pp.spanN=p.spanN, pp.homez_same=p.homez_same, pp.homez_diff=p.homez_diff,
-        pp.hetez_same = p.hetez_same, pp.hetez_diff = p.hetez_diff,
-        pp.hetez_multi=p.hetez_multi, pp.support_vntr=p.support_vntr,
-        pp.support_vntr_span1=p.support_vntr_span1
-    WHERE pp.rid = p.rid};
-
-    # update based on temp table
-    $updfromtable = $dbh->do($query);
-}
-elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-
-    # Insert last row:
-    if ( $ref->{readsum} >= 1 ) {
-        $ref->{span1} = 1;
-    }
-    if ( $ref->{readsum} >= $MIN_SUPPORT_REQUIRED ) {
-        $ref->{spanN} = 1;
-    }
-
-    if ( $ref->{nsupport} == 1 && $ref->{nsameasref} > 0 ) {
-        $ref->{homez_same} = 1;
-    }
-    elsif ( $ref->{nsupport} == 1 && 0 == $ref->{nsameasref} ) {
-        $ref->{homez_diff} = 1;
-    }
-    elsif ( $ref->{nsupport} >= 2 && $ref->{nsameasref} > 0 ) {
-        $ref->{hetez_same} = 1;
-    }
-    elsif ( $ref->{nsupport} >= 2 && 0 == $ref->{nsameasref} ) {
-        $ref->{hetez_diff} = 1;
-    }
-
-    if ( $ref->{nsupport} > 2 ) {
-        $ref->{homez_same}  = 0;
-        $ref->{homez_diff}  = 0;
-        $ref->{hetez_same}  = 0;
-        $ref->{hetez_diff}  = 0;
-        $ref->{hetez_multi} = 1;
-    }
-
-    if (   $ref->{homez_diff}
-        || $ref->{hetez_same}
-        || $ref->{hetez_diff}
-        || $ref->{hetez_multi} )
-    {
-        $ref->{support_vntr} = 1;
-    }
-
-    if ( $run_conf{BACKEND} eq "mysql" ) {
-        print $TEMPFILE $ref->{refid}, ",", $ref->{nsupport}, ",",
-            $ref->{nsameasref}, ",",
-            $ref->{entr},
-            ",", $ref->{has_support}, ",", $ref->{span1}, ",",
-            $ref->{spanN}, ",", $ref->{homez_same},
-            ",",
-            $ref->{homez_diff}, ",", $ref->{hetez_same}, ",",
-            $ref->{hetez_diff}, ",",
-            $ref->{hetez_multi},
-            ",", $ref->{support_vntr}, ",",
-            $ref->{support_vntr_span1}, "\n";
-    }
-    elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-        warn "Updating fasta_ref_reps table with: ", Dumper($ref), "\n"
-            if ( $ENV{DEBUG} );
-        $sth1->execute(
-            $ref->{refid},        $ref->{nsupport},
-            $ref->{nsameasref},   $ref->{entr},
-            $ref->{has_support},  $ref->{span1},
-            $ref->{spanN},        $ref->{homez_same},
-            $ref->{homez_diff},   $ref->{hetez_same},
-            $ref->{hetez_diff},   $ref->{hetez_multi},
-            $ref->{support_vntr}, $ref->{support_vntr_span1}
-        ) or die "Cannot execute: " . $sth1->errstr;
-    }
-    $dbh->commit;
-
-# $query = q{CREATE TEMPORARY VIEW `fasta_ref_reps_tmp`
-#     AS SELECT t1.rid AS rid, t2.entropy AS entropy,
-#     t2.has_support AS has_support, t2.span1 AS span1, t2.spanN AS spanN,
-#     t2.homez_same AS homez_same, t2.homez_diff AS homez_diff,
-#     t2.hetez_same AS hetez_same, t2.hetez_diff AS hetez_diff,
-#     t2.hetez_multi AS hetez_multi, t2.support_vntr AS support_vntr,
-#     t2.support_vntr_span1 AS support_vntr_span1, t2.alleles_sup AS alleles_sup,
-#     t2.allele_sup_same_as_ref AS allele_sup_same_as_ref
-#     FROM fasta_ref_reps t1 INNER JOIN updtable t2 ON t1.rid = t2.rid};
-# $dbh->do($query)
-#     or die "Error in do statement: " . $dbh->errstr;
-# ($updfromtable) = $dbh->selectrow_array(q{SELECT COUNT(*) FROM fasta_ref_reps_tmp});
-
-    # $query = q{INSERT OR REPLACE INTO fasta_ref_reps
-    #     (entropy,
-    #     has_support, span1, spanN,
-    #     homez_same, homez_diff,
-    #     hetez_same, hetez_diff,
-    #     hetez_multi, support_vntr,
-    #     support_vntr_span1, alleles_sup,
-    #     allele_sup_same_as_ref)
-    #     SELECT entropy,
-    #     has_support, span1, spanN,
-    #     homez_same, homez_diff,
-    #     hetez_same, hetez_diff,
-    #     hetez_multi, support_vntr,
-    #     support_vntr_span1, alleles_sup,
-    #     allele_sup_same_as_ref
-    #     FROM fasta_ref_reps_tmp t2
-    #     WHERE fasta_ref_reps.rid = t2.rid};
-    # $dbh->do($query)
-    #     or die "Error in do statement: " . $dbh->errstr;
-    $updfromtable = $refsInRefsTable;
-}
-
+# Insert last row:
+update_ref_table( $ref, $update_ref_table_sth );
 $dbh->commit;
+
+$updfromtable = $refsInRefsTable;
 
 if ( $updfromtable != $refsInRefsTable ) {
     die
@@ -2467,13 +2254,21 @@ unlink("$TEMPDIR/updaterefs_$DBSUFFIX.txt");
 #$sth4->finish;
 
 # updating stats table
+$dbh->begin_work;
 print STDERR "Updating stats table...\n";
-my $sth2
-    = $dbh->prepare(
-    "UPDATE stats SET NUMBER_REFS_SINGLE_REF_CLUSTER_WITH_READS_MAPPED=(select count(*) FROM (select count(*) as thecount from clusterlnk where repeatid<0 group by clusterid having thecount=1) f);"
-    ) or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth2->execute() or die "Cannot execute: " . $sth2->errstr();
-$sth2->finish;
+my $update_stats_sth = $dbh->prepare(
+    q{UPDATE stats SET NUMBER_REFS_SINGLE_REF_CLUSTER_WITH_READS_MAPPED=(
+    select count(*)
+        FROM (
+            select count(*) as thecount
+            from clusterlnk
+            where repeatid<0 group by clusterid having thecount=1
+        ) f
+    )}
+) or die "Couldn't prepare statement: " . $dbh->errstr;
+$update_stats_sth->execute()
+    or die "Cannot execute: " . $update_stats_sth->errstr();
+$update_stats_sth->finish;
 
 # create singlton entries
 #$sth2 = $dbh->prepare("CREATE TEMPORARY TABLE tempmap (rid int  PRIMARY KEY);")
@@ -2501,61 +2296,76 @@ $sth2->finish;
 #$sth2->execute() or die "Cannot execute: " . $sth2->errstr();;
 #$sth2->finish;
 
-$sth2 = $dbh->prepare('CREATE TABLE t1 (c1 INT PRIMARY KEY NOT NULL);')
-    or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth2->execute() or die "Cannot execute: " . $sth2->errstr();
-$sth2->finish;
+$dbh->do('CREATE TABLE t1 (c1 INT PRIMARY KEY NOT NULL);')
+    or die "Couldn't do statement: " . $dbh->errstr;
 
-$sth2
-    = $dbh->prepare(
-    'insert into t1 select urefid from (select count(*) as thecount,max(repeatid) as urefid from clusterlnk where repeatid<0 group by clusterid having thecount=1) f;'
-    ) or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth2->execute() or die "Cannot execute: " . $sth2->errstr();
-$sth2->finish;
+my $sth = $dbh->prepare(
+    q{insert into t1 select urefid
+    from (
+        select count(*) as thecount,max(repeatid) as urefid
+        from clusterlnk
+        where repeatid<0
+        group by clusterid
+        having thecount=1
+    ) f}
+) or die "Couldn't prepare statement: " . $dbh->errstr;
+$sth->execute() or die "Cannot execute: " . $sth->errstr();
 
-$sth2
-    = $dbh->prepare(
-    'UPDATE stats SET NUMBER_REFS_SINGLE_REF_CLUSTER = (select count(distinct repeatid) FROM clusterlnk  WHERE repeatid IN (select c1 from t1));'
-    ) or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth2->execute() or die "Cannot execute: " . $sth2->errstr();
-$sth2->finish;
+$sth = $dbh->prepare(
+    q{UPDATE stats SET NUMBER_REFS_SINGLE_REF_CLUSTER = (
+        select count(distinct repeatid)
+        FROM clusterlnk 
+        WHERE repeatid IN (select c1 from t1)
+    )}
+) or die "Couldn't prepare statement: " . $dbh->errstr;
+$sth->execute() or die "Cannot execute: " . $sth->errstr();
 
-$sth2
+$sth
     = $dbh->prepare(
     'UPDATE stats SET NUMBER_REFS_SINGLE_REF_CLUSTER_WITH_READS_MAPPED = (select count(distinct map.refid) FROM clusterlnk INNER JOIN map ON map.refid=-clusterlnk.repeatid WHERE repeatid IN (select c1 from t1));'
     ) or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth2->execute() or die "Cannot execute: " . $sth2->errstr();
-$sth2->finish;
+$sth->execute() or die "Cannot execute: " . $sth->errstr();
 
-$sth2 = $dbh->prepare('drop table t1;')
+$sth = $dbh->prepare('drop table t1;')
     or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth2->execute() or die "Cannot execute: " . $sth2->errstr();
-$sth2->finish;
+$sth->execute() or die "Cannot execute: " . $sth->errstr();
 
-$sth2
+$sth
     = $dbh->prepare(
     "UPDATE stats SET NUMBER_REFS_SINGLE_REF_CLUSTER_WITH_NO_READS_MAPPED = NUMBER_REFS_SINGLE_REF_CLUSTER - NUMBER_REFS_SINGLE_REF_CLUSTER_WITH_READS_MAPPED;"
     ) or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth2->execute() or die "Cannot execute: " . $sth2->errstr();
-$sth2->finish;
+$sth->execute() or die "Cannot execute: " . $sth->errstr();
+
+# Update last few stats:
+my ( $mapped, $rank, $rankflank, $num_spanN );
+
+($mapped) = $dbh->selectrow_array(q{SELECT count(*) FROM map})
+    or die "Couldn't select map count: " . $dbh->errstr;
+
+($rank) = $dbh->selectrow_array(q{SELECT count(*) FROM rank})
+    or die "Couldn't select rank count: " . $dbh->errstr;
+
+($rankflank) = $dbh->selectrow_array(q{SELECT count(*) FROM rankflank})
+    or die "Couldn't select rankflank count: " . $dbh->errstr;
+
+# update spanN number on stats
+($num_spanN) = $dbh->selectrow_array(q{SELECT count(*) FROM fasta_ref_reps 
+    WHERE support_vntr > 0})
+    or die "Couldn't select span N count: " . $dbh->errstr;
+
+$dbh->do(
+    qq{UPDATE stats SET
+        NUMBER_MAPPED=$mapped,
+        NUMBER_RANK=$rank,
+        NUMBER_RANKFLANK = $rankflank,
+        NUMBER_REFS_VNTR_SPAN_N = $num_spanN}
+) or die "Couldn't do statement: " . $dbh->errstr;
 
 # set old db settings
-if ( $run_conf{BACKEND} eq "mysql" ) {
-    $sth = $dbh->do('SET AUTOCOMMIT = 1;')
-        or die "Couldn't do statement: " . $dbh->errstr;
+$dbh->do("PRAGMA foreign_keys = ON");
 
-    $sth = $dbh->do('SET FOREIGN_KEY_CHECKS = 1;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-
-    $sth = $dbh->do('SET UNIQUE_CHECKS = 1;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-}
-elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-    $dbh->do("PRAGMA foreign_keys = ON");
-    $dbh->{AutoCommit} = 1;
-}
-
-$dbh->disconnect();
+$dbh->commit;
+$dbh->disconnect;
 
 warn "Producing output LaTeX file...\n";
 print_latex($ReadTRsSupport);

@@ -13,7 +13,7 @@ if ( $ENV{DEBUG} ) {
 
 use base 'Exporter';
 our @EXPORT_OK
-    = qw(read_config_file get_config set_config set_credentials get_dbh write_mysql make_refseq_db load_refprofiles_db run_redund write_sqlite set_statistics get_statistics stats_get set_datetime print_config trim create_blank_file get_trunc_query);
+    = qw(read_config_file get_config set_config set_credentials get_dbh get_ref_dbh write_mysql make_refseq_db load_refprofiles_db run_redund write_sqlite set_statistics get_statistics stats_get set_datetime print_config trim create_blank_file get_trunc_query);
 
 # vutil.pm
 # author: Yevgeniy Gelfand
@@ -46,9 +46,7 @@ sub read_config_file {
     unless (@_) { die "read_config_file: expects 1 parameters.\n"; }
     my $file_loc = shift;
 
-    if ( $ENV{DEBUG} ) {
-        warn "Reading configuration file: $file_loc\n";
-    }
+    ( $ENV{DEBUG} ) && warn "Reading configuration file: $file_loc\n";
 
     # read global config
     if ( open( my $cnf, "<", "$file_loc" ) ) {
@@ -97,6 +95,8 @@ sub get_config {
         # Set VSREAD;
         $VSREAD = 1;
         $VSCNF_FILE{DBSUFFIX} = $dbsuffix;
+        ( $VSCNF_FILE{REFERENCE_DB} = $VSCNF_FILE{REFERENCE_SEQ} )
+            =~ s/.seq$/.db/;
     }
 
     return %VSCNF_FILE;
@@ -110,24 +110,6 @@ sub set_config {
     unless ( $in_hash{SERVER} ) {
         croak(
             "Please set machine name (SERVER) variable on the command line or in the configuration file.\n"
-        );
-    }
-
-    if ( $in_hash{BACKEND} ne "sqlite" && !( $in_hash{LOGIN} ) ) {
-        croak(
-            "Please set  mysql login (LOGIN) variable on the command line or in the configuration file.\n"
-        );
-    }
-
-    if ( $in_hash{BACKEND} ne "sqlite" && !( $in_hash{PASS} ) ) {
-        croak(
-            "Please set mysql pass (PASS) variable on the command line or in the configuration file.\n"
-        );
-    }
-
-    if ( $in_hash{BACKEND} ne "sqlite" && !( $in_hash{HOST} ) ) {
-        croak(
-            "Please set mysql host (HOST) variable on the command line or in the configuration file.\n"
         );
     }
 
@@ -170,12 +152,6 @@ sub set_config {
     if ( $in_hash{IS_PAIRED_READS} < 0 ) {
         croak(
             "Please set is_paired_reads (is_paired_reads) variable on the command line or in the configuration file.\n"
-        );
-    }
-
-    if ( $in_hash{REFS_TOTAL} < 0 ) {
-        croak(
-            "Please set refs total (REFS_TOTAL) variable on the command line or in the configuration file.\n"
         );
     }
 
@@ -294,17 +270,12 @@ sub set_statistics {
 # }
 
     my $stats = shift;
-    my $dbh   = get_dbh( $VSCNF_FILE{DBSUFFIX},
-        $ENV{HOME} . "/" . $VSCNF_FILE{DBSUFFIX} . ".vs.cnf" );
+    my $dbh   = get_dbh();
     my ( $sql_clause, @sql_qual, @sql_bind );
-    if ( $ENV{DEBUG} ) {
-        warn Dumper( $stats ) . "\n";
-    }
+    ( $ENV{DEBUG} ) && warn Dumper($stats) . "\n";
 
     while ( my ( $key, $val ) = each %$stats ) {
-        if ( $ENV{DEBUG} ) {
-            warn "Setting stat: $key to $val\n";
-        }
+        ( $ENV{DEBUG} ) && warn "Setting stat: $key to $val\n";
         push @sql_qual, "$key=?";
         push @sql_bind, $val;
     }
@@ -331,7 +302,7 @@ sub set_datetime {
     my $NAME = shift;
     my $VALUE = strftime( "%F %T", localtime );
 
-    return set_statistics( {$NAME, $VALUE} );
+    return set_statistics( { $NAME, $VALUE } );
 }
 
 ####################################
@@ -348,17 +319,12 @@ sub get_statistics {
 
     # my $DBSUFFIX = shift;
     my @stats = @_;
-    my $dbh   = get_dbh( $VSCNF_FILE{DBSUFFIX},
-        $ENV{HOME} . "/" . $VSCNF_FILE{DBSUFFIX} . ".vs.cnf" );
+    my $dbh   = get_dbh();
     my $sql_clause;
-    if ( $ENV{DEBUG} ) {
-        warn Dumper( \@stats ) . "\n";
-    }
+    ( $ENV{DEBUG} ) && warn Dumper( \@stats ) . "\n";
 
     $sql_clause = join ", ", @stats;
-    if ( $ENV{DEBUG} ) {
-        warn "Getting stats: " . $sql_clause . "\n";
-    }
+    ( $ENV{DEBUG} ) && warn "Getting stats: " . $sql_clause . "\n";
 
     my $sql_res = $dbh->selectrow_hashref("SELECT $sql_clause FROM stats")
         or croak "Couldn't execute statement: " . $dbh->errstr;
@@ -384,7 +350,7 @@ sub stats_get {
     my $NAME     = $_[4];
     my $VALUE    = undef;
 
-    my $dbh = get_dbh( $DBSUFFIX, $ENV{HOME} . "/" . $DBSUFFIX . ".vs.cnf" );
+    my $dbh = get_dbh();
 
     # check if database exists first, return undef if not
     unless ($dbh) {
@@ -409,9 +375,7 @@ sub stats_get {
     $sth->finish;
 
     if ( !defined $VALUE ) { $VALUE = ""; }
-    if ( $ENV{DEBUG} ) {
-        warn "$NAME stat is $VALUE\n";
-    }
+    ( $ENV{DEBUG} ) && warn "$NAME stat is $VALUE\n";
 
     $dbh->disconnect();
 
@@ -419,7 +383,77 @@ sub stats_get {
 }
 
 ################################################################
+sub _init_ref_dbh {
+    my ( $refseq, $refleb36, $refindist, $redo ) = @_;
+    ( my $refdbfile = $refseq ) =~ s/.seq$/.db/;
 
+    # TODO Maybe first connect to a temp location, backup database
+    # to that location then return handle to that location. This
+    # is primarily for running on clusters/over NFS.
+    my $dbh = DBI->connect(
+        "DBI:SQLite:dbname=" . $refdbfile,
+        undef, undef,
+        {   AutoCommit                 => 1,
+            RaiseError                 => 1,
+            sqlite_see_if_its_a_number => 1,
+        }
+        )
+        or die "Could not connect to database "
+        . $refdbfile
+        . ": $DBI::errstr";
+
+    # Set some pragmas to make this part faster
+    $dbh->do(q{PRAGMA synchronous = OFF});
+    $dbh->do(q{PRAGMA journal_mode = WAL});
+
+    make_refseq_db( $dbh, $refseq, $refleb36, $redo );
+    load_refprofiles_db( $dbh, $redo );
+    set_indist( $dbh, $refindist, $redo );
+    if ( $redo && $VSREAD ) {
+
+# # TODO This was grafted in here. Need to make sure caller tries to catch this to set error.
+#         print STDERR "\n\n(updating database with dist/indist info)...";
+#         my $installdir = "$FindBin::RealBin";
+#         my $exstring   = "$installdir/update_indist.pl";
+#         my @exargs     = (
+#             qw(-r -k5 -t50 -d),
+#             $VSCNF_FILE{DBSUFFIX}, "-u",
+#             $ENV{HOME} . "/" . $VSCNF_FILE{DBSUFFIX} . "."
+#         );
+#         system( $exstring, @exargs );
+#         if ( $? == -1 ) {
+#             die "Error adding indistinguishable information: $!\n";
+#         }
+#         else {
+#             my $rc = ( $? >> 8 );
+#             if ( 0 != $rc ) {
+#                 die
+#                     "Error: updating database with dist/undist info failed with exit status $rc";
+#             }
+#         }
+# Always set redo flag back to 0 when done redoing
+        $VSCNF_FILE{REDO_REFDB} = 0;
+        print_config( $ENV{HOME} . "/" . $VSCNF_FILE{DBSUFFIX} . "." );
+    }
+
+    # END TODO
+
+    # Return the db handle
+    return $dbh;
+}
+################################################################
+sub get_ref_dbh {
+    unless ( @_ == 4 ) {
+        croak "Error: expecting 4 arguments, got " . @_ * 1 . "\n";
+    }
+    my ( $refseq, $refleb36, $refindist, $redo ) = @_;
+    ( $ENV{DEBUG} ) && warn "get_ref_dbh arguments: " . Dumper( \@_ ) . "\n";
+    my $dbh = _init_ref_dbh( $refseq, $refleb36, $refindist, $redo );
+
+    return $dbh;
+}
+
+################################################################
 sub get_dbh {
     unless ($VSREAD) {
         croak
@@ -427,48 +461,12 @@ sub get_dbh {
     }
 
     # Might use in the future, connection options
-    my %opts = @_;
+    my $opts = shift // {};
 
     my $dbh;
     if ( $VSCNF_FILE{BACKEND} eq "sqlite" ) {
         my $dbfile
             = "$VSCNF_FILE{OUTPUT_ROOT}/vntr_$VSCNF_FILE{DBSUFFIX}/$VSCNF_FILE{DBSUFFIX}.db";
-
-# First we check if the reference sequences DB has been initialized yet, and if not,
-# set it up. Then continue with grabbing the main DB, and attach the refseq db
-# to the connection.
-# REDO_REFDB option not yet implemented
-        my $redo
-            = ( exists $VSCNF_FILE{REDO_REFDB} )
-            ? $VSCNF_FILE{REDO_REFDB}
-            : 0;
-        make_refseq_db( $VSCNF_FILE{REFERENCE_SEQ}, $redo );
-        load_refprofiles_db( $VSCNF_FILE{REFERENCE_FILE}, $redo );
-
-# TODO This was grafted in here. Need to make sure caller tries to catch this to set error.
-        if ($redo) {
-            print STDERR "\n\n(updating database with dist/indist info)...";
-            my $installdir = "$FindBin::RealBin";
-            my $exstring   = "$installdir/update_indist.pl";
-            my @exargs     = (
-                qw(-r -k5 -t50 -d),
-                $VSCNF_FILE{DBSUFFIX}, "-u", $ENV{HOME} . "/" . $VSCNF_FILE{DBSUFFIX} . "."
-            );
-            system( $exstring, @exargs );
-            if ( $? == -1 ) {
-                die "command failed: $!\n";
-            }
-            else {
-                my $rc = ( $? >> 8 );
-                if ( 0 != $rc ) {
-                    die "updating database with dist/undist info failed $rc";
-                }
-            }
-        }
-        # END TODO
-        # Always set redo flag back to 0 when done redoing
-        $VSCNF_FILE{REDO_REFDB} = 0;
-        print_config( $ENV{HOME} . "/" . $VSCNF_FILE{DBSUFFIX} . "." );
 
 # TODO First connect to a temp location, backup database to that location
 # then return handle to that location. This is primarily for running on clusters.
@@ -478,34 +476,27 @@ sub get_dbh {
             {   AutoCommit                 => 1,
                 RaiseError                 => 1,
                 sqlite_see_if_its_a_number => 1,
+                ReadOnly => 1 * ( exists $opts->{readonly} ) || 0
             }
         ) or die "Could not connect to database $dbfile: $DBI::errstr";
 
         # Set default journal to write-ahead log
         $dbh->do(q{PRAGMA journal_mode = WAL})
             or die "Could not do statement on database $dbfile: $DBI::errstr";
+
         # 800MB cache
         $dbh->do("PRAGMA cache_size = 800000")
             or die "Could not do statement on database $dbfile: $DBI::errstr";
 
         # Attach reference set database
-        (my $refdbfile = $VSCNF_FILE{REFERENCE_SEQ}) =~ s/.seq$/.db/;
-        if ( $ENV{DEBUG} ) {
-            warn "Attaching refseq db at $refdbfile\n";
+        if ( exists $opts->{userefdb} && $opts->{userefdb} ) {
+            my $refdbfile = $VSCNF_FILE{REFERENCE_DB};
+            ( $ENV{DEBUG} )
+                && warn "Connecting to refseq db at $refdbfile\n";
+            $dbh->do(qq{ATTACH DATABASE "$refdbfile" AS refdb})
+                or die
+                "Could not attach refseq db '$refdbfile': $DBI::errstr";
         }
-        $dbh->do(qq{ATTACH DATABASE "$refdbfile" AS refdb})
-            or die "Could not attach refseq db: $DBI::errstr";
-    }
-    else {
-        $dbh = DBI->connect(
-            "DBI:mysql:VNTRPIPE_$VSCNF_FILE{DBSUFFIX};mysql_local_infile=1;host=$VSCNF_FILE{HOST}",
-            "$VSCNF_FILE{LOGIN}",
-            "$VSCNF_FILE{PASS}",
-            {   AutoCommit           => 1,
-                RaiseError           => 1,
-                mysql_server_prepare => 1
-            }
-        ) or croak "Could not connect to database: $DBI::errstr";
     }
 
     return $dbh;
@@ -515,28 +506,13 @@ sub get_dbh {
 sub make_refseq_db {
 
     # TODO DBI error checking
-    my $reffile   = shift;
-    my $redo      = shift;
-    (my $refdbfile = $reffile) =~ s/.(seq|leb36)$/.db/;
-    if ( $ENV{DEBUG} ) {
-        warn "Connecting to SQLite db at $refdbfile\n";
+    unless ( @_ == 4 ) {
+        croak "Error: expecting 4 arguments, got " . @_ * 1 . "\n";
     }
-    my $dbh = DBI->connect(
-        "DBI:SQLite:dbname=$refdbfile",
-        undef, undef,
-        {   AutoCommit                 => 1,
-            RaiseError                 => 1,
-            sqlite_see_if_its_a_number => 1,
-        }
-    ) or die "Could not connect to database: $DBI::errstr";
+    my ( $dbh, $refseq, $refdbfile, $redo ) = @_;
 
-    warn "CWD = " . getcwd() . "\n"
-        if ( $ENV{DEBUG} );
+    ( $ENV{DEBUG} ) && warn "CWD = " . getcwd() . "\n";
 
-    # Set some pragmas to make this part faster
-    $dbh->do(q{PRAGMA synchronous = OFF});
-    $dbh->do(q{PRAGMA journal_mode = WAL});
-    
     # Create the table in this new db.
     my $create_fasta_ref_reps_q
         = q{CREATE TABLE IF NOT EXISTS `fasta_ref_reps` (
@@ -566,8 +542,9 @@ sub make_refseq_db {
     my ($num_rows)
         = $dbh->selectrow_array(q{SELECT COUNT(*) FROM fasta_ref_reps});
 
-    warn "Rows in fasta_ref_reps == $num_rows, redo set to $redo\n"
-        if ( $ENV{DEBUG} );
+    ( $ENV{DEBUG} )
+        && warn "Rows in fasta_ref_reps == $num_rows, redo set to $redo\n";
+
     if ( $num_rows == 0 || $redo ) {
         warn "Creating reference sequence database...\n";
         $dbh->do(q{DROP TABLE IF EXISTS fasta_ref_reps});
@@ -581,10 +558,10 @@ sub make_refseq_db {
         our $seq_rows = [];
 
         # my $installdir = "$FindBin::RealBin";
-        (my $refseqfile = $reffile) =~ s/.(seq|leb36)$/.seq/;
-        open my $refset, "<", $refseqfile
-            or confess
-            "Error opening reference sequences file $reffile: $!.\nStopped at";
+        open my $refset, "<", $refseq
+            or confess "Error opening reference sequences file "
+            . $refseq
+            . ": $!.\nStopped at";
 
         $dbh->begin_work;
 
@@ -598,9 +575,10 @@ sub make_refseq_db {
             push @$seq_rows, \@fields;
         }
 
-        if ( $ENV{DEBUG} ) {
-            warn "Read " . scalar(@$seq_rows) . " lines from refseq file\n";
-        }
+        ( $ENV{DEBUG} )
+            && warn "Read "
+            . scalar(@$seq_rows)
+            . " lines from refseq file\n";
 
         close $refset;
 
@@ -643,18 +621,15 @@ sub make_refseq_db {
             $dbh->disconnect;
 
             # unlink($refdbfile);
-            die
-                "Error inserting reference sequences into $refdbfile: inserted $num_rows but read "
+            die "Error inserting reference sequences into "
+                . $refdbfile
+                . ": inserted $num_rows but read "
                 . scalar(@$seq_rows)
                 . " lines from file. Aborting...";
         }
 
         $dbh->commit;
     }
-
-    # Set journal mode back to default "DELETE"
-    $dbh->do(q{PRAGMA journal_mode = DELETE});
-    $dbh->disconnect;
 }
 
 ####################################
@@ -676,19 +651,7 @@ sub get_trunc_query {
 ################################################################
 # Use this to load reference set db with profiles (leb36 file)
 sub load_refprofiles_db {
-    my ( $prof_file, $redo ) = @_;
-    (my $dbfile = $prof_file) =~ s/.(seq|leb36)$/.db/;
-    my $dbh    = DBI->connect(
-        "DBI:SQLite:dbname=$dbfile",
-        undef, undef,
-        {   AutoCommit                 => 1,
-            RaiseError                 => 1,
-            sqlite_see_if_its_a_number => 1,
-        }
-    ) or die "Could not connect to database: $DBI::errstr";
-    # Set some pragmas to make this part faster
-    $dbh->do(q{PRAGMA synchronous = OFF});
-    $dbh->do(q{PRAGMA journal_mode = WAL});
+    my ( $dbh, $refleb36, $redo ) = @_;
 
     # By default, set redund flag to 1 so we can set
     # non-redundant trs to 0 later;
@@ -721,7 +684,7 @@ sub load_refprofiles_db {
             perl => "DBD::SQLite::VirtualTable::PerlData" );
 
         our $leb36_rows = [];
-        open my $refleb36, "<", "$prof_file"
+        open my $refleb36, "<", "$refleb36"
             or die "Error opening reference profiles file: $!\n";
 
         while ( my $r = <$refleb36> ) {
@@ -730,9 +693,10 @@ sub load_refprofiles_db {
             push @$leb36_rows, [ @fields[ 0, 3 .. 11 ] ];
         }
 
-        if ( $ENV{DEBUG} ) {
-            warn "Read " . scalar(@$leb36_rows) . " lines from refleb file\n";
-        }
+        ( $ENV{DEBUG} )
+            && warn "Read "
+            . scalar(@$leb36_rows)
+            . " lines from refleb file\n";
 
         close $refleb36;
 
@@ -780,23 +744,37 @@ sub load_refprofiles_db {
         $dbh->do(q{DROP TABLE temp.leb36tab});
 
         $dbh->commit;
-        # Set journal mode back to default "DELETE"
-        $dbh->do(q{PRAGMA journal_mode = DELETE});
-        $dbh->disconnect;
 
         # Run redund
-        run_redund( $prof_file, "reference.leb36", 0 );
+        run_redund( $refleb36, "reference.leb36", 0, 0 );
         return 1;
     }
 
-    # Set journal mode back to default "DELETE"
-    $dbh->do(q{PRAGMA journal_mode = DELETE});
-    $dbh->disconnect;
     return 0;
 }
 
 ################################################################
-##############################
+sub set_indist {
+    my ( $dbh, $indist_file, $redo ) = @_;
+    return
+        unless $redo;
+
+    ( $ENV{DEBUG} )
+        && warn "Updating indistinguishable TRs...\n";
+    open my $indist_fh, "<", $indist_file
+        or die "Error opening indist file $indist_file: $!\n";
+    my $count = 0;
+    while ( my $line = <$indist_fh> ) {
+        $count++;
+        $line =~ /-(\d+)/;
+
+        $dbh->do(
+            qq{UPDATE refdb.fasta_ref_reps SET is_singleton=0,is_indist=1 WHERE rid=$1}
+        ) or die $dbh->errstr;
+    }
+}
+
+################################################################
 # Use database to produce the profiles needed to run redund.exe
 # and update database on redundant TRs.
 sub run_redund {
@@ -804,8 +782,7 @@ sub run_redund {
     # First, create a temporary directory and copy the filtered set there
     my $tmpdir      = File::Temp->newdir();
     my $tmpdir_name = $tmpdir->dirname;
-    my ( $input_refset, $output_basename, $keep_files, $redo ) = @_;
-    (my $dbfile = $input_refset) =~ s/.(seq|leb36)$/.db/;
+    my ( $dbh, $input_refset, $output_basename, $keep_files, $redo ) = @_;
 
     # # Add - sign if negating for ref set and set new input to same
     # # file path as the final output
@@ -821,17 +798,6 @@ sub run_redund {
     # }
 
     # Check if we need to run redund, or are forcing a rerun
-    my $dbh = DBI->connect(
-        "DBI:SQLite:dbname=$dbfile",
-        undef, undef,
-        {   AutoCommit                 => 1,
-            RaiseError                 => 1,
-            sqlite_see_if_its_a_number => 1,
-        }
-    ) or die "Could not connect to database: $DBI::errstr";
-    # Set some pragmas to make this part faster
-    $dbh->do(q{PRAGMA synchronous = OFF});
-    $dbh->do(q{PRAGMA journal_mode = WAL});
 
     my ($num_rows)
         = $dbh->selectrow_array(
@@ -911,9 +877,7 @@ sub run_redund {
     my $minreporder_db = "$tmp_file.db";
     $dbh->do(qq{ATTACH DATABASE "$minreporder_db" AS minrep})
         or carp "Couldn't do statement: $DBI::errstr\n";
-    if ( $ENV{DEBUG} ) {
-        warn "Connecting to SQLite db at $minreporder_db\n";
-    }
+    ( $ENV{DEBUG} ) && warn "Connecting to SQLite db at $minreporder_db\n";
 
     # print "Press enter to continue...";
     # my $dummy = <STDIN>;
@@ -956,9 +920,7 @@ sub run_redund {
     $load_rotindex_sth->execute;
 
     warn "$unique_tr_count unique TRs in filtered set\n";
-    # Set journal mode back to default "DELETE"
-    $dbh->do(q{PRAGMA journal_mode = DELETE});
-    $dbh->disconnect;
+
     unlink($minreporder_db);
 
     if ($keep_files) {
@@ -1314,9 +1276,6 @@ sub print_config {
 
     my $startdir = $_[0];
 
-    if ( !defined $VSCNF_FILE{"LOGIN"} ) { $VSCNF_FILE{"LOGIN"} = ""; }
-    if ( !defined $VSCNF_FILE{"PASS"} )  { $VSCNF_FILE{"PASS"}  = ""; }
-    if ( !defined $VSCNF_FILE{"HOST"} ) { $VSCNF_FILE{"HOST"} = "localhost"; }
     if ( !defined $VSCNF_FILE{"NPROCESSES"} ) {
         $VSCNF_FILE{"NPROCESSES"} = -1;
     }
@@ -1357,9 +1316,6 @@ sub print_config {
     if ( !defined $VSCNF_FILE{"REFERENCE_INDIST_PRODUCE"} ) {
         $VSCNF_FILE{"REFERENCE_INDIST_PRODUCE"} = -1;
     }
-    if ( !defined $VSCNF_FILE{"REFS_TOTAL"} ) {
-        $VSCNF_FILE{"REFS_TOTAL"} = -1;
-    }
 
     # look in the directory the script was started in
     if ( open( MFREAD, ">${startdir}vs.cnf" ) ) {
@@ -1371,11 +1327,6 @@ sub print_config {
 
 # Database backend
 BACKEND=$VSCNF_FILE{"BACKEND"}
-
-# mysql credentials
-LOGIN=$VSCNF_FILE{"LOGIN"}
-PASS=$VSCNF_FILE{"PASS"}
-HOST=$VSCNF_FILE{"HOST"}
 
 # set this to the number of processors on your system 
 # (or less if sharing the system with others or RAM is limited)
@@ -1454,12 +1405,6 @@ REFERENCE_INDIST=$VSCNF_FILE{"REFERENCE_INDIST"}
 # eg, 1- generate
 # eg, 0 - don't generate
 REFERENCE_INDIST_PRODUCE=$VSCNF_FILE{"REFERENCE_INDIST_PRODUCE"}
-
-# total number of reference TRs prior to filtering
-# this is a fixed number to be printed in the latex file
-# set to 0 if it is not applicable
-# eg, 1188939 - human
-REFS_TOTAL=$VSCNF_FILE{"REFS_TOTAL"} 
 
 CNF
 

@@ -41,9 +41,9 @@ my $TEMPDIR      = $ARGV[5];
 my $KEEPPCRDUPS  = $ARGV[6];
 
 # set these mysql credentials in vs.cnf (in installation directory)
-my %run_conf = get_config($DBSUFFIX, $MSDIR . "vs.cnf" );
+my %run_conf = get_config( $DBSUFFIX, $MSDIR . "vs.cnf" );
 my ( $LOGIN, $PASS, $HOST ) = @run_conf{qw(LOGIN PASS HOST)};
-my $dbh = get_dbh()
+my $dbh = get_dbh( { userefdb => 1 } )
     or die "Could not connect to database: $DBI::errstr";
 my %stats;
 
@@ -99,10 +99,11 @@ warn "reading: $indexfolder\n";
 
 # first count the intersect before pcr dup
 my $rrintersect = 0;
-my $sth = $dbh->prepare(q{SELECT count(*)
+my $sth         = $dbh->prepare(
+    q{SELECT count(*)
     FROM rank INNER JOIN
-        rankflank ON rank.refid=rankflank.refid AND rank.readid=rankflank.readid})
-    or die "Couldn't prepare statement: " . $dbh->errstr;
+        rankflank ON rank.refid=rankflank.refid AND rank.readid=rankflank.readid}
+) or die "Couldn't prepare statement: " . $dbh->errstr;
 $sth->execute() or die "Cannot execute: " . $sth->errstr();
 ($rrintersect) = $sth->fetchrow_array();
 $sth->finish();
@@ -143,6 +144,7 @@ if ( $run_conf{BACKEND} eq "mysql" ) {
 }
 elsif ( $run_conf{BACKEND} eq "sqlite" ) {
     $dbh->do("PRAGMA foreign_keys = OFF");
+
     # warn "\nTurning off AutoCommit\n";
     $dbh->{AutoCommit} = 0;
     $sth = $dbh->prepare(q{INSERT INTO pduptemp VALUES (?, ?)});
@@ -213,7 +215,7 @@ foreach my $ifile (@indexfiles) {
                             print $TEMPFILE $ref, ",", $read, "\n";
                         }
                         elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-                            $sth->execute($ref, $read);
+                            $sth->execute( $ref, $read );
                         }
 
                         #print "deleting: -$ref -> $read\n";
@@ -249,9 +251,10 @@ if ( $run_conf{BACKEND} eq "mysql" ) {
     close($TEMPFILE);
     $dbh->do(
         "LOAD DATA LOCAL INFILE '$TEMPDIR/pduptemp_$DBSUFFIX.txt' INTO TABLE pduptemp FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';"
-        ) or die "Couldn't do statement: " . $dbh->errstr;
+    ) or die "Couldn't do statement: " . $dbh->errstr;
     $dbh->do('ALTER TABLE pduptemp ENABLE KEYS;')
         or die "Couldn't do statement: " . $dbh->errstr;
+
     # delete from rankdflank based on temptable entries
     $query = q{DELETE FROM t1
     USING rank t1 INNER JOIN
@@ -259,6 +262,7 @@ if ( $run_conf{BACKEND} eq "mysql" ) {
 }
 elsif ( $run_conf{BACKEND} eq "sqlite" ) {
     $dbh->commit;
+
     # delete from rankdflank based on temptable entries
     $query = q{DELETE FROM rank
     WHERE EXISTS (
@@ -293,9 +297,10 @@ if ( open( my $fh, ">$pcleanfolder/result/$DBSUFFIX.pcr_dup.txt" ) ) {
 
 # first count the intersect
 $rrintersect = 0;
-$sth = $dbh->prepare(q{SELECT count(*) FROM rank
-    INNER JOIN rankflank ON rank.refid=rankflank.refid AND rank.readid=rankflank.readid})
-    or die "Couldn't prepare statement: " . $dbh->errstr;
+$sth         = $dbh->prepare(
+    q{SELECT count(*) FROM rank
+    INNER JOIN rankflank ON rank.refid=rankflank.refid AND rank.readid=rankflank.readid}
+) or die "Couldn't prepare statement: " . $dbh->errstr;
 $sth->execute() or die "Cannot execute: " . $sth->errstr();
 ($rrintersect) = $sth->fetchrow_array();
 $sth->finish();
@@ -303,12 +308,13 @@ $stats{INTERSECT_RANK_AND_RANKFLANK} = $rrintersect;
 
 # now exclude ties, mark in map table and record the number
 warn "Updating BEST BEST BEST map entries...\n";
+
 # clear all bbb entries
 $dbh->do("UPDATE map SET bbb=0;")
     or die "Couldn't do statement: " . $dbh->errstr;
 
 # clear all pduptemp entries
-$dbh->do(get_trunc_query($run_conf{BACKEND},"pduptemp"))
+$dbh->do( get_trunc_query( $run_conf{BACKEND}, "pduptemp" ) )
     or die "Couldn't do statement: " . $dbh->errstr;
 
 if ( $run_conf{BACKEND} eq "mysql" ) {
@@ -317,14 +323,15 @@ if ( $run_conf{BACKEND} eq "mysql" ) {
 }
 
 # clear all pduptemp entries
-$sth = $dbh->prepare(q{INSERT INTO pduptemp
+$sth = $dbh->prepare(
+    q{INSERT INTO pduptemp
     SELECT map.refid, map.readid FROM map
     INNER JOIN rank ON rank.refid=map.refid AND rank.readid=map.readid
     INNER JOIN rankflank ON rankflank.refid=map.refid AND rankflank.readid=map.readid
-    WHERE rank.ties=0 OR rankflank.ties=0});
+    WHERE rank.ties=0 OR rankflank.ties=0}
+);
 $sth->execute();
 $dbh->commit;
-
 
 if ( $run_conf{BACKEND} eq "mysql" ) {
     $dbh->do('ALTER TABLE pduptemp ENABLE KEYS;')
@@ -352,7 +359,7 @@ if ( open( my $fh, ">$pcleanfolder/result/$DBSUFFIX.ties.txt" ) ) {
         GROUP BY map.refid HAVING mbb=0 ORDER BY chr, tind};
     $sth = $dbh->prepare($query);
     $sth->execute();
-    $i   = 0;
+    $i = 0;
     while ( my @data = $sth->fetchrow_array() ) {
         $i++;
         print $fh "$i\t-"
@@ -367,10 +374,7 @@ warn "Ties list complete with $i removed references.\n";
 
 # make a list of ties
 warn "\nMaking a list of ties (entries)...\n";
-if (open( my $fh, ">$pcleanfolder/result/$DBSUFFIX.ties_entries.txt"
-    )
-    )
-{
+if ( open( my $fh, ">$pcleanfolder/result/$DBSUFFIX.ties_entries.txt" ) ) {
 
     $query = q{SELECT map.refid, map.readid,rank.ties,rankflank.ties
     FROM map
@@ -379,7 +383,7 @@ if (open( my $fh, ">$pcleanfolder/result/$DBSUFFIX.ties_entries.txt"
     WHERE bbb=0 ORDER BY map.refid,map.readid};
     $sth = $dbh->prepare($query);
     $sth->execute();
-    $i   = 0;
+    $i = 0;
     while ( my @data = $sth->fetchrow_array() ) {
         $i++;
         print $fh "$i\t-"
@@ -404,7 +408,7 @@ if ( $run_conf{BACKEND} eq "mysql" ) {
     $sth = $dbh->do('SET UNIQUE_CHECKS = 1;')
         or die "Couldn't do statement: " . $dbh->errstr;
 }
-elsif ($run_conf{BACKEND} eq "sqlite") {
+elsif ( $run_conf{BACKEND} eq "sqlite" ) {
     $dbh->do("PRAGMA foreign_keys = ON");
     $dbh->{AutoCommit} = 1;
 }
@@ -416,7 +420,7 @@ if ( $delfromtable != $deleted ) {
 
 $dbh->disconnect();
 warn strftime( "\n\nend: %F %T\n\n", localtime );
-set_statistics(\%stats);
+set_statistics( \%stats );
 
 1;
 

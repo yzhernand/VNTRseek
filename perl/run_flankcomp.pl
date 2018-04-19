@@ -37,14 +37,14 @@ my $MSDIR     = $ARGV[2];
 my $TEMPDIR   = $ARGV[3];
 
 # set these mysql credentials in vs.cnf (in installation directory)
-my %run_conf = get_config($DBSUFFIX, $MSDIR . "vs.cnf" );
+my %run_conf = get_config( $DBSUFFIX, $MSDIR . "vs.cnf" );
 my ( $LOGIN, $PASS, $HOST ) = @run_conf{qw(LOGIN PASS HOST)};
 
 my $clusters_processed = 0;
 my $totalRefReps       = 0;
 my $totalReadReps      = 0;
 
-my $dbh = get_dbh( $DBSUFFIX, $MSDIR . "vs.cnf" )
+my $dbh = get_dbh( { userefdb => 1 } )
     or die "Could not connect to database: $DBI::errstr";
 
 my $sth;
@@ -177,6 +177,7 @@ $dbh->commit;
 #############################################################################################
 
 print STDERR "\nPrinting DNA and inserting into cluster table...\n";
+
 # now print dna and quals (also insert into cluster table)
 $sth = $dbh->prepare(
     q{SELECT rid,flankleft,sequence,flankright,pattern,copynum,direction
@@ -356,7 +357,7 @@ my %stats = (
     CLUST_NUMBER_OF_REF_REPS_IN_CLUSTERS           => $totalRefReps,
     CLUST_NUMBER_OF_READ_REPS_IN_CLUSTERS          => $totalReadReps,
 );
-set_statistics(\%stats);
+set_statistics( \%stats );
 
 print STDERR
     "Processing complete -- processed $clusters_processed cluster(s).\n";

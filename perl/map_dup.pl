@@ -34,7 +34,7 @@ my $TEMPDIR  = $ARGV[2];
 # set these mysql credentials in vs.cnf (in installation directory)
 my %run_conf = get_config($DBSUFFIX, $MSDIR . "vs.cnf" );
 my ( $LOGIN, $PASS, $HOST ) = @run_conf{qw(LOGIN PASS HOST)};
-my $dbh = get_dbh( $DBSUFFIX, $MSDIR . "vs.cnf" )
+my $dbh = get_dbh( {userefdb => 1} )
     or die "Could not connect to database: $DBI::errstr";
 
 #my $sth3 = $dbh->prepare("UPDATE map SET bbb=0 WHERE refid=? AND readid=?;")

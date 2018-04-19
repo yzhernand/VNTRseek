@@ -39,7 +39,7 @@ my $input;
 my $rc;
 
 my %run_conf = get_config($DBSUFFIX, $MSDIR . "vs.cnf" );
-my $dbh      = get_dbh();
+my $dbh      = get_dbh({userefdb => 1});
 
 # open( $input, "-|", "wc -l $reffile | tail -1" );
 # my $rc = <$input>;

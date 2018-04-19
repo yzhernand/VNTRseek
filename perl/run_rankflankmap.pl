@@ -46,7 +46,7 @@ my %run_conf = get_config( $DBSUFFIX, $MSDIR . "vs.cnf" );
 
 my $clusters_processed = 0;
 
-my $dbh = get_dbh( $DBSUFFIX, $MSDIR . "vs.cnf" )
+my $dbh = get_dbh()
     or die "Could not connect to database: $DBI::errstr";
 
 my $sth;

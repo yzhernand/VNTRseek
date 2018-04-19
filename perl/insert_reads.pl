@@ -53,7 +53,7 @@ my $totalReads = 0;
 
 # TODO for all files needing this function, maybe run get_config first
 # to eliminate need for second arg
-my $dbh = get_dbh( $DBSUFFIX, $MSDIR . "vs.cnf" )
+my $dbh = get_dbh()
     or die "Could not connect to database: $DBI::errstr";
 my %RHASH    = ();
 my %SHASH    = ();

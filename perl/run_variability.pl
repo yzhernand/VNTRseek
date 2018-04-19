@@ -43,7 +43,7 @@ my $TEMPDIR            = $ARGV[5];
 warn strftime( "\n\nstart: %F %T\n\n", localtime );
 my %run_conf = get_config( $DBSUFFIX, $MSDIR . "vs.cnf" );
 my ( $LOGIN, $PASS, $HOST ) = @run_conf{qw(LOGIN PASS HOST)};
-my $dbh = get_dbh( $DBSUFFIX, $MSDIR . "vs.cnf" )
+my $dbh = get_dbh( {userefdb => 1} )
     or die "Could not connect to database: $DBI::errstr";
 
 my ( $sth, $sth1, $sth6, $sth7, $sth8, $query, $query2 );

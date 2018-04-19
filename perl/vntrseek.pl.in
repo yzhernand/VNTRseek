@@ -99,7 +99,6 @@ my $HELPSTRING
     . "\t--REFERENCE_SEQ               reference sequence file (default set in global config file)\n"
     . "\t--REFERENCE_INDIST            reference indistinguishables file (default set in global config file)\n"
     . "\t--REFERENCE_INDIST_PRODUCE    generate a file of indistinguishable references, 0/1 (default 0)\n"
-    . "\t--REFS_TOTAL                  total number of reference TRs prior to filtering (default set in global config file)\n"
     . "\t\n\nADDITIONAL USAGE:\n\n"
     . "\t$0 100                       clear error\n"
     . "\t$0 100 N                     clear error and set NextRunStep to N (0-19, this is only when running on a cluster using the advanced cluster script that checks for NextRunStep)\n"
@@ -122,8 +121,7 @@ GetOptions(
     "HTML_DIR=s",             "FASTA_DIR=s",
     "OUTPUT_ROOT=s",          "TMPDIR=s",
     "REFERENCE_FILE=s",       "REFERENCE_SEQ=s",
-    "REFERENCE_INDIST=s",     "REFERENCE_INDIST_PRODUCE=i",
-    "REFS_TOTAL=i"
+    "REFERENCE_INDIST=s",     "REFERENCE_INDIST_PRODUCE=i"
 );
 
 # print help if asked
@@ -974,7 +972,8 @@ if ( $STEP == 11 ) {
     $timestart = time();
     my $exstring;
 
-    print STDERR "\n\nExecuting step #$STEP (aligning ref-ref flanks)...";
+    # print STDERR "\n\nExecuting step #$STEP (aligning ref-ref flanks)...";
+    print STDERR "\n\nExecuting step #$STEP (This step does nothing!)...";
 
   # TODO Don't use this. Change so that the new produce_indist script is used.
   # Will require new param
@@ -1373,12 +1372,7 @@ if ( $STEP == 19 ) {
         "$MSDIR",
         "$read_profiles_folder_clean/out/representatives.txt",
         "${read_profiles_folder_clean}/result/${DBNAME}",
-        "$opts{REFS_TOTAL}",
-        "$REFS_REDUND",
-        "$HTTPSERVER",
-        "$opts{MIN_SUPPORT_REQUIRED}",
-        "$VERSION",
-        "$opts{TMPDIR}"
+        "$VERSION"
     );
     system( $exstring, @exargs );
     if ( $? == -1 ) {
