@@ -5,7 +5,7 @@ CMAKE_MINIMUM_REQUIRED(VERSION 2.8)
 PROJECT(VNTRseek)
 
 # Set current VNTRseek version. Not user configurable
-SET(VNTRVer "1.09.1")
+SET(VNTRVer "1.09.2")
 SET(InstallSuffix "vntrseek${VNTRVer}")
 
 # Set current TRF version. Not user configurable
@@ -88,7 +88,7 @@ INSTALL(CODE "
 SET(MISC_FILES
     HISTORY
     COPYING CLUSTER
-    README RUNNING
+    README.md RUNNING
     )
 INSTALL(FILES ${MISC_FILES}
     DESTINATION ${InstallSuffix}
