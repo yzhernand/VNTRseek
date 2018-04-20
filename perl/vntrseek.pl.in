@@ -49,7 +49,8 @@ my $VERSION = '@VNTRVer@';
 # this is where the pipeline is installed
 my $install_dir = "$FindBin::RealBin";
 
-use lib "$FindBin::RealBin/lib";    # must be same as install dir!
+use lib "$FindBin::RealBin/lib";
+use lib "$FindBin::RealBin/perl/lib";  # for testing
 
 use vutil
     qw(get_config set_config set_statistics get_statistics set_credentials write_mysql write_sqlite get_dbh stats_get set_datetime print_config create_blank_file run_redund trim);
@@ -143,8 +144,8 @@ if ( !exists $opts{"DBSUFFIX"} ) {
 # $opts{"DBSUFFIX"} = lc($opts{"DBSUFFIX"});
 
 # This path needs to be able to pick any case difference, for backwards compatibility
-my $MSDIR       = $ENV{HOME} . "/" . $opts{'DBSUFFIX'} . ".";
-my $config_file = $MSDIR . "vs.cnf";
+# my $MSDIR       = $ENV{HOME} . "/" . $opts{'DBSUFFIX'} . ".";
+my $config_file = $opts{'DBSUFFIX'} . ".vs.cnf";
 
 # set variables from vs.cnf
 my %conf_vars = get_config( $opts{'DBSUFFIX'}, $config_file );
@@ -295,7 +296,6 @@ sub ClearError {
         DATE_INDEX_PCR
         DATE_PCR_DUP
         DATE_MAP_DUP
-        DATE_MAP_DUP
         DATE_VNTR_PREDICT
         DATE_ASSEMBLYREQ
         DATE_REPORTS
@@ -304,9 +304,9 @@ sub ClearError {
     if (@_) {
         my $to = int shift;
         print "\nClearError: making next step: $to.\n\n";
-        my $set_step = min( $to, 20 );
+        my $set_step = min( $to, 19 );
         $set_step = max( $to, 0 );
-        my %clear_stats = map { $_ => undef } @stats[ $set_step .. 20 ];
+        my %clear_stats = map { $_ => undef } @stats[ $set_step .. 19 ];
         set_statistics( \%clear_stats );
 
         # Fill in the previous step with some dummy date/time if needed
@@ -358,7 +358,6 @@ sub GetNextStep {
         DATE_INDEX_PCR
         DATE_PCR_DUP
         DATE_MAP_DUP
-        DATE_MAP_DUP
         DATE_VNTR_PREDICT
         DATE_ASSEMBLYREQ
         DATE_REPORTS
@@ -366,11 +365,15 @@ sub GetNextStep {
 
     my %stat_hash = %{ get_statistics(@stats) };
     my @vals      = @stat_hash{@stats};
+    ( $ENV{DEBUG} ) && warn "GetNextStep vals: " . Dumper(\@vals) . "\n";
     for ( my $idx = @vals - 1; $idx > 0; --$idx ) {
-        return $idx
-            if (defined $vals[$idx] && $vals[$idx] ne "");
+        if (defined $vals[$idx]) {
+            say min($idx+1, 20);
+            return 0;
+        }
     }
 
+    say 0;
     return 0;
 }
 

@@ -1,5 +1,7 @@
 #Important Notes
 
+- Up-to-date installation documentation can be found on the project's
+[GitHub wiki](https://github.com/yzhernand/VNTRseek/wiki)
 - Only CentOS 6 and Ubuntu 12.10 and up have been tested.
 - Only a Linux 64-bit version of our software is available at this time.
 - Currently, the default install path is valid only on UNIX-like
@@ -19,23 +21,8 @@ space for output.
 ### Build requirements
 Installation requires cmake (http://www.cmake.org/), minimum version 2.8
 
-On Ubuntu, this can be installed using:
-
-    sudo apt-get install cmake
-
-On Red Hat 6/CentOS 6, run (as root):
-
-    yum install cmake28
-
-On Fedora (13 and up), run (as root):
-
-    yum install cmake
-
-On archlinux, run:
-
-    pacman -Sy cmake
-
-Additionally you will need GCC version 4.1.2 on Mac/Linux/CYGWIN
+Additionally you will need GCC version 4.1.2 on Mac/Linux/CYGWIN or
+a compatible compiler (only clang has been tested).
 
 ### Runtime requirements
 The following programs are required for the pipeline to run:
@@ -50,9 +37,39 @@ with a MySQL server.
 
 TRF is also required, but is downloaded during installation. If for some
 reason the download fails, you can download it manually from
-[the website](http://tandem.bu.edu/trf/trf407b.linux.download.html)
-and save it as `trf407b-ngs.linux.exe` in the build directory (see [Installation](#installation)
+[the website](http://tandem.bu.edu/trf/trf409.linux64.download.html)
+and save it as `trf409-ngs.linux.exe` in the build directory (see [Installation](#installation)
 below).
+
+To install all requirements at once (assuming you want to use gcc), copy the correct
+command for your system:
+
+### Ubuntu/Debian
+
+Note: Replace `libmysqlclient-dev` with `libmariadbclient-dev` if using MariaDB.
+
+```
+sudo apt install cmake build-essential zlib1g-dev libdbi-perl libdbd-mysql-perl libmysqlclient-dev
+```
+
+### CentOS/Red Hat/Fedora
+
+Note: Replace with `mysql-devel` with `mariadb-devel` if using MariaDB.
+
+```
+sudo yum install cmake gcc perl-DBI perl-DBD-MySQL mysql-devel
+```
+
+### Arch Linux (and derivatives)
+
+Note: Arch Linux only uses MariaDB, unless the AUR is enabled.
+
+```
+sudo pacman -Sy cmake gcc zlib perl-dbi perl-dbd-mysql libmariadbclient
+```
+
+The clang compiler also works. If you have this installed, see below for how
+to use clang over gcc if it is not your default compiler.
 
 #Installation
 
@@ -66,7 +83,7 @@ To build and install to the default directory, simply run the following commands
 	make install # or sudo make install, if needed
 
 By default, this will install the pipeline to `/usr/local/vntrseekN.NN` (eg,
-`/usr/local/vntrseek1.05`).
+`/usr/local/vntrseek1.09`).
 
 If you would like to choose a different installation prefix, simply run:
 
@@ -75,6 +92,11 @@ If you would like to choose a different installation prefix, simply run:
 For example, to install to your home directory, `${HOME}/vntrseekN.NN`, use:
 
 	cmake -DCMAKE_INSTALL_PREFIX=${HOME} ..
+
+You can change your default compiler using `-DCMAKE_C_COMPILER=yourcompiler`.
+For example, to use clang:
+
+    cmake -DCMAKE_C_COMPILER=clang ..
 
 **If you installed this pipeline as root, and are creating an INDIST
 file** you may need to run it as root unless you give your user

@@ -46,8 +46,8 @@ echo "$DBSUFFIX"
 STEPS=""
 
 handle_error() {
-  perl "$perlfile" 99 --dbsuffix "$DBSUFFIX" --nprocesses "$NPROCS"
-  laststep=$(($? - 1))
+  runnext=$(perl "$perlfile" 99 --dbsuffix "$DBSUFFIX")
+  laststep=$(($runnext - 1))
   echo "Oh noes, something went wrong (got SIGERR)! Setting run to status 2 (error)"
   mysql -N -h "${MYSQLHOST}" -u "${MYSQLLOGIN}" -p"${MYSQLPASS}" vntrseektrack <<SQL
 LOCK TABLES ${dbtable} WRITE;
@@ -59,8 +59,8 @@ SQL
 
 handle_kill() {
   # A kill signal was sent.
-  perl "$perlfile" 99 --dbsuffix "$DBSUFFIX" --nprocesses "$NPROCS"
-  laststep=$(($? - 1))
+  runnext=$(perl "$perlfile" 99 --dbsuffix "$DBSUFFIX")
+  laststep=$(($runnext - 1))
   echo "Oh noes, something went wrong (got SIGKILL)! Setting run to status 2 (error)"
   mysql -N -h "${MYSQLHOST}" -u "${MYSQLLOGIN}" -p"${MYSQLPASS}" vntrseektrack <<SQL
 LOCK TABLES ${dbtable} WRITE;
@@ -72,8 +72,8 @@ SQL
 
 handle_success() {
   STATUS=""
-  perl "$perlfile" 99 --dbsuffix "$DBSUFFIX" --nprocesses "$NPROCS"
-  laststep=$(($? - 1))
+  runnext=$(perl "$perlfile" 99 --dbsuffix "$DBSUFFIX")
+  laststep=$(($runnext - 1))
   if [ $laststep -eq 19 ]; then
     echo "Last step! Setting run to status 1 (complete)"
     STATUS="status=1,"

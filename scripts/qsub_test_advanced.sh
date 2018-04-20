@@ -13,9 +13,7 @@ perlfile=${WORKD}/vntrseek.pl
 nprocs=$1
 dbsuffix="$2"
 
-perl $perlfile 99 --dbsuffix $dbsuffix --nprocesses $nprocs   # ask for what step needs to be run next
-
-runnext=$?          # assuming die will always return 255 here and nothing in the 0-19 range ....
+runnext=$(perl $perlfile 99 --dbsuffix $dbsuffix)   # ask for what step needs to be run next
 
 case  $runnext  in
   0|1|4|10|13|15) 				# multiple

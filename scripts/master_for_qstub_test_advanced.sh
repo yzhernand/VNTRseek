@@ -28,15 +28,13 @@ batchname=${WORKD}/qsub_test_advanced.sh
 scriptname=${WORKD}/master_for_qstub_test_advanced.sh
 perlfile=${WORKD}/vntrseek.pl
 
-perl $perlfile 99 --dbsuffix $DBSUFFIX --nprocesses $NPROCS   # ask for what step needs to be run next
-
-runnext=$?          # assuming die will always return 255 here and nothing in the 0-19 range ....
+runnext=$(perl $perlfile 99 --dbsuffix $DBSUFFIX) # ask for what step needs to be run next
 
 STEPS=""
 
 handle_error() {
-  perl "$perlfile" 99 --dbsuffix "$DBSUFFIX" --nprocesses "$NPROCS"
-  laststep=$(($? - 1))
+  runnext=$(perl "$perlfile" 99 --dbsuffix "$DBSUFFIX")
+  laststep=$(($runnext - 1))
   echo "Oh noes, something went wrong (got SIGERR)! Setting run to status 2 (error)"
   echo "Job encountered error at step $laststep"
   exit 1
@@ -44,8 +42,8 @@ handle_error() {
 
 handle_kill() {
   # A kill signal was sent.
-  perl "$perlfile" 99 --dbsuffix "$DBSUFFIX" --nprocesses "$NPROCS"
-  laststep=$(($? - 1))
+  runnext=$(perl "$perlfile" 99 --dbsuffix "$DBSUFFIX")
+  laststep=$(($runnext - 1))
   echo "Oh noes, something went wrong (got SIGKILL)! Setting run to status 2 (error)"
   echo "Job encountered error at step $laststep"
   exit 1
@@ -53,8 +51,8 @@ handle_kill() {
 
 handle_success() {
   STATUS=""
-  perl "$perlfile" 99 --dbsuffix "$DBSUFFIX" --nprocesses "$NPROCS"
-  laststep=$(($? - 1))
+  runnext=$(perl "$perlfile" 99 --dbsuffix "$DBSUFFIX")
+  laststep=$(($runnext - 1))
   if [ $laststep -eq 19 ]; then
     echo "Last step!"
     exit
