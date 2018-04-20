@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/sh -l
 
 if (($# != 2));
 then
