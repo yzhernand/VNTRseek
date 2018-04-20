@@ -404,7 +404,7 @@ sub _init_ref_dbh {
 
     # Set some pragmas to make this part faster
     $dbh->do(q{PRAGMA synchronous = OFF});
-    $dbh->do(q{PRAGMA journal_mode = WAL});
+    # $dbh->do(q{PRAGMA journal_mode = WAL});
 
     make_refseq_db( $dbh, $refseq, $refleb36, $redo );
     load_refprofiles_db( $dbh, $redo );
@@ -481,8 +481,8 @@ sub get_dbh {
         ) or die "Could not connect to database $dbfile: $DBI::errstr";
 
         # Set default journal to write-ahead log
-        $dbh->do(q{PRAGMA journal_mode = WAL})
-            or die "Could not do statement on database $dbfile: $DBI::errstr";
+        # $dbh->do(q{PRAGMA journal_mode = WAL})
+            # or die "Could not do statement on database $dbfile: $DBI::errstr";
 
         # 800MB cache
         $dbh->do("PRAGMA cache_size = 800000")
