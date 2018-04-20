@@ -30,20 +30,19 @@ my $curdir = getcwd;
 my $argc = @ARGV;
 if ( $argc < 6 ) {
     die
-        "Usage: run_variability.pl inputfile  mapdir dbname msdir minflank tempdir\n";
+        "Usage: run_variability.pl inputfile  mapdir dbname run_dir minflank tempdir\n";
 }
 
 my $inputfile          = $ARGV[0];
 my $mapdir             = $ARGV[1];
 my $DBSUFFIX           = $ARGV[2];
-my $MSDIR              = $ARGV[3];
+my $run_dir            = $ARGV[3];
 my $MIN_FLANK_REQUIRED = $ARGV[4];
 my $TEMPDIR            = $ARGV[5];
 
 warn strftime( "\n\nstart: %F %T\n\n", localtime );
-my %run_conf = get_config( $DBSUFFIX, $MSDIR . "vs.cnf" );
-my ( $LOGIN, $PASS, $HOST ) = @run_conf{qw(LOGIN PASS HOST)};
-my $dbh = get_dbh( {userefdb => 1} )
+my %run_conf = get_config( $DBSUFFIX, $run_dir );
+my $dbh = get_dbh( { userefdb => 1 } )
     or die "Could not connect to database: $DBI::errstr";
 
 my ( $sth, $sth1, $sth6, $sth7, $sth8, $query, $query2 );

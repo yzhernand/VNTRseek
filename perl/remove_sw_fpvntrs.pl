@@ -29,59 +29,67 @@ use IO::Handle;
 use FindBin;
 use Cwd;
 use DBI;
+
 # use File::Copy;
 use File::Basename;
+
 # use File::Temp qw/ tempfile tempdir /;
 use lib "$FindBin::RealBin/lib";
-use vutil qw(get_config get_dbh );
+use vutil qw( get_config get_dbh );
 
 # Get input files
 die "Usage: $0 <dbsuffix> <db backend> [new reference set name]"
-    unless (@ARGV && (@ARGV <= 3));
-my ($dbsuffix, $backend, $refset_suffix) = @ARGV;
-my $MSDIR = $ENV{HOME} . "/${dbsuffix}.";
-my $config_loc = $MSDIR . "vs.cnf";
+    unless ( @ARGV && ( @ARGV <= 3 ) );
+my ( $dbsuffix, $backend, $refset_suffix ) = @ARGV;
+my $run_dir = getcwd();
 
 # Connect to DB
-my %run_conf = get_config($config_loc);
+my %run_conf = get_config( $dbsuffix, $run_dir );
 my ( $login, $pass, $host ) = @run_conf{qw(LOGIN PASS HOST)};
 my $dbh = get_dbh()
     or die "Could not connect to database: $DBI::errstr";
+
 # Retrieve from the database the list of all reads mapping to a reftr
 # my $all_reads_mapped_query = q{SELECT DISTINCT map.refid AS reftrid, SUBSTRING_INDEX(fasta_reads.head, "_", -1) AS origintrid
 #   FROM map INNER JOIN replnk ON replnk.rid=map.readid
 #       INNER JOIN fasta_reads on fasta_reads.sid=replnk.sid
 #   WHERE map.bbb = 1 ORDER BY reftrid,origintrid};
 
-if ($backend eq "sqlite") {
+if ( $backend eq "sqlite" ) {
+
     # Works close enough to the MySQL function for our purposes.
-    $dbh->sqlite_create_function('SUBSTRING_INDEX', 3, sub {
-        my ($field, $delim, $idx) = @_;
-        my @a = split /$delim/, $field;
-        return $a[$idx];
-        });
+    $dbh->sqlite_create_function(
+        'SUBSTRING_INDEX',
+        3,
+        sub {
+            my ( $field, $delim, $idx ) = @_;
+            my @a = split /$delim/, $field;
+            return $a[$idx];
+        }
+    );
 }
 
 # Retrieve from the database the list of all reads mapping to a reftr called as a VNTR with at least one spanning read
-my $vntr_reads_mapped_query = qq{
+my $vntr_reads_mapped_query = q{
     SELECT DISTINCT map.refid AS reftrid, SUBSTRING_INDEX(fasta_reads.head, "_", -1) AS origintrid
     FROM map INNER JOIN replnk ON replnk.rid=map.readid
-        INNER JOIN fasta_reads on fasta_reads.sid=replnk.sid
+        INNER JOIN fasta_reads ON fasta_reads.sid=replnk.sid
         INNER JOIN fasta_ref_reps ON map.refid = fasta_ref_reps.rid
     WHERE map.bbb = 1 AND support_vntr_span1 > 0 ORDER BY reftrid,origintrid;};
 my $get_vntr_mapped_reads_sth = $dbh->prepare($vntr_reads_mapped_query);
 $get_vntr_mapped_reads_sth->execute
-    or die "Error executing query for all mapped reads: " . $get_vntr_mapped_reads_sth->errstr();
-my ($vntr, $mapped_to, %discard);
-$get_vntr_mapped_reads_sth->bind_columns(\($vntr, $mapped_to));
+    or die "Error executing query for all mapped reads: "
+    . $get_vntr_mapped_reads_sth->errstr();
+my ( $vntr, $mapped_to, %discard );
+$get_vntr_mapped_reads_sth->bind_columns( \( $vntr, $mapped_to ) );
 
 # Iterate through this list and remove all VNTRs and other mapped loci
-while ($get_vntr_mapped_reads_sth->fetch) {
-    $discard{$vntr} = 1;
+while ( $get_vntr_mapped_reads_sth->fetch ) {
+    $discard{$vntr}      = 1;
     $discard{$mapped_to} = 1;
 }
 
-for my $d (sort keys %discard) {
+for my $d ( sort keys %discard ) {
     say $d;
 }
 
@@ -105,22 +113,26 @@ warn "\nDone. Final set contains $tr_count reference TRs.\n";
 sub write_ref_file {
     my $file = shift;
     my @lines;
-    my ($name, $path, $fileext) = fileparse( $file, ".leb36", ".seq", ".indist" );
+    my ( $name, $path, $fileext )
+        = fileparse( $file, ".leb36", ".seq", ".indist" );
+
     # If not an absolute path, check in install dir
-    $path = "$FindBin::Bin" if (($path eq "./") && !(-e "$path/${name}${fileext}"));
+    $path = "$FindBin::Bin"
+        if ( ( $path eq "./" ) && !( -e "$path/${name}${fileext}" ) );
     my $fn = "$path/${name}${fileext}";
     open my $ref_in_fh, "<", "$fn"
         or die "Error opening file $fn: $!\n";
-    while (my $line = <$ref_in_fh>) {
+    while ( my $line = <$ref_in_fh> ) {
         chomp $line;
         my ($trid) = split /[,\s]/, $line;
+
         # If this is the .seq header, we keep that.
-        if ($trid eq "Repeatid") {
+        if ( $trid eq "Repeatid" ) {
             push @lines, $line;
             next;
         }
 
-        push @lines, $line unless (exists $discard{abs($trid)});
+        push @lines, $line unless ( exists $discard{ abs($trid) } );
     }
     close $ref_in_fh;
 

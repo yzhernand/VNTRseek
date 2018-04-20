@@ -35,14 +35,13 @@ my $curdir = getcwd;
 my $indexfolder  = $ARGV[0];
 my $pcleanfolder = $ARGV[1];
 my $DBSUFFIX     = $ARGV[2];
-my $MSDIR        = $ARGV[3];
+my $run_dir      = $ARGV[3];
 my $cpucount     = $ARGV[4];
 my $TEMPDIR      = $ARGV[5];
 my $KEEPPCRDUPS  = $ARGV[6];
 
 # set these mysql credentials in vs.cnf (in installation directory)
-my %run_conf = get_config( $DBSUFFIX, $MSDIR . "vs.cnf" );
-my ( $LOGIN, $PASS, $HOST ) = @run_conf{qw(LOGIN PASS HOST)};
+my %run_conf = get_config( $DBSUFFIX, $run_dir );
 my $dbh = get_dbh( { userefdb => 1 } )
     or die "Could not connect to database: $DBI::errstr";
 my %stats;

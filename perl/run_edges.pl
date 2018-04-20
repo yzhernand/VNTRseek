@@ -38,21 +38,20 @@ my $argc = @ARGV;
 
 if ( $argc < 8 ) {
     die
-        "Usage: run_edges.pl reference_file edges_folder dbsuffix msdir MINPROFSCORE NPROCESSORS PSEARCH TMPDIR\n";
+        "Usage: run_edges.pl reference_file edges_folder dbsuffix run_dir MINPROFSCORE NPROCESSORS PSEARCH TMPDIR\n";
 }
 
 my $inputfile    = $ARGV[0];
 my $folder       = $ARGV[1];
 my $DBSUFFIX     = $ARGV[2];
-my $MSDIR        = $ARGV[3];
+my $run_dir      = $ARGV[3];
 my $MINPROFSCORE = $ARGV[4];
 my $cpucount     = $ARGV[5];
 my $PROCLU       = "$curdir/$ARGV[6]";
 my $tmp          = $ARGV[7];
 
 # set these mysql credentials in vs.cnf (in installation directory)
-my %run_conf = get_config( $DBSUFFIX, $MSDIR . "vs.cnf" );
-my ( $LOGIN, $PASS, $HOST ) = @run_conf{qw(LOGIN PASS HOST)};
+my %run_conf = get_config( $DBSUFFIX, $run_dir );
 
 my $clusters_processed = 0;
 my $totalRefReps       = 0;

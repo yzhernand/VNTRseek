@@ -89,8 +89,11 @@ sub get_config {
         # Must read global file first. Sets up the defaults.
         warn "Could not read global config\n"
             unless read_config_file("$installdir/vs.cnf");
-        warn "Could not read run config (harmless if this is a new run)\n"
-            unless read_config_file($config_loc);
+        $VSCNF_FILE{NEW_RUN} = 0;
+        unless (read_config_file("$config_loc/$dbsuffix.vs.cnf")) {
+            warn "Could not read run config (harmless if this is a new run)\n";
+            $VSCNF_FILE{NEW_RUN} = 1;
+        }
 
         # Set VSREAD;
         $VSREAD = 1;

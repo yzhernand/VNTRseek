@@ -33,11 +33,10 @@ my $curdir = getcwd;
 
 my $folder   = $ARGV[0];
 my $DBSUFFIX = $ARGV[1];
-my $MSDIR    = $ARGV[2];
+my $run_dir  = $ARGV[2];
 
 # set these mysql credentials in vs.cnf (in installation directory)
-my %run_conf = get_config($DBSUFFIX, $MSDIR . "vs.cnf" );
-my ( $LOGIN, $PASS, $HOST ) = @run_conf{qw(LOGIN PASS HOST)};
+my %run_conf = get_config( $DBSUFFIX, $run_dir );
 my $dbh = get_dbh()
     or die "Could not connect to database: $DBI::errstr";
 
@@ -59,11 +58,13 @@ my $sql_clause = q{
     replnk ON replnk.rid=map.readid INNER JOIN
     fasta_reads on fasta_reads.sid=replnk.sid
   ORDER BY map.refid,map.readid};
-($num) = $dbh->selectrow_arrayref(q{SELECT COUNT(*) } . $sql_clause)
-  or die "Couldn't execute statement: " . $dbh->errstr;
-$sth = $dbh->prepare(
-    q{SELECT map.refid, map.readid, replnk.sid, replnk.first, replnk.last, replnk.copynum, replnk.patsize, replnk.pattern,fasta_reads.dna} . $sql_clause
-) or die "Couldn't prepare statement: " . $dbh->errstr;
+($num) = $dbh->selectrow_arrayref( q{SELECT COUNT(*) } . $sql_clause )
+    or die "Couldn't execute statement: " . $dbh->errstr;
+$sth
+    = $dbh->prepare(
+    q{SELECT map.refid, map.readid, replnk.sid, replnk.first, replnk.last, replnk.copynum, replnk.patsize, replnk.pattern,fasta_reads.dna}
+        . $sql_clause )
+    or die "Couldn't prepare statement: " . $dbh->errstr;
 
 $sth->execute() or die "Couldn't execute: " . $sth->errstr;
 

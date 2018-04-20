@@ -28,12 +28,11 @@ my $curdir = getcwd;
 my $maxRepeatsPerRead = 2;
 
 my $DBSUFFIX = $ARGV[0];
-my $MSDIR    = $ARGV[1];
+my $run_dir    = $ARGV[1];
 my $TEMPDIR  = $ARGV[2];
 
 # set these mysql credentials in vs.cnf (in installation directory)
-my %run_conf = get_config($DBSUFFIX, $MSDIR . "vs.cnf" );
-my ( $LOGIN, $PASS, $HOST ) = @run_conf{qw(LOGIN PASS HOST)};
+my %run_conf = get_config($DBSUFFIX, $run_dir );
 my $dbh = get_dbh( {userefdb => 1} )
     or die "Could not connect to database: $DBI::errstr";
 
@@ -88,7 +87,7 @@ my $trsInRead_sth
         SELECT head
         FROM fasta_reads
         WHERE fasta_reads.sid=replnk.sid
-    ),rank.score,rankflank.score,fasta_ref_reps.head AS refhead,fasta_ref_reps.firstindex,fasta_ref_reps.lastindex,(
+    ),rank.score,rankflank.score,reftab.head AS refhead,reftab.firstindex,reftab.lastindex,(
         SELECT length(DNA)
         FROM fasta_reads
         WHERE fasta_reads.sid=replnk.sid
@@ -97,7 +96,7 @@ my $trsInRead_sth
     INNER JOIN replnk on replnk.rid=map.readid
     INNER JOIN rank ON rank.refid=map.refid AND rank.readid=map.readid
     INNER JOIN rankflank ON rankflank.refid=map.refid AND rankflank.readid=map.readid
-    INNER JOIN refdb.fasta_ref_reps fasta_ref_reps ON fasta_ref_reps.rid=map.refid
+    INNER JOIN refdb.fasta_ref_reps reftab ON reftab.rid=map.refid
     WHERE replnk.sid=? AND bbb=1
     ORDER BY rank.score ASC, rankflank.score ASC, map.refid ASC})
     or die "Couldn't prepare statement: " . $dbh->errstr;

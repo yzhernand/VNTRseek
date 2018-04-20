@@ -32,17 +32,17 @@ my $curdir = getcwd;
 my $argc = @ARGV;
 if ( $argc < 5 ) {
     die
-        "Usage: run_rankflankmap.pl inputfile  mapdir tmpdir dbsuffix msdir\n";
+        "Usage: run_rankflankmap.pl inputfile  mapdir tmpdir dbsuffix run_dir\n";
 }
 
 my $inputfile = $ARGV[0];
 my $mapdir    = $ARGV[1];
 my $tmp       = $ARGV[2];
 my $DBSUFFIX  = $ARGV[3];
-my $MSDIR     = $ARGV[4];
+my $run_dir   = $ARGV[4];
 
 # set these mysql credentials in vs.cnf (in installation directory)
-my %run_conf = get_config( $DBSUFFIX, $MSDIR . "vs.cnf" );
+my %run_conf = get_config( $DBSUFFIX, $run_dir );
 
 my $clusters_processed = 0;
 

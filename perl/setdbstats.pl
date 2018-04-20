@@ -23,13 +23,13 @@ use vutil qw( get_config get_dbh set_statistics );
 my $argc = @ARGV;
 if ( $argc < 4 ) {
     die
-        "Usage: setdbstats.pl reads_profiles_folder reads_profile_folder_clean dbsuffix msdir\n";
+        "Usage: setdbstats.pl reads_profiles_folder reads_profile_folder_clean dbsuffix run_dir\n";
 }
 
-my $readpf    = $ARGV[0];
-my $rpfc      = $ARGV[1];
-my $DBSUFFIX  = $ARGV[2];
-my $MSDIR     = $ARGV[3];
+my $readpf   = $ARGV[0];
+my $rpfc     = $ARGV[1];
+my $DBSUFFIX = $ARGV[2];
+my $run_dir  = $ARGV[3];
 
 ####################################
 
@@ -38,8 +38,8 @@ my $exstring;
 my $input;
 my $rc;
 
-my %run_conf = get_config($DBSUFFIX, $MSDIR . "vs.cnf" );
-my $dbh      = get_dbh({userefdb => 1});
+my %run_conf = get_config( $DBSUFFIX, $run_dir );
+my $dbh = get_dbh( { userefdb => 1, readonly => 1 } );
 
 # open( $input, "-|", "wc -l $reffile | tail -1" );
 # my $rc = <$input>;
@@ -67,6 +67,8 @@ if ( $rc =~ /(\d+)/ ) {
     $stats{NUMBER_TRS_IN_READS} = $1;
 }
 close($input);
+
+$dbh->disconnect;
 
 open( $input, "-|", "wc -l $rpfc/*.rotindex | tail -1" );
 $rc = <$input>;
@@ -97,12 +99,12 @@ close($input);
 
 open( $input, "-|", "wc -l $rpfc/*.rotindex | tail -1" );
 $rc = <$input>;
-if ( $rc =~ /^(\d+)/) {
+if ( $rc =~ /^(\d+)/ ) {
     $stats{NUMBER_READS_WITHTRS_GE7_AFTER_REDUND} = $1;
 }
 close($input);
 
 # Get config for run and save stats
-set_statistics(\%stats);
+set_statistics( \%stats );
 
 1;

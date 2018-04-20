@@ -22,22 +22,22 @@ my $argc = @ARGV;
 
 if ( $argc < 7 ) {
     die
-        "Usage: updaterefs.pl read_profiles_folder read_profiles_folder_clean dbname msdir file_representative latexfile VERSION\n";
+        "Usage: updaterefs.pl read_profiles_folder read_profiles_folder_clean dbname run_dir file_representative latexfile VERSION\n";
 }
 
 my $curdir        = getcwd;
 my $readpf        = $ARGV[0];
 my $rpfc          = $ARGV[1];
 my $DBSUFFIX      = $ARGV[2];
-my $MSDIR         = $ARGV[3];
+my $run_dir       = $ARGV[3];
 my $filerep       = $ARGV[4];
 my $result_prefix = $ARGV[5];
 my $VERSION       = $ARGV[6];
 
 # set these mysql credentials in vs.cnf (in installation directory)
-my %run_conf = get_config( $DBSUFFIX, $MSDIR . "vs.cnf" );
-my ( $LOGIN, $PASS, $HOST, $HTTPSERVER, $MIN_SUPPORT_REQUIRED, $TEMPDIR )
-    = @run_conf{qw(LOGIN PASS HOST SERVER MIN_SUPPORT_REQUIRED TMPDIR)};
+my %run_conf = get_config( $DBSUFFIX, $run_dir );
+my ( $HTTPSERVER, $MIN_SUPPORT_REQUIRED, $TEMPDIR )
+    = @run_conf{qw(SERVER MIN_SUPPORT_REQUIRED TMPDIR)};
 
 ############################ Procedures ###############################################################
 sub RC {
@@ -2098,8 +2098,7 @@ our $supported_refs = $dbh->selectcol_arrayref(
 ) or die "Couldn't select from supported VNTRs: " . $dbh->errstr;
 
 ( $ENV{DEBUG} )
-    && warn "Supported ref tr ids:\n"
-    . Dumper($supported_refs) . "\n";
+    && warn "Supported ref tr ids:\n" . Dumper($supported_refs) . "\n";
 
 # Connect to refdb
 my $ref_dbh = get_ref_dbh(
@@ -2349,9 +2348,10 @@ my ( $mapped, $rank, $rankflank, $num_spanN );
     or die "Couldn't select rankflank count: " . $dbh->errstr;
 
 # update spanN number on stats
-($num_spanN) = $dbh->selectrow_array(q{SELECT count(*) FROM fasta_ref_reps 
-    WHERE support_vntr > 0})
-    or die "Couldn't select span N count: " . $dbh->errstr;
+($num_spanN) = $dbh->selectrow_array(
+    q{SELECT count(*) FROM fasta_ref_reps 
+    WHERE support_vntr > 0}
+) or die "Couldn't select span N count: " . $dbh->errstr;
 
 $dbh->do(
     qq{UPDATE stats SET

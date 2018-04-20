@@ -28,17 +28,16 @@ my $curdir = getcwd;
 
 my $argc = @ARGV;
 if ( $argc < 4 ) {
-    die "Usage: run_flankcomp.pl inputfile dbname msdir tempdir\n";
+    die "Usage: run_flankcomp.pl inputfile dbname run_dir tempdir\n";
 }
 
 my $inputfile = $ARGV[0];
 my $DBSUFFIX  = $ARGV[1];
-my $MSDIR     = $ARGV[2];
+my $run_dir     = $ARGV[2];
 my $TEMPDIR   = $ARGV[3];
 
 # set these mysql credentials in vs.cnf (in installation directory)
-my %run_conf = get_config( $DBSUFFIX, $MSDIR . "vs.cnf" );
-my ( $LOGIN, $PASS, $HOST ) = @run_conf{qw(LOGIN PASS HOST)};
+my %run_conf = get_config( $DBSUFFIX, $run_dir );
 
 my $clusters_processed = 0;
 my $totalRefReps       = 0;

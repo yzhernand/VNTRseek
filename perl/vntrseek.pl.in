@@ -49,8 +49,11 @@ my $VERSION = '@VNTRVer@';
 # this is where the pipeline is installed
 my $install_dir = "$FindBin::RealBin";
 
+# this is the working directory of the run when calling the script
+my $run_dir = getcwd();
+
 use lib "$FindBin::RealBin/lib";
-use lib "$FindBin::RealBin/perl/lib";  # for testing
+use lib "$FindBin::RealBin/perl/lib";    # for testing
 
 use vutil
     qw(get_config set_config set_statistics get_statistics set_credentials write_mysql write_sqlite get_dbh stats_get set_datetime print_config create_blank_file run_redund trim);
@@ -139,34 +142,39 @@ if ( !exists $opts{"DBSUFFIX"} ) {
     );
 }
 
+my $STEP = shift;
+
 # where config file will go
 # Convert any input for DBSUFFIX to lower case.
-# $opts{"DBSUFFIX"} = lc($opts{"DBSUFFIX"});
+$opts{"DBSUFFIX"} = lc( $opts{"DBSUFFIX"} );
 
 # This path needs to be able to pick any case difference, for backwards compatibility
 # my $MSDIR       = $ENV{HOME} . "/" . $opts{'DBSUFFIX'} . ".";
-my $config_file = $opts{'DBSUFFIX'} . ".vs.cnf";
+my $config_file = "$run_dir/" . $opts{'DBSUFFIX'} . ".vs.cnf";
 
 # set variables from vs.cnf
-my %conf_vars = get_config( $opts{'DBSUFFIX'}, $config_file );
+my %conf_vars = get_config( $opts{'DBSUFFIX'}, $run_dir );
 for my $k ( keys %conf_vars ) {
     $opts{$k} = $conf_vars{$k}
         if ( !exists $opts{$k} );
 }
 
-if ( $ENV{DEBUG} ) {
-    warn Dumper( \%opts );
+if ( ( $conf_vars{NEW_RUN} == 1 ) && ( $STEP != 0 ) ) {
+    die
+        "Error: run configuration file not found at $config_file and this is not a new run.
+Please make sure that the DB suffix you supplied is correct.\n";
 }
+
+( $ENV{DEBUG} ) && warn Dumper( \%opts );
 
 # Send config back to vutil lib and validate, after including CLI options
 set_config(%opts);
 
 # write out the config file
-print_config($MSDIR);
+print_config($run_dir);
 
 # print Dumper(\%opts);
 # print Dumper(@ARGV);
-my $STEP = shift;
 
 my $STEPEND = -1;
 if (   (@ARGV)
@@ -365,10 +373,10 @@ sub GetNextStep {
 
     my %stat_hash = %{ get_statistics(@stats) };
     my @vals      = @stat_hash{@stats};
-    ( $ENV{DEBUG} ) && warn "GetNextStep vals: " . Dumper(\@vals) . "\n";
+    ( $ENV{DEBUG} ) && warn "GetNextStep vals: " . Dumper( \@vals ) . "\n";
     for ( my $idx = @vals - 1; $idx > 0; --$idx ) {
-        if (defined $vals[$idx]) {
-            say min($idx+1, 20);
+        if ( defined $vals[$idx] ) {
+            say min( $idx + 1, 20 );
             return 0;
         }
     }
@@ -597,7 +605,7 @@ if ( $STEP == 3 ) {
 
     warn "setting additional statistics...\n";
     system(
-        "./setdbstats.pl $read_profiles_folder $read_profiles_folder_clean $opts{DBSUFFIX} $MSDIR"
+        "./setdbstats.pl $read_profiles_folder $read_profiles_folder_clean $opts{DBSUFFIX} $run_dir"
     );
     if ( $? == -1 ) {
         SetError( $STEP, "command failed: $!", -1 );
@@ -876,7 +884,7 @@ if ( $STEP == 8 ) {
     $dbh->disconnect();
 
     my $exstring
-        = "./insert_reads.pl $read_profiles_folder_clean/all.clusters $read_profiles_folder  $opts{FASTA_DIR} $read_profiles_folder_clean $reference_folder/reference.leb36.rotindex $extra_param $opts{DBSUFFIX} $MSDIR $opts{TMPDIR} $opts{IS_PAIRED_READS}";
+        = "./insert_reads.pl $read_profiles_folder_clean/all.clusters $read_profiles_folder  $opts{FASTA_DIR} $read_profiles_folder_clean $reference_folder/reference.leb36.rotindex $extra_param $opts{DBSUFFIX} $run_dir $opts{TMPDIR} $opts{IS_PAIRED_READS}";
     system($exstring);
     if ( $? == -1 ) {
         SetError( $STEP, "command failed: $!", -1 );
@@ -905,7 +913,7 @@ if ( $STEP == 9 ) {
     print STDERR
         "\n\nExecuting step #$STEP (outputting flanks inside each cluster)...";
     my $exstring
-        = "./run_flankcomp.pl $read_profiles_folder_clean/allwithdups.clusters $opts{DBSUFFIX} $MSDIR $opts{TMPDIR} > $read_profiles_folder_clean/allwithdups.flanks";
+        = "./run_flankcomp.pl $read_profiles_folder_clean/allwithdups.clusters $opts{DBSUFFIX} $run_dir $opts{TMPDIR} > $read_profiles_folder_clean/allwithdups.flanks";
     system($exstring);
     if ( $? == -1 ) {
         SetError( $STEP, "command failed: $!", -1 );
@@ -1131,7 +1139,7 @@ if ( $STEP == 12 ) {
     print STDERR
         "\n\nExecuting step #$STEP (inserting map and rankflank information into database.)";
     my $exstring
-        = "./run_rankflankmap.pl $read_profiles_folder_clean/allwithdups.clusters $read_profiles_folder_clean/out $opts{TMPDIR} $opts{DBSUFFIX} $MSDIR";
+        = "./run_rankflankmap.pl $read_profiles_folder_clean/allwithdups.clusters $read_profiles_folder_clean/out $opts{TMPDIR} $opts{DBSUFFIX} $run_dir";
     system($exstring);
     if ( $? == -1 ) {
         SetError( $STEP, "command failed: $!", -1 );
@@ -1164,7 +1172,7 @@ if ( $STEP == 13 ) {
     my $exstring = "./run_edges.pl";
     my @exargs   = (
         "$opts{REFERENCE_FILE}", "$edges_folder",
-        "$opts{DBSUFFIX}",       "$MSDIR",
+        "$opts{DBSUFFIX}",       "$run_dir",
         "$MINPROFSCORE",         "$opts{NPROCESSES}",
         "$PROCLU_EXECUTABLE",    "$opts{TMPDIR}"
     );
@@ -1201,7 +1209,7 @@ if ( $STEP == 14 ) {
     my $exstring = "./extra_index.pl";
     my @exargs   = (
         "$read_profiles_folder_clean/best", "$opts{DBSUFFIX}",
-        "$MSDIR",                           "$opts{TMPDIR}"
+        "$run_dir",                         "$opts{TMPDIR}"
     );
     system( $exstring, @exargs );
     if ( $? == -1 ) {
@@ -1237,7 +1245,7 @@ if ( $STEP == 15 ) {
     my $exstring = "./pcr_dup.pl";
     my @exargs   = (
         "$read_profiles_folder_clean/best", "$read_profiles_folder_clean",
-        "$opts{DBSUFFIX}",                  "$MSDIR",
+        "$opts{DBSUFFIX}",                  "$run_dir",
         "$opts{NPROCESSES}",                "$opts{TMPDIR}",
         "$opts{KEEPPCRDUPS}"
     );
@@ -1269,7 +1277,7 @@ if ( $STEP == 16 ) {
     print STDERR "\n\nExecuting step #$STEP (removing mapped duplicates) ...";
 
     my $exstring
-        = "./map_dup.pl $opts{DBSUFFIX} $MSDIR $opts{TMPDIR} > $read_profiles_folder_clean/result/$opts{DBSUFFIX}.map_dup.txt";
+        = "./map_dup.pl $opts{DBSUFFIX} $run_dir $opts{TMPDIR} > $read_profiles_folder_clean/result/$opts{DBSUFFIX}.map_dup.txt";
     system($exstring);
     if ( $? == -1 ) {
         SetError( $STEP, "command failed: $!", -1 );
@@ -1296,7 +1304,7 @@ if ( $STEP == 17 ) {
     $timestart = time();
     print STDERR "\n\nExecuting step #$STEP (computing variability)...";
     my $exstring
-        = "./run_variability.pl $read_profiles_folder_clean/allwithdups.clusters $read_profiles_folder_clean/out $opts{DBSUFFIX} $MSDIR $opts{MIN_FLANK_REQUIRED} $opts{TMPDIR}";
+        = "./run_variability.pl $read_profiles_folder_clean/allwithdups.clusters $read_profiles_folder_clean/out $opts{DBSUFFIX} $run_dir $opts{MIN_FLANK_REQUIRED} $opts{TMPDIR}";
     system($exstring);
     if ( $? == -1 ) {
         SetError( $STEP, "command failed: $!", -1 );
@@ -1351,7 +1359,7 @@ if ( $STEP == 19 ) {
     system(
         "./setdbstats.pl",             "$read_profiles_folder",
         "$read_profiles_folder_clean", "$opts{DBSUFFIX}",
-        "$MSDIR"
+        "$run_dir"
     );
     if ( $? == -1 ) {
         SetError( $STEP, "command failed: $!", -1 );
@@ -1372,7 +1380,7 @@ if ( $STEP == 19 ) {
         "$read_profiles_folder",
         "$read_profiles_folder_clean",
         "$opts{DBSUFFIX}",
-        "$MSDIR",
+        "$run_dir",
         "$read_profiles_folder_clean/out/representatives.txt",
         "${read_profiles_folder_clean}/result/${DBNAME}",
         "$VERSION"

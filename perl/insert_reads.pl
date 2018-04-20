@@ -41,12 +41,12 @@ my $rotatedfolder   = $ARGV[3];
 my $rotatedreffile  = $ARGV[4];
 my $strip454        = $ARGV[5];
 my $DBSUFFIX        = $ARGV[6];
-my $MSDIR           = $ARGV[7];
+my $run_dir         = $ARGV[7];
 my $TEMPDIR         = $ARGV[8];
 my $IS_PAIRED_READS = $ARGV[9];
 
 # set these mysql credentials in vs.cnf (in installation directory)
-my %run_conf = get_config( $DBSUFFIX, $MSDIR . "vs.cnf" );
+my %run_conf = get_config( $DBSUFFIX, $run_dir );
 my ( $LOGIN, $PASS, $HOST ) = @run_conf{qw(LOGIN PASS HOST)};
 
 my $totalReads = 0;
