@@ -5,6 +5,7 @@ use DBI;
 use Carp;
 use FindBin;
 use File::Temp;
+use Try::Tiny;
 use POSIX qw(strftime);
 
 if ( $ENV{DEBUG} ) {
@@ -413,8 +414,8 @@ sub _init_ref_dbh {
 
     # $dbh->do(q{PRAGMA journal_mode = WAL});
 
-    make_refseq_db( $dbh, $refseq, $refleb36, $redo );
-    load_refprofiles_db( $dbh, $redo );
+    make_refseq_db( $dbh, $refseq, $redo );
+    load_refprofiles_db( $dbh, $refleb36, $redo );
     set_indist( $dbh, $refindist, $redo );
     if ( $redo && $VSREAD ) {
 
@@ -498,6 +499,14 @@ sub get_dbh {
         # Attach reference set database
         if ( exists $opts->{userefdb} && $opts->{userefdb} ) {
             my $refdbfile = $VSCNF_FILE{REFERENCE_DB};
+
+            # First initialize the reference DB, if needed
+            # Don't save the returned dbh
+            _init_ref_dbh(
+                @VSCNF_FILE{
+                    qw(REFERENCE_SEQ REFERENCE_FILE REFERENCE_INDIST REDO_REFDB)
+                }
+            );
             ( $ENV{DEBUG} )
                 && warn "Connecting to refseq db at $refdbfile\n";
             $dbh->do(qq{ATTACH DATABASE "$refdbfile" AS refdb})
@@ -513,10 +522,10 @@ sub get_dbh {
 sub make_refseq_db {
 
     # TODO DBI error checking
-    unless ( @_ == 4 ) {
-        croak "Error: expecting 4 arguments, got " . @_ * 1 . "\n";
+    unless ( @_ == 3 ) {
+        croak "Error: expecting 3 arguments, got " . @_ * 1 . "\n";
     }
-    my ( $dbh, $refseq, $refdbfile, $redo ) = @_;
+    my ( $dbh, $refseq, $redo ) = @_;
 
     ( $ENV{DEBUG} ) && warn "CWD = " . getcwd() . "\n";
 
@@ -625,14 +634,15 @@ sub make_refseq_db {
 
         if ( $num_rows != @$seq_rows ) {
             $dbh->rollback;
-            $dbh->disconnect;
 
             # unlink($refdbfile);
             die "Error inserting reference sequences into "
-                . $refdbfile
+                . $dbh->sqlite_db_filename()
                 . ": inserted $num_rows but read "
                 . scalar(@$seq_rows)
                 . " lines from file. Aborting...";
+
+            $dbh->disconnect;
         }
 
         $dbh->commit;
@@ -687,14 +697,19 @@ sub load_refprofiles_db {
         $dbh->do($create_ref_profiles_q);
 
         # Read in ref leb36 file and create a virtual table out of it
-        $dbh->sqlite_create_module(
-            perl => "DBD::SQLite::VirtualTable::PerlData" );
+        try {
+            $dbh->sqlite_create_module(
+                perl => "DBD::SQLite::VirtualTable::PerlData" );
+        }
+        catch {
+            warn "Not creating VirtualTable; module already registered.\n";
+        };
 
         our $leb36_rows = [];
-        open my $refleb36, "<", "$refleb36"
+        open my $refleb36_fh, "<", "$refleb36"
             or die "Error opening reference profiles file: $!\n";
 
-        while ( my $r = <$refleb36> ) {
+        while ( my $r = <$refleb36_fh> ) {
             chomp $r;
             my @fields = split /\s+/, $r;
             push @$leb36_rows, [ @fields[ 0, 3 .. 11 ] ];
@@ -705,7 +720,7 @@ sub load_refprofiles_db {
             . scalar(@$leb36_rows)
             . " lines from refleb file\n";
 
-        close $refleb36;
+        close $refleb36_fh;
 
         $dbh->do(
             q{CREATE VIRTUAL TABLE temp.leb36tab
@@ -753,7 +768,7 @@ sub load_refprofiles_db {
         $dbh->commit;
 
         # Run redund
-        run_redund( $refleb36, "reference.leb36", 0, 0 );
+        run_redund( $dbh, $refleb36, "reference.leb36", 0, 0 );
         return 1;
     }
 
@@ -776,7 +791,7 @@ sub set_indist {
         $line =~ /-(\d+)/;
 
         $dbh->do(
-            qq{UPDATE refdb.fasta_ref_reps SET is_singleton=0,is_indist=1 WHERE rid=$1}
+            qq{UPDATE fasta_ref_reps SET is_singleton=0,is_indist=1 WHERE rid=$1}
         ) or die $dbh->errstr;
     }
 }
@@ -810,7 +825,8 @@ sub run_redund {
         = $dbh->selectrow_array(
         q{SELECT COUNT(*) FROM ref_profiles WHERE redund = 0});
 
-# Return if redund has already been run for this refset and were are not forcing a redo
+    # Return if redund has already been run for this refset
+    # and were are not forcing a redo
     return
         unless ( $num_rows == 0 || $redo );
 

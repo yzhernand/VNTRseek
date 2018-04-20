@@ -56,7 +56,7 @@ use lib "$FindBin::RealBin/lib";
 use lib "$FindBin::RealBin/perl/lib";    # for testing
 
 use vutil
-    qw(get_config set_config set_statistics get_statistics set_credentials write_mysql write_sqlite get_dbh stats_get set_datetime print_config create_blank_file run_redund trim);
+    qw(get_config set_config set_statistics get_statistics set_credentials write_mysql write_sqlite get_dbh get_ref_dbh stats_get set_datetime print_config create_blank_file run_redund trim);
 
 my $DOALLSTEPS = 0
     ; # set to 0 to do one step at a time (recommended for test run), 1 to run though all steps (THIS IS OTIONAL AS SPECIFYING END STEP IS POSSIBLE)
@@ -374,7 +374,7 @@ sub GetNextStep {
     my %stat_hash = %{ get_statistics(@stats) };
     my @vals      = @stat_hash{@stats};
     ( $ENV{DEBUG} ) && warn "GetNextStep vals: " . Dumper( \@vals ) . "\n";
-    for ( my $idx = @vals - 1; $idx > 0; --$idx ) {
+    for ( my $idx = @vals - 1; $idx >= 0; --$idx ) {
         if ( defined $vals[$idx] ) {
             say min( $idx + 1, 20 );
             return 0;
@@ -667,15 +667,7 @@ if ( $STEP == 4 ) {
 # psearch output can still be files but this step will then collect them and
 # insert into the db. (Maybe merge in next step's `join_clusters.exe`)
 # For now, extract the file we need using the database
-    ( my $dbfile = $opts{REFERENCE_SEQ} ) =~ s/.(seq|leb36)$/.db/;
-    my $dbh = DBI->connect(
-        "DBI:SQLite:dbname=$dbfile",
-        undef, undef,
-        {   AutoCommit                 => 1,
-            RaiseError                 => 1,
-            sqlite_see_if_its_a_number => 1,
-        }
-    ) or die "Could not connect to database: $DBI::errstr";
+    my $dbh = get_ref_dbh(@opts{qw(REFERENCE_SEQ REFERENCE_FILE REFERENCE_INDIST), 0});
 
     # Must negate rids for refset
     my $get_ref_leb36 = q{SELECT -rid, length(pattern) AS patsize,
