@@ -83,21 +83,24 @@ sub get_config {
         unless ( @_ == 2 );
 
     my ( $dbsuffix, $config_loc ) = @_;
-    my $installdir = "$FindBin::RealBin";
+    my $installdir  = "$FindBin::RealBin";
+    my $config_file = "$config_loc/$dbsuffix.vs.cnf";
     unless ($VSREAD) {
 
         # Must read global file first. Sets up the defaults.
         warn "Could not read global config\n"
             unless read_config_file("$installdir/vs.cnf");
         $VSCNF_FILE{NEW_RUN} = 0;
-        unless (read_config_file("$config_loc/$dbsuffix.vs.cnf")) {
-            warn "Could not read run config (harmless if this is a new run)\n";
+        unless ( read_config_file($config_file) ) {
+            warn
+                "Could not read run config (harmless if this is a new run)\n";
             $VSCNF_FILE{NEW_RUN} = 1;
         }
 
         # Set VSREAD;
-        $VSREAD = 1;
+        $VSREAD               = 1;
         $VSCNF_FILE{DBSUFFIX} = $dbsuffix;
+        $VSCNF_FILE{CONF_DIR} = $config_loc;
         ( $VSCNF_FILE{REFERENCE_DB} = $VSCNF_FILE{REFERENCE_SEQ} )
             =~ s/.seq$/.db/;
     }
@@ -407,6 +410,7 @@ sub _init_ref_dbh {
 
     # Set some pragmas to make this part faster
     $dbh->do(q{PRAGMA synchronous = OFF});
+
     # $dbh->do(q{PRAGMA journal_mode = WAL});
 
     make_refseq_db( $dbh, $refseq, $refleb36, $redo );
@@ -436,7 +440,7 @@ sub _init_ref_dbh {
 #         }
 # Always set redo flag back to 0 when done redoing
         $VSCNF_FILE{REDO_REFDB} = 0;
-        print_config( $ENV{HOME} . "/" . $VSCNF_FILE{DBSUFFIX} . "." );
+        print_config( $VSCNF_FILE{CONF_DIR} );
     }
 
     # END TODO
@@ -485,7 +489,7 @@ sub get_dbh {
 
         # Set default journal to write-ahead log
         # $dbh->do(q{PRAGMA journal_mode = WAL})
-            # or die "Could not do statement on database $dbfile: $DBI::errstr";
+        # or die "Could not do statement on database $dbfile: $DBI::errstr";
 
         # 800MB cache
         $dbh->do("PRAGMA cache_size = 800000")
@@ -1321,9 +1325,10 @@ sub print_config {
     }
 
     # look in the directory the script was started in
-    if ( open( MFREAD, ">${startdir}vs.cnf" ) ) {
+    my $config_file = "$startdir/" . $VSCNF_FILE{DBSUFFIX} . ".vs.cnf";
+    if ( open( my $config_fh, ">", $config_file ) ) {
 
-        print MFREAD <<CNF;
+        print $config_fh <<CNF;
 # COPY THIS FILE TO A DIFFERENT LOCATION AND SET ALL VARIABLES. 
 # DO NOT FORGET TO CHMOD THIS FILE TO PREVENT OTHER PEOPLE ON 
 # THE SYSTEM FROM LEARNING YOUR MYSQL CREDENTIALS.
@@ -1411,14 +1416,14 @@ REFERENCE_INDIST_PRODUCE=$VSCNF_FILE{"REFERENCE_INDIST_PRODUCE"}
 
 CNF
 
-        close(MFREAD);
+        close($config_fh);
 
-        chmod 0600, "${startdir}vs.cnf";
+        chmod 0640, $config_file;
 
     }
     else {
 
-        die "print_config: can't open '${startdir}vs.cnf' for writing!\n";
+        die "print_config: can't open '$config_file' for writing!\n";
     }
 
 }
