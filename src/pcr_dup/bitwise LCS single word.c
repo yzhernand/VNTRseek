@@ -40,6 +40,9 @@ int LCS_single_word(char *string1, char *string2, int n, int m){
 	unsigned long long int xorResult;
 	unsigned long long int complementErase;
 	int countOneBits;
+    int junkBits;
+    unsigned long long int junkBitsMask;
+
 	//UINT_MAX is             4294967295 which is 32 bits long
 	//ULLONG_MAX is 18446744073709551615 which is 64 bits long
 	//printf("\n%u %llu",UINT_MAX,ULLONG_MAX);
@@ -52,11 +55,15 @@ int LCS_single_word(char *string1, char *string2, int n, int m){
 		return(-1);
 	}
 	
-	//*************************encode match strings A C G T N for string1 
+    junkBits = wordSize - 1 - n;
+    junkBitsMask = 0xFFFFFFFFFFFFFFFF >> junkBits;
+    //printf("\njunkBitsMask >>> %s",convertToBitString64(junkBitsMask));
+
+	//*************************encode match strings A C G T N for string1
 	//loop through string1 and store bits in matchA, matchC, etc.
 	//position zero corresponds to column zero in the score matrix, i.e., no character
 	//so we start with i = 0 and bitmask = 2
-	bitmask=0x0000000000000010; //2
+	bitmask=0x0000000000000002; //2
 	matchA=0x0000000000000000;
 	matchC=0x0000000000000000;
 	matchG=0x0000000000000000;
@@ -91,22 +98,20 @@ int LCS_single_word(char *string1, char *string2, int n, int m){
 	}
 	
 	//debug
-	/*
-	printf("\nmatchA: %s",convertToBitString64(matchA));
-	printf("\nmatchC: %s",convertToBitString64(matchC));
-	printf("\nmatchG: %s",convertToBitString64(matchG));
-	printf("\nmatchT: %s",convertToBitString64(matchT));
-	printf("\nmatchN: %s",convertToBitString64(matchN));
-	*/
+	//printf("\nmatchA: %s",convertToBitString64(matchA));
+	//printf("\nmatchC: %s",convertToBitString64(matchC));
+	//printf("\nmatchG: %s",convertToBitString64(matchG));
+	//printf("\nmatchT: %s",convertToBitString64(matchT));
+	//printf("\nmatchN: %s",convertToBitString64(matchN));
+	//printf("\nhere");
 	
 	//**********************load complement of row zero in the score matrix which is all 1s	
 	complement = ~0x0000000000000000;
 
 	//debug
-	/*
-	printf("\n\nRow 0");
-	printf("\n\ncomplement:            %s",convertToBitString64(complement));
-	*/
+	//printf("\n\nRow 0");
+	//printf("\n\ncomplement:            %s",convertToBitString64(complement));
+	
 	
 	//loop for each letter in string2
 	//row zero in the score matrix corresponds to the initial value of complement
@@ -147,38 +152,37 @@ int LCS_single_word(char *string1, char *string2, int n, int m){
 		complement = addResult|xorResult;
 		
 		//debug
-		/*
-		printf("\n\n                     %s",string1);
-		printf("\n                    %2d %c",i+1,string2[i]);
-		printf("\nmatchString            %s",convertToBitString64(matchString));
-		printf("\nonlyOnesNotInOriginal: %s",convertToBitString64(onlyOnesNotInOriginal));
-		printf("\naddResult:             %s",convertToBitString64(addResult));
-		printf("\nxorResult:             %s",convertToBitString64(xorResult));
-		printf("\ncomplement:            %s",convertToBitString64(complement));
-		*/
+		//printf("\n\n                     %s",string1);
+		//printf("\n                    %2d %c",i+1,string2[i]);
+		//printf("\nmatchString            %s",convertToBitString64(matchString));
+		//printf("\nonlyOnesNotInOriginal: %s",convertToBitString64(onlyOnesNotInOriginal));
+		//printf("\naddResult:             %s",convertToBitString64(addResult));
+		//printf("\nxorResult:             %s",convertToBitString64(xorResult));
+		//printf("\ncomplement:            %s",convertToBitString64(complement));
+				
 	}
 	
 	//debug
-	/*
-	printf("\n\nFinal complement:      %s",convertToBitString64(complement));
-	printf("\nFinal ~complement:     %s",convertToBitString64(~complement));
-   */
-	
+	//printf("\n\nFinal complement:      %s",convertToBitString64(complement));
+	//printf("\nFinal ~complement:     %s",convertToBitString64(~complement));
+
 	complement = ~complement;
 	
 	//find length of LCS
 	//time proportional to number of ones in bit string
 	complementErase = complement;
-	countOneBits = 0 ;
+
+    //mask bits past N in final word using JunkBits
+    complementErase  &= junkBitsMask;
+
+    countOneBits = 0 ;
 	while (complementErase)//stop when zero
 	{
 		countOneBits++;
 		complementErase &= (complementErase - 1); //removes last one bit
 	}
 	//debug
-	/*
-	printf("\n\nNumber of one bits = LCS = %d",countOneBits);
-	*/
+	//printf("\n\nNumber of one bits = LCS = %d\n",countOneBits);
 	
 	return(countOneBits);
 	

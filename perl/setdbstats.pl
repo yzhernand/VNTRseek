@@ -16,7 +16,7 @@ use File::Basename;
 
 use List::Util qw[min max];
 
-use lib "$FindBin::Bin/vntr"; # must be same as install dir!
+use lib "$FindBin::RealBin/lib"; # must be same as install dir!
 
 require "vutil.pm";
 
@@ -56,28 +56,28 @@ my $rc;
 my $exstring;
 my $input;
 
-open($input, "-|", "wc", "-l", "$reffile");
+open($input, "-|", "wc -l < $reffile");
 $rc = <$input>;
 if ($rc =~ /(\d+)/) {
   SetStatistics('NUMBER_REF_TRS',$rc);
 }
 close($input);
 
-open($input, "-|", "wc -l $readpf/*.indexhist");
+open($input, "-|", "cat $readpf/*.indexhist | wc -l");
 $rc = <$input>;
 if ($rc =~ /(\d+)/) {
   SetStatistics('NUMBER_TRS_IN_READS',$rc);
 }
 close($input);
 
-open($input, "-|", "wc", "-l", "$reffolder/reference.leb36.rotindex");
+open($input, "-|", "wc -l < $reffolder/reference.leb36.rotindex");
 $rc = <$input>;
 if ($rc =~ /(\d+)/) {
   SetStatistics('NUMBER_REFS_TRS_AFTER_REDUND',$rc);
 }
 close($input);
 
-open($input, "-|", "wc -l $rpfc/*.rotindex");
+open($input, "-|", "cat $rpfc/*.rotindex | wc -l");
 $rc = <$input>;
 if ($rc =~ /(\d+)/) {
   SetStatistics('NUMBER_TRS_IN_READS_AFTER_REDUND',$rc);
@@ -90,7 +90,7 @@ my $totalReadsWithTRsPatternGE7 = 0;
 my $totalReadsWithTRs = 0;
 my $readTRsWPGE7AfterCyclicRedundancyElimination = 0;
 
-open($input, "cat $readpf/*.index | ./ge7.pl |");
+open($input, "-|", "./ge7.pl $readpf/*.index");
 $rc = <$input>;
 if ($rc =~ /(\d+) (\d+) (\d+)/) {
    $readTRsWithPatternGE7 = $1;
@@ -100,7 +100,7 @@ if ($rc =~ /(\d+) (\d+) (\d+)/) {
 close($input);
 
 
-open($input, "cat $readpf/*.indexhist | ./ge7.pl |");
+open($input, "-|", "./ge7.pl $readpf/*.indexhist");
 $rc = <$input>;
 if ($rc =~ /(\d+) (\d+) (\d+)/) {
   $totalReadsWithTRs = $3;
@@ -108,7 +108,7 @@ if ($rc =~ /(\d+) (\d+) (\d+)/) {
 close($input);
 
 
-open($input, "cat $rpfc/*.rotindex | wc |");
+open($input, "-|", "cat $rpfc/*.rotindex | wc");
 $rc = <$input>;
 if ($rc =~ /(\d+) (\d+) (\d+)/) {
   $readTRsWPGE7AfterCyclicRedundancyElimination = $1;

@@ -1,12 +1,14 @@
+package vutil;
 use strict;
 use Cwd;
 use DBI;
+use Carp;
+#use Config::Simple;
 
 use FindBin;
 
-package vutil;
 use base 'Exporter';
-our @EXPORT_OK = ('read_global_config_file','get_config','get_config_vars','get_credentials','set_config','set_config_vars','set_credentials','write_mysql','stats_set','stats_get','set_datetime','print_config');
+our @EXPORT_OK = qw(read_config_file get_config get_credentials set_config set_credentials write_mysql stats_set stats_get set_datetime print_config trim create_blank_file);
 
 # vutil.pm
 # author: Yevgeniy Gelfand
@@ -26,62 +28,36 @@ sub trim($)
         return $string;
 }
 
-################################################################
-sub read_config_file {
-
- my $argc = @_;
- if ($argc <1) { die "read_config_file: expects 1 parameters, passed $argc !\n"; }
- my $startdir = $_[0];
- 
-
- print STDERR "Using config file '${startdir}vs.cnf'...\n";
-
-
- # read local config
- if (open(MFREAD,"${startdir}vs.cnf")) {
-
-  while (<MFREAD>) {
-   chomp;
-   
-   # skip start comments
-   if (/^\#/) { next; }
-   
-   if ( /(.+)=(.*)/ ) {
-     my $key = trim($1);
-     my $val = trim($2);
-     $val =~ s/\s*\#.*//; # strip end comments
-     $VSCNF_FILE{uc($key)}=$val; 
-     #print $key."=".$val."\n";
-   }
-  }
-
-  close(MFREAD);
-
- } else {
-
-  #die "\nread_config_file: Cannot find config file (${startdir}vs.cnf). Aborting!\n";
-
-  # create config file
-  print_config($startdir);
-
- }
-
- $VSREAD = 1;
-
+sub create_blank_file {
+  my $filename = shift or croak("Error: filename is a required argument\n");
+  open my $blank_file, ">", $filename or croak("Error creating blank file $filename: $!");
+  close $blank_file or croak("Error closing blank file $filename: $!");
 }
 
 ################################################################
-sub read_global_config_file {
+#sub read_config_file_configsimple {
+#  my $output_folder = shift
+#    or croak "Error: function expects 1 parameter (got none)\n";
+#  my $config_ref;
+#  carp "$output_folder/vs.cnf";
+#  my $cfg = new Config::Simple( syntax => "ini" );
+#  $cfg->read("$output_folder/vs.cnf");
+#  $config_ref = $cfg->get_block('default');
+#  $cfg->write("$output_folder/vs.cnf.bak");
+#  return $config_ref;
+#}
 
- # install dir
- my $argc = @_;
- if ($argc <1) { die "read_global_config_file: expects 1 parameters, passed $argc !\n"; }
- my $installdir = $_[0];
+################################################################
+sub read_config_file {
+
+ # Get file location
+ unless (@_) { die "read_global_config_file: expects 1 parameters.\n"; }
+ my $file_loc = shift;
  
  # read global config
- if (open(MFREAD,"$installdir/vs.cnf")) {
+ if (open(my $cnf, "<", "$file_loc")) {
 
-  while (<MFREAD>) {
+  while (<$cnf>) {
    chomp;
    
    # skip start comments
@@ -96,107 +72,40 @@ sub read_global_config_file {
    }
   }
 
-  close(MFREAD);
+  close($cnf);
+  return 1;
 
  } else {
-
-  warn "read_global_config_file: can't read global config file '$installdir/vs.cnf'!\n";
+  return 0;
  }
 
 }
 
 ################################################################
 sub get_config {
+  croak "Error: function expects 1 parameter (got none)\n"
+    unless (@_ == 1);
+  my $installdir = "$FindBin::RealBin";
+  unless ($VSREAD) {
+    # Must read global file first. Sets up the defaults.
+    warn "Could not read global config\n"
+      unless read_config_file("$installdir/vs.cnf");
+    my $config_loc = shift;
+    warn "Could not read run config (harmless if this is a new run)\n"
+      unless read_config_file($config_loc);
+    # Set VSREAD;
+    $VSREAD = 1;
+  }
 
- my $SERVER=""; 
- my $TMPDIR=""; 
- my $html_dir=""; 
- my $fasta_folder=""; 
- my $output_root=""; 
- my $reference_file=""; 
- my $reference_seq=""; 
- my $reference_indist="";
-
- my $argc = @_;
- if ($argc <1) { die "get_config: expects 1 parameters, passed $argc !\n"; }
-
- my $startdir = $_[0];
-
- if (!$VSREAD) { read_config_file($startdir); }
-
- if (defined $VSCNF_FILE{"SERVER"}) { $SERVER = $VSCNF_FILE{"SERVER"}; } 
- if (defined $VSCNF_FILE{"TMPDIR"}) { $TMPDIR = $VSCNF_FILE{"TMPDIR"}; } 
- if (defined $VSCNF_FILE{"HTML_DIR"}) { $html_dir = $VSCNF_FILE{"HTML_DIR"}; } 
- if (defined $VSCNF_FILE{"FASTA_DIR"}) { $fasta_folder = $VSCNF_FILE{"FASTA_DIR"}; } 
- if (defined $VSCNF_FILE{"OUTPUT_ROOT"}) { $output_root = $VSCNF_FILE{"OUTPUT_ROOT"}; } 
- if (defined $VSCNF_FILE{"REFERENCE_FILE"}) { $reference_file = $VSCNF_FILE{"REFERENCE_FILE"}; } 
- if (defined $VSCNF_FILE{"REFERENCE_SEQ"}) { $reference_seq = $VSCNF_FILE{"REFERENCE_SEQ"}; } 
- if (defined $VSCNF_FILE{"REFERENCE_INDIST"}) { $reference_indist = $VSCNF_FILE{"REFERENCE_INDIST"}; } 
- 
- return ($SERVER,$TMPDIR,$html_dir,$fasta_folder,$output_root,$reference_file,$reference_seq,$reference_indist);
+  return %VSCNF_FILE;
 }
 
 ################################################################
 sub set_config {
+  # TODO Option validation (trusting caller sends hash with valid options)
+  my %in_hash = @_;
 
- my $argc = @_;
- if ($argc <8) { die "set_config: expects 9 parameters, passed $argc !\n"; }
-
- $VSCNF_FILE{"SERVER"}=$_[0];
- $VSCNF_FILE{"TMPDIR"}=$_[1]; 
- $VSCNF_FILE{"HTML_DIR"}=$_[2]; 
- $VSCNF_FILE{"FASTA_DIR"}=$_[3]; 
- $VSCNF_FILE{"OUTPUT_ROOT"}=$_[4]; 
- $VSCNF_FILE{"REFERENCE_FILE"}=$_[5]; 
- $VSCNF_FILE{"REFERENCE_SEQ"}=$_[6]; 
- $VSCNF_FILE{"REFERENCE_INDIST"}=$_[7]; 
-}
-
-################################################################
-sub get_config_vars {
-
- my $NPROCESSES=-1; 
- my $strip_454_keytags=-1; 
- my $is_paired_reads=-1; 
- my $reference_indist_produce=-1; 
- my $MIN_SUPPORT_REQUIRED=-1; 
- my $MIN_FLANK_REQUIRED=-1;
- my $MAX_FLANK_CONSIDERED=-1;
- my $REFS_TOTAL=-1;
-
- my $argc = @_;
- if ($argc <1) { die "get_config_vars: expects 1 parameters, passed $argc !\n"; }
-
- my $startdir = $_[0];
-
- if (!$VSREAD) { read_config_file($startdir); }
-
- if (defined $VSCNF_FILE{"NPROCESSES"}) { $NPROCESSES = $VSCNF_FILE{"NPROCESSES"}; } 
- if (defined $VSCNF_FILE{"STRIP_454_KEYTAGS"}) { $strip_454_keytags = $VSCNF_FILE{"STRIP_454_KEYTAGS"}; } 
- if (defined $VSCNF_FILE{"IS_PAIRED_READS"}) { $is_paired_reads = $VSCNF_FILE{"IS_PAIRED_READS"}; } 
- if (defined $VSCNF_FILE{"REFERENCE_INDIST_PRODUCE"}) { $reference_indist_produce = $VSCNF_FILE{"REFERENCE_INDIST_PRODUCE"}; } 
- if (defined $VSCNF_FILE{"MIN_SUPPORT_REQUIRED"}) { $MIN_SUPPORT_REQUIRED = $VSCNF_FILE{"MIN_SUPPORT_REQUIRED"}; } 
- if (defined $VSCNF_FILE{"MIN_FLANK_REQUIRED"}) { $MIN_FLANK_REQUIRED = $VSCNF_FILE{"MIN_FLANK_REQUIRED"}; } 
- if (defined $VSCNF_FILE{"MAX_FLANK_CONSIDERED"}) { $MAX_FLANK_CONSIDERED = $VSCNF_FILE{"MAX_FLANK_CONSIDERED"}; } 
- if (defined $VSCNF_FILE{"REFS_TOTAL"}) { $REFS_TOTAL = $VSCNF_FILE{"REFS_TOTAL"}; } 
- 
- return ($NPROCESSES,$strip_454_keytags,$is_paired_reads,$reference_indist_produce,$MIN_SUPPORT_REQUIRED,$MIN_FLANK_REQUIRED,$MAX_FLANK_CONSIDERED,$REFS_TOTAL);
-}
-
-################################################################
-sub set_config_vars {
-
- my $argc = @_;
- if ($argc <8) { die "set_config_vars: expects 8 parameters, passed $argc !\n"; }
-
- $VSCNF_FILE{"NPROCESSES"}=$_[0]; 
- $VSCNF_FILE{"STRIP_454_KEYTAGS"}=$_[1]; 
- $VSCNF_FILE{"IS_PAIRED_READS"}=$_[2]; 
- $VSCNF_FILE{"REFERENCE_INDIST_PRODUCE"}=$_[3]; 
- $VSCNF_FILE{"MIN_SUPPORT_REQUIRED"}=$_[4]; 
- $VSCNF_FILE{"MIN_FLANK_REQUIRED"}=$_[5]; 
- $VSCNF_FILE{"MAX_FLANK_CONSIDERED"}=$_[6]; 
- $VSCNF_FILE{"REFS_TOTAL"}=$_[7]; 
+  %VSCNF_FILE = %in_hash;
 }
 
 ################################################################
@@ -211,7 +120,7 @@ sub get_credentials {
 
  my $startdir = $_[0];
 
- if (!$VSREAD) { read_config_file($startdir); }
+ if (!$VSREAD) { read_config_file($startdir . "vs.cnf"); }
  
  if (defined $VSCNF_FILE{"LOGIN"}) { $LOGIN = $VSCNF_FILE{"LOGIN"}; } 
  if (defined $VSCNF_FILE{"PASS"})  { $PASS = $VSCNF_FILE{"PASS"}; } 
@@ -371,6 +280,7 @@ vntr_support (
 `representative` INT(11) NULL,
  PRIMARY KEY (refid,copies)
 ) ENGINE=INNODB;
+CREATE INDEX read_index ON vntr_support (representative);
 
 drop table IF EXISTS fasta_ref_reps;
 CREATE TABLE
@@ -382,10 +292,10 @@ fasta_ref_reps (
 `copynum` FLOAT(11) NOT NULL, 
 `head` VARCHAR(100) NULL,
 
-`flankleft` VARCHAR(8000) NULL,
-`pattern` VARCHAR(5000) NOT NULL,
+`flankleft` TEXT(8000) NULL,
+`pattern` TEXT(5000) NOT NULL,
 `sequence` TEXT NOT NULL,
-`flankright` VARCHAR(8000) NULL,
+`flankright` TEXT(8000) NULL,
 `conserved` FLOAT(11) NULL,
 `comment` VARCHAR(500) NULL,
 `flank_disting` INT(11) NULL,
@@ -407,7 +317,8 @@ fasta_ref_reps (
 `allele_sup_same_as_ref` INT(11) NULL,
 INDEX(`head`)
 ) ENGINE=INNODB;
-CREATE UNIQUE INDEX comment_index on fasta_ref_reps(rid,comment);
+CREATE UNIQUE INDEX comment_index on fasta_ref_reps(rid,comment(100));
+
 
 drop table IF EXISTS fasta_reads;
 CREATE TABLE 
@@ -429,9 +340,9 @@ replnk (
 `last` INT(11) NOT NULL,
 `patsize` INT(11) NOT NULL,
 `copynum`  FLOAT(11) NOT NULL,
-`pattern` VARCHAR(5000) NOT NULL,
-`profile` VARCHAR(8000) NULL,
-`profilerc` VARCHAR(8000) NULL,
+`pattern` TEXT(5000) NOT NULL,
+`profile` TEXT(8000) NULL,
+`profilerc` TEXT(8000) NULL,
 `profsize` INT(11) NULL,
  INDEX(`sid`)
 ) ENGINE=INNODB;
@@ -545,57 +456,57 @@ stats (
 `FILE_REFERENCE_LEB` VARCHAR(500) NULL,
 `FILE_REFERENCE_SEQ` VARCHAR(500) NULL,
 
-`NUMBER_READS` INT(11) NULL,
-`NUMBER_TRS_IN_READS` INT(11) NULL,
+`NUMBER_READS` BIGINT NULL,
+`NUMBER_TRS_IN_READS` BIGINT NULL,
 
-`NUMBER_TRS_IN_READS_GE7` INT(11) NULL,
-`NUMBER_READS_WITHTRS` INT(11) NULL,
-`NUMBER_READS_WITHTRS_GE7` INT(11) NULL,
-`NUMBER_READS_WITHTRS_GE7_AFTER_REDUND` INT(11) NULL,
+`NUMBER_TRS_IN_READS_GE7` BIGINT NULL,
+`NUMBER_READS_WITHTRS` BIGINT NULL,
+`NUMBER_READS_WITHTRS_GE7` BIGINT NULL,
+`NUMBER_READS_WITHTRS_GE7_AFTER_REDUND` BIGINT NULL,
 
-`NUMBER_TRS_IN_READS_AFTER_REDUND` INT(11) NULL,
-`NUMBER_REF_TRS` INT(11) NULL,
-`NUMBER_REFS_TRS_AFTER_REDUND` INT(11) NULL,
+`NUMBER_TRS_IN_READS_AFTER_REDUND` BIGINT NULL,
+`NUMBER_REF_TRS` BIGINT NULL,
+`NUMBER_REFS_TRS_AFTER_REDUND` BIGINT NULL,
 
-`CLUST_NUMBER_OF_PROCLU_CLUSTERS` INT(11) NULL,
-`CLUST_NUMBER_OF_PROCLU_CLUSTERS_BEFORE_REJOIN` INT(11) NULL,
-`CLUST_NUMBER_OF_EXACTPAT_CLUSTERS` INT(11) NULL,
-`CLUST_NUMBER_OF_REF_REPS_IN_CLUSTERS` INT(11) NULL,
-`CLUST_NUMBER_OF_READ_REPS_IN_CLUSTERS` INT(11) NULL,
+`CLUST_NUMBER_OF_PROCLU_CLUSTERS` BIGINT NULL,
+`CLUST_NUMBER_OF_PROCLU_CLUSTERS_BEFORE_REJOIN` BIGINT NULL,
+`CLUST_NUMBER_OF_EXACTPAT_CLUSTERS` BIGINT NULL,
+`CLUST_NUMBER_OF_REF_REPS_IN_CLUSTERS` BIGINT NULL,
+`CLUST_NUMBER_OF_READ_REPS_IN_CLUSTERS` BIGINT NULL,
 
 
-`CLUST_LARGEST_NUMBER_OF_TRS_IN_PROCLU_CLUSTER` INT(11) NULL,
-`CLUST_LARGEST_NUMBER_OF_REFS_IN_PROCLU_CLUSTER` INT(11) NULL,
-`CLUST_LARGEST_PATRANGE_IN_PROCLU_CLUSTER` INT(11) NULL,
-`CLUST_LARGEST_NUMBER_OF_TRS_IN_EXACTPAT_CLUSTER` INT(11) NULL,
-`CLUST_LARGEST_NUMBER_OF_REFS_IN_EXACTPAT_CLUSTER` INT(11) NULL,
+`CLUST_LARGEST_NUMBER_OF_TRS_IN_PROCLU_CLUSTER` BIGINT NULL,
+`CLUST_LARGEST_NUMBER_OF_REFS_IN_PROCLU_CLUSTER` BIGINT NULL,
+`CLUST_LARGEST_PATRANGE_IN_PROCLU_CLUSTER` BIGINT NULL,
+`CLUST_LARGEST_NUMBER_OF_TRS_IN_EXACTPAT_CLUSTER` BIGINT NULL,
+`CLUST_LARGEST_NUMBER_OF_REFS_IN_EXACTPAT_CLUSTER` BIGINT NULL,
 
-`CLUST_NUMBER_OF_REFS_WITH_PREDICTED_VNTR` INT(11) NULL,
-`CLUST_NUMBER_OF_CLUSTERS_WITH_PREDICTED_VNTR` INT(11) NULL,
-`NUMBER_REFS_VNTR_SPAN_N` INT(11) NULL,
+`CLUST_NUMBER_OF_REFS_WITH_PREDICTED_VNTR` BIGINT NULL,
+`CLUST_NUMBER_OF_CLUSTERS_WITH_PREDICTED_VNTR` BIGINT NULL,
+`NUMBER_REFS_VNTR_SPAN_N` BIGINT NULL,
 
-`NUMBER_REFS_SINGLE_REF_CLUSTER` INT(11) NULL,
-`NUMBER_REFS_SINGLE_REF_CLUSTER_WITH_READS_MAPPED` INT(11) NULL,
-`NUMBER_REFS_SINGLE_REF_CLUSTER_WITH_NO_READS_MAPPED` INT(11) NULL,
+`NUMBER_REFS_SINGLE_REF_CLUSTER` BIGINT NULL,
+`NUMBER_REFS_SINGLE_REF_CLUSTER_WITH_READS_MAPPED` BIGINT NULL,
+`NUMBER_REFS_SINGLE_REF_CLUSTER_WITH_NO_READS_MAPPED` BIGINT NULL,
 
-`NUMBER_MAPPED` INT(11) NULL,
-`NUMBER_RANK` INT(11) NULL,
-`NUMBER_RANKFLANK` INT(11) NULL,
-`INTERSECT_RANK_AND_RANKFLANK` INT(11) NULL,
-`INTERSECT_RANK_AND_RANKFLANK_BEFORE_PCR` INT(11) NULL,
+`NUMBER_MAPPED` BIGINT NULL,
+`NUMBER_RANK` BIGINT NULL,
+`NUMBER_RANKFLANK` BIGINT NULL,
+`INTERSECT_RANK_AND_RANKFLANK` BIGINT NULL,
+`INTERSECT_RANK_AND_RANKFLANK_BEFORE_PCR` BIGINT NULL,
 
-`BBB_WITH_MAP_DUPS` INT(11) NULL,
-`BBB` INT(11) NULL,
+`BBB_WITH_MAP_DUPS` BIGINT NULL,
+`BBB` BIGINT NULL,
 
-`RANK_EDGES_OVERCUTOFF` INT(11) NULL,
-`RANK_REMOVED_SAMEREF` INT(11) NULL,
-`RANK_REMOVED_SAMESEQ` INT(11) NULL,
-`RANK_REMOVED_PCRDUP` INT(11) NULL,
+`RANK_EDGES_OVERCUTOFF` BIGINT NULL,
+`RANK_REMOVED_SAMEREF` BIGINT NULL,
+`RANK_REMOVED_SAMESEQ` BIGINT NULL,
+`RANK_REMOVED_PCRDUP` BIGINT NULL,
 
-`RANKFLANK_EDGES_INSERTED` INT(11) NULL,
-`RANKFLANK_REMOVED_SAMEREF` INT(11) NULL,
-`RANKFLANK_REMOVED_SAMESEQ` INT(11) NULL,
-`RANKFLANK_REMOVED_PCRDUP` INT(11) NULL,
+`RANKFLANK_EDGES_INSERTED` BIGINT NULL,
+`RANKFLANK_REMOVED_SAMEREF` BIGINT NULL,
+`RANKFLANK_REMOVED_SAMESEQ` BIGINT NULL,
+`RANKFLANK_REMOVED_PCRDUP` BIGINT NULL,
 
 
 `TIME_MYSQLCREATE` INT(11) NULL,
@@ -657,6 +568,122 @@ TEST
 
  return 0;
 }
+
+################################################################
+sub write_config {
+  carp("Error: function requires two arguments: string of path and dbsuffix concatenated, reference to hash of options")
+    unless @_ == 2;
+  my $startdir = shift;
+  my %opts = %{ shift() };
+  %VSCNF_FILE = %opts;
+
+  # look in the directory the script was started in
+ if (open(MFREAD,">${startdir}vs.cnf")) {
+  print MFREAD <<CNF;
+# COPY THIS FILE TO A DIFFERENT LOCATION AND SET ALL VARIABLES. 
+# DO NOT FORGET TO CHMOD THIS FILE TO PREVENT OTHER PEOPLE ON 
+# THE SYSTEM FROM LEARNING YOUR MYSQL CREDENTIALS.
+
+# mysql credentials
+LOGIN=$VSCNF_FILE{"LOGIN"}
+PASS=$VSCNF_FILE{"PASS"}
+HOST=$VSCNF_FILE{"HOST"}
+
+# set this to the number of processors on your system 
+# (or less if sharing the system with others or RAM is limited)
+# eg, 8
+NPROCESSES=$VSCNF_FILE{"NPROCESSES"}
+
+# minimum required flank on both sides for a read TR to be considered
+# eg, 10
+MIN_FLANK_REQUIRED=$VSCNF_FILE{"MIN_FLANK_REQUIRED"}
+
+# maximum flank length used in flank alignments
+# set to big number to use all
+# if read flanks are long with a lot of errors, 
+# it might be useful to set this to something like 50
+# max number of errors per flank is currently set to 8 (can be changed in main script only)
+# eg, 1000
+MAX_FLANK_CONSIDERED=$VSCNF_FILE{"MAX_FLANK_CONSIDERED"}
+
+# minimum number of mapped reads which agree on copy number to call an allele
+# eg, 2
+MIN_SUPPORT_REQUIRED=$VSCNF_FILE{"MIN_SUPPORT_REQUIRED"}
+
+# Whether or not to keep reads detected as PCR duplicates. A nonzero (true) value
+# means that detected PCR duplicates will not be removed. Default is 0.
+KEEPPCRDUPS=$VSCNF_FILE{"KEEPPCRDUPS"}
+
+# server name, used for html generating links
+# eg, orca.bu.edu
+SERVER=$VSCNF_FILE{"SERVER"}
+
+# for 454 platform, strip leading 'TCAG' 
+# eg, 1 - yes
+# eg, 0 - no (use no for all other platforms)
+STRIP_454_KEYTAGS=$VSCNF_FILE{"STRIP_454_KEYTAGS"}
+
+# data is paired reads
+# eg, 0 = no 
+# eg, 1 - yes
+IS_PAIRED_READS=$VSCNF_FILE{"IS_PAIRED_READS"}
+
+# html directory (must be writable and executable!)
+# eg, /var/www/html/vntrview
+HTML_DIR=$VSCNF_FILE{"HTML_DIR"}
+
+# input data directory 
+# (plain or gzipped fasta/fastq files)
+# eg, /input
+FASTA_DIR=$VSCNF_FILE{"FASTA_DIR"}
+
+# output directory (must be writable and executable!)
+# eg, /output
+OUTPUT_ROOT=$VSCNF_FILE{"OUTPUT_ROOT"}
+
+# temp (scratch) directory (must be executable!)
+# eg, /tmp
+TMPDIR=$VSCNF_FILE{"TMPDIR"}
+
+# names for the reference files 
+
+# (leb36 file, sequence plus flank data file, indistinguishable references file) 
+# files must be in install directory
+
+# eg, reference.leb36
+REFERENCE_FILE=$VSCNF_FILE{"REFERENCE_FILE"} 
+
+# eg, reference.seq
+REFERENCE_SEQ=$VSCNF_FILE{"REFERENCE_SEQ"} 
+
+# this file can be generated bu setting reference_indist_produce to 1
+# eg, reference.indist 
+REFERENCE_INDIST=$VSCNF_FILE{"REFERENCE_INDIST"}
+
+# generate a file of indistinguishable references, 
+# necessary only if a file is not already available for the reference set
+# eg, 1- generate
+# eg, 0 - don't generate
+REFERENCE_INDIST_PRODUCE=$VSCNF_FILE{"REFERENCE_INDIST_PRODUCE"}
+
+# total number of reference TRs prior to filtering
+# this is a fixed number to be printed in the latex file
+# set to 0 if it is not applicable
+# eg, 1188939 - human
+REFS_TOTAL=$VSCNF_FILE{"REFS_TOTAL"} 
+
+CNF
+
+    close(MFREAD);
+
+chmod 0600, "${startdir}vs.cnf";
+
+ } else {
+
+   die "print_config: can't open '${startdir}vs.cnf' for writing!\n";
+ }
+}
+
 ################################################################
 
 sub print_config {

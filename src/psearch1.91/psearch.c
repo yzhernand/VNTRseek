@@ -55,8 +55,7 @@ char OPTION2 = 0; // v1.9, for mapfile
 
 static time_t startTime;
 
-#include "easylife.h"
-#include "easylife.c"
+#include "../libs/easylife/easylife.h"
 
 #include "doublehash.h"
 #include "profile.h"

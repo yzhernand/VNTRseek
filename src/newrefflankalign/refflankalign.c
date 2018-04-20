@@ -10,10 +10,12 @@
 #include <stdio.h>
 
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include <stdlib.h>
 #include <stdarg.h>
+#include <ctype.h>
 #include <math.h>
 #include <zlib.h>
 #include <string.h>
@@ -26,7 +28,7 @@
 #define max(a,b) (((a)>=(b))?(a):(b))
 #define min(a,b) (((a)<=(b))?(a):(b))
 
-#include "easylife.h"
+#include "../libs/easylife/easylife.h"
 
 
 #include "narrowbandDistanceAlignment.h"
@@ -595,7 +597,7 @@ if (hasdata)
 	   doCriticalErrorAndQuit("\n\nRefFlankAlign - can't open output XML file (%s). Aborting!\n\n",tempbuf);
        
        fprintf(fp,"<?xml-stylesheet type=\"text/xsl\" href=\"../family.xsl\"?>\n");
-       fprintf(fp,"<cluster trim=\"%d\" read_count=\"%ld\" ref_count=\"%d\" report=\"all\" maxedits=\"%d\" id=\"%d_%d\">\n",REFLEN,read_count,ref_list->size,MAXERRORS,a1,a2);
+       fprintf(fp,"<cluster trim=\"%d\" read_count=\"%lld\" ref_count=\"%d\" report=\"all\" maxedits=\"%d\" id=\"%d_%d\">\n",REFLEN,read_count,ref_list->size,MAXERRORS,a1,a2);
 
        if (NULL==ref_list->head) 
 	   { fprintf(fp,"\n\nRefFlankAlign - empty reference list, this should not happen(%d_%d). Aborting!\n\n",a1,a2); _exit(1); }
@@ -718,7 +720,7 @@ if (distcount) {
 
         if (0 == ref_ptr->leftcon && 0 == ref_ptr->rightcon) {
          if (i>=1) { fprintf(fp," "); }
-         fprintf(fp,"%d",ref_ptr->id); 
+         fprintf(fp,"%lld",ref_ptr->id); 
          i++;
         }
       }
@@ -736,7 +738,7 @@ if (leftcount) {
 
         if (1 == ref_ptr->leftcon) {
          if (i>=1) { fprintf(fp," "); }
-         fprintf(fp,"%d",ref_ptr->id);
+         fprintf(fp,"%lld",ref_ptr->id);
          i++;
         }
       }
@@ -755,7 +757,7 @@ if (rightcount) {
 
         if (1 == ref_ptr->rightcon) {
          if (i>=1) { fprintf(fp," "); }
-         fprintf(fp,"%d",ref_ptr->id);
+         fprintf(fp,"%lld",ref_ptr->id);
          i++;
         }
       }
@@ -774,7 +776,7 @@ if (anycount) {
 
         if (1 == ref_ptr->leftcon || 1 == ref_ptr->rightcon) {
          if (i>=1) { fprintf(fp," "); }
-         fprintf(fp,"%d",ref_ptr->id);
+         fprintf(fp,"%lld",ref_ptr->id);
          i++;
         }
       }
@@ -792,7 +794,7 @@ if (undistcount) {
 
         if (1 == ref_ptr->leftcon && 1 == ref_ptr->rightcon) {
          if (i>=1) { fprintf(fp," "); }
-         fprintf(fp,"%d",ref_ptr->id);
+         fprintf(fp,"%lld",ref_ptr->id);
          i++;
         }
       }
@@ -952,7 +954,7 @@ if (undistcount) {
   sprintf(tempbuf,"rm %s/*.rep",outdir);
   system(tempbuf);
 
-  printf("\ndone!!! processed: %ld, ThreadCounter: %d\n",processed,ThreadCounter);
+  printf("\ndone!!! processed: %lld, ThreadCounter: %d\n",processed,ThreadCounter);
   
   return 0;
 } 

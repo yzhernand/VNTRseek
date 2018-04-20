@@ -8,8 +8,7 @@
 #include <string.h>
 #include <stdarg.h>
 
-#include "easylife.h"
-#include "easylife.c"
+#include "../libs/easylife/easylife.h"
 #include "ghash.h"
 
 #define max3(a,b,c) (((a)>=(b))?(((a)>=(c))?(a):(c)):(((b)>=(c))?(b):(c)))
@@ -143,7 +142,7 @@ int main(int argc, char** argv)
     // open out file
     fpo = fopen(argv[2],"w");
     if (NULL==fpo) {
-        printf("\n\nError, cannot open file 's' for writing!\n",argv[2]);
+        printf("\n\nError, cannot open file '%s' for writing!\n",argv[2]);
         exit(1);
     }
 

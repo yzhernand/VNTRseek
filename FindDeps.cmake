@@ -11,7 +11,7 @@ ENDIF(ZLIB_FOUND)
 FUNCTION(PERL_REQ_VER VER)
     FIND_PACKAGE(Perl)
     IF (PERL_FOUND)
-        IF (PERL_VERSION_STRING VERSION_GREATER ${VER} OR PERL_VERSION_STRINGVERSION_EQUAL${VER})
+        IF (PERL_VERSION_STRING VERSION_GREATER ${VER} OR PERL_VERSION_STRING VERSION_EQUAL ${VER})
             MESSAGE(STATUS "Perl >= ${VER} (${PERL_VERSION_STRING})")
         ELSE ()
             MESSAGE(FATAL_ERROR "Error: Perl version must be >= ${VER}. You have ${PERL_VERSION_STRING}.")
@@ -35,6 +35,20 @@ FUNCTION(GCC_REQ_VER VER)
     ENDIF()
 ENDFUNCTION(GCC_REQ_VER)
 
+# Check GLIBC minimum version
+FUNCTION(GLIBC_REQ_VER VER)
+    MESSAGE(STATUS "Checking GLIBC version...")
+    EXECUTE_PROCESS(COMMAND /lib/libc.so.6
+        OUTPUT_VARIABLE GLIBC_VERSION)
+    STRING(REGEX MATCH "[0-9]\\.[0-9][0-9]?" GLIBC_VERSION "${GLIBC_VERSION}")
+    MESSAGE(STATUS "GLIBC version: ${GLIBC_VERSION}")
+
+    IF(GLIBC_VERSION VERSION_LESS ${VER} OR GLIBC_VERSION VERSION_EQUAL ${VER})
+        MESSAGE(STATUS "Downloading legacy build of TRF...")
+        SET(TRFDLName "trf${TRFVer}.legacy${ARCH}" PARENT_SCOPE)
+    ENDIF()
+ENDFUNCTION(GLIBC_REQ_VER)
+
 # Check mysql binary is found, and is of correct version
 FUNCTION(MYSQL_REQ_VER VER)
     MESSAGE(STATUS "Checking MySQL client version...")
@@ -57,3 +71,12 @@ FUNCTION(MYSQL_REQ_VER VER)
         ENDIF()
     ENDIF()
 ENDFUNCTION(MYSQL_REQ_VER)
+
+# Check for seqtk
+
+
+# Check for samtools
+
+
+# Check for bedtools
+

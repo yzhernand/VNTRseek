@@ -26,7 +26,7 @@
 	free(matchN);\
 	free(Complement);
 
-int LCS_multiple_word(char *string1, char *string2, int n, int m){
+int LCS_multiple_word(char * string1, char * string2, int n, int m){
 	//the procedure computes fast bitwise LCS
 	//n is the length of string1
 	//m is the length of string2
@@ -55,6 +55,11 @@ int LCS_multiple_word(char *string1, char *string2, int n, int m){
 	int N,M;
 	char *stringN, *stringM;
 	int NWords;
+    int junkBits;
+    unsigned long long int junkBitsMask;
+
+
+	//printf("\nIn the original version");
 	
 	//UINT_MAX is             4294967295 which is 32 bits long
 	//ULLONG_MAX is 18446744073709551615 which is 64 bits long
@@ -85,14 +90,18 @@ int LCS_multiple_word(char *string1, char *string2, int n, int m){
 	if(N>wordSize-1){
 		integerPart = (N-wordSize+1)/wordSize;
 		NWords = (N-wordSize+1-wordSize*integerPart)>0?integerPart+2:integerPart+1;
+        //computation of junk bits
+        junkBits = wordSize - 1 + (NWords-1)*wordSize - N;
+        junkBitsMask = 0xFFFFFFFFFFFFFFFF >> junkBits;
+        //printf("\njunkBitsMask >>> %s",convertToBitString64(junkBitsMask));
 	}
 	else return(LCS_single_word(stringN, stringM, N, M));
 	
 	//debug
-	/*
-	printf("\nN  M  NWords");
-	printf("\n%d  %d  %d",N,M,NWords);
-	*/
+	//printf("\nformula = %d",N-wordSize+1-wordSize*integerPart);
+	//printf("\nN  M  integerPart NWords junkBits");
+	//printf("\n%d  %d  %d   %d   %d",N,M,integerPart,NWords,junkBits);
+	//
 	
 	//*************************encode match strings A C G T N for string1 
 	matchA = (unsigned long long int *)calloc(NWords,sizeof(unsigned long long int));
@@ -151,14 +160,13 @@ int LCS_multiple_word(char *string1, char *string2, int n, int m){
 		}
 	}		
 
-	//debug
-	/*
-	printf("\nmatchA:  ");for(j=0;j<NWords;j++){printf("%s ",convertToBitString64(matchA[j]));}
-	printf("\nmatchC:  ");for(j=0;j<NWords;j++){printf("%s ",convertToBitString64(matchC[j]));}
-	printf("\nmatchG:  ");for(j=0;j<NWords;j++){printf("%s ",convertToBitString64(matchG[j]));}
-	printf("\nmatchT:  ");for(j=0;j<NWords;j++){printf("%s ",convertToBitString64(matchT[j]));}
-	printf("\nmatchN:  ");for(j=0;j<NWords;j++){printf("%s ",convertToBitString64(matchN[j]));}
-	*/
+	////debug
+	// printf("\nmatchA:  ");for(j=0;j<NWords;j++){printf("%s ",convertToBitString64(matchA[j]));}
+	// printf("\nmatchC:  ");for(j=0;j<NWords;j++){printf("%s ",convertToBitString64(matchC[j]));}
+	// printf("\nmatchG:  ");for(j=0;j<NWords;j++){printf("%s ",convertToBitString64(matchG[j]));}
+	// printf("\nmatchT:  ");for(j=0;j<NWords;j++){printf("%s ",convertToBitString64(matchT[j]));}
+	// printf("\nmatchN:  ");for(j=0;j<NWords;j++){printf("%s ",convertToBitString64(matchN[j]));}
+	
 	//**********************load complement of row zero in the score matrix which is all 1s
 	
 	for(j=0;j<NWords;j++)
@@ -166,10 +174,8 @@ int LCS_multiple_word(char *string1, char *string2, int n, int m){
 		Complement[j] = ~0x0000000000000000;
 	}	
 	//debug
-	/*
-	printf("\n\nRow 0");
-	printf("\ncomplement:  ");for(j=0;j<NWords;j++){printf("%s ",convertToBitString64(Complement[j]));}
-	*/
+	//printf("\n\nRow 0");
+	//printf("\ncomplement:  ");for(j=0;j<NWords;j++){printf("%s ",convertToBitString64(Complement[j]));}
 	
 	//loop for each letter in string2
 	//row zero in the score matrix corresponds to the initial value of complement
@@ -203,6 +209,8 @@ int LCS_multiple_word(char *string1, char *string2, int n, int m){
 		for(j=0;j<NWords;j++)
 		{
 			matchString = matchVector[j];
+			// printf("\nmatchString: %s ", convertToBitString64(matchString));
+			// printf("\nmatchVector: %s \n", convertToBitString64(matchVector[j]));
 			
 			complement = Complement[j];
 			
@@ -218,7 +226,8 @@ int LCS_multiple_word(char *string1, char *string2, int n, int m){
 				addResult = complement+carryBit;
 				carryBit = (addResult==0)?1:0;  //if the carryBit is one, then only carry if whole number rolls over to zero
 				addResult += onlyOnesNotInOriginal;
-				if(addResult<onlyOnesNotInOriginal) carryBit = 1;  //must test again in case carryBit not reset to one on first add				
+				carryBit |= (addResult < onlyOnesNotInOriginal) ? 1:0;
+				//if(addResult<onlyOnesNotInOriginal) carryBit = 1;  //must test again in case carryBit not reset to one on first add				
 			}
 			else //carryBit not set from last NWord
 			{
@@ -233,27 +242,26 @@ int LCS_multiple_word(char *string1, char *string2, int n, int m){
 			Complement[j] = addResult|xorResult;
 			
 			//debug
-			/*
-			printf("\n\nRow %d, Column %d",i+1,j);
-			printf("\n\n                     %s",string1);
-			printf("\n                    %2d %c",i+1,string2[i]);
-			printf("\nmatchString:           %s",convertToBitString64(matchString));
-			printf("\nonlyOnesNotInOriginal: %s",convertToBitString64(onlyOnesNotInOriginal));
-			printf("\naddResult:             %s",convertToBitString64(addResult));
-			printf("\nxorResult:             %s",convertToBitString64(xorResult));
-			printf("\ncomplement:            %s",convertToBitString64(Complement[j]));
-			*/
+			// printf("\n\nRow %d, Column %d",i+1,j);
+			// printf("\n\n                     %s",string1);
+			// printf("\n                    %2d %c",i+1,string2[i]);
+			// printf("\nj is %d",j);
+			// printf("\nmatchString:           %s",convertToBitString64(matchString));
+			// printf("\nonlyOnesNotInOriginal: %s",convertToBitString64(onlyOnesNotInOriginal));
+			// printf("\naddResult:             %s",convertToBitString64(addResult));
+			// printf("\nxorResult:             %s",convertToBitString64(xorResult));
+			// printf("\ncomplement:            %s",convertToBitString64(Complement[j]));
+
 			
 		}
 	}
 		
 	//debug
-	/*
-	printf("\n\nFinal:");
-	printf("\ncomplement:         ");for(j=0;j<NWords;j++){printf("%s ",convertToBitString64(Complement[j]));}
-	printf("\n~complement:        ");for(j=0;j<NWords;j++){printf("%s ",convertToBitString64(~Complement[j]));}
-	*/
-	 
+	//printf("\n\nFinal:");
+	//printf("\nIn original version");
+	//printf("\ncomplement:         ");for(j=0;j<NWords;j++){printf("\n%s ",convertToBitString64(Complement[j]));}
+	//printf("\n~complement:        ");for(j=0;j<NWords;j++){printf("\n%s ",convertToBitString64(~Complement[j]));}
+
 	//find length of LCS
 	countOneBits = 0 ;
 	for(j=0;j<NWords;j++)
@@ -262,7 +270,13 @@ int LCS_multiple_word(char *string1, char *string2, int n, int m){
 	
 		//time proportional to number of ones in bit string
 		complementErase = Complement[j];
-		while (complementErase)//stop when zero
+
+        //mask bits past N in final word using JunkBits
+        if (j==NWords-1) {
+            complementErase  &= junkBitsMask;
+        }
+        
+        while (complementErase)//stop when zero
 		{
 			countOneBits++;
 			complementErase &= (complementErase - 1); //removes last one bit
@@ -270,13 +284,11 @@ int LCS_multiple_word(char *string1, char *string2, int n, int m){
 	}
 	
 	//debug
-	/*
-	printf("\nNumber of one bits = LCS = %d",countOneBits);
-   */
-	
-	
+	//printf("\nNumber of one bits using mulitword= LCS = %d\n",countOneBits);
+
 	freeMultipleWords;
 	return(countOneBits);
+
 	
 	
 }

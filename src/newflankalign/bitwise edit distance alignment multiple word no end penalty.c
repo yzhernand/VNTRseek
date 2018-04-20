@@ -81,7 +81,10 @@ int Edit_Distance_multiple_word_NoEndPenaltySeq1(char *stringN, char *stringM, i
 	int nWords;
 	int integerPart;
 	int NWords;
-	
+	int junkBits;
+    unsigned long long int junkBitsMask;
+    int bestFinalColumn;
+
 	//***beginning of identical code to Edit_Distance_multiple_word
 	
 	//UINT_MAX is             4294967295 which is 32 bits long
@@ -101,7 +104,9 @@ int Edit_Distance_multiple_word_NoEndPenaltySeq1(char *stringN, char *stringM, i
 		nWords = (N-wordSize+1-wordSize*integerPart)>0?integerPart+2:integerPart+1;
 	}
 	else nWords=1;  //does not call Edit_Distance_single_word
-	
+    junkBits = wordSize -1 + (nWords -1)*wordSize - N;
+	junkBitsMask = 0xFFFFFFFFFFFFFFFF >> junkBits;
+    // printf("\n>>>%s",convertToBitString64(junkBitsMask));
 	
 	//length of strings for edit distance is n and m
 	//number of wordSize-bit words is nWords
@@ -249,10 +254,16 @@ int Edit_Distance_multiple_word_NoEndPenaltySeq1(char *stringN, char *stringM, i
 			not_M_I_xor_P_D = not_M_I^P_D[j];
 			
 			//the add (with carry)
-			sum = not_M_I+P_S_or_P_D[j]+carryBitSum;
-			//get carryBitSum for next round
-			//saw this online. if a+b causes overflow (carry), a+b<a, a+b<b.  
-			if(sum<not_M_I) carryBitSum = 1;  
+			//and get carryBitSum for next round
+			//saw this online. if a+b causes overflow (carry), a+b<a, a+b<b.
+			//bug fix Beth Becker 4/30/14
+			//old: sum = not_M_I+P_S_or_P_D[j]+carryBitSum;
+			//old: if(sum<not_M_I) carryBitSum = 1;  
+			sum = not_M_I+carryBitSum;
+			carryBitSum = (sum<not_M_I)?1:0;
+			sum += P_S_or_P_D[j];
+			carryBitSum |= (sum<P_S_or_P_D[j])?1:0;
+			
 			sum_and_R_IS = sum&R_IS;
 			
 			//the new vertical classes
@@ -312,15 +323,49 @@ int Edit_Distance_multiple_word_NoEndPenaltySeq1(char *stringN, char *stringM, i
 	 printf("\nP_D:         ");for(j=0;j<NWords;j++){printf("%s ",convertToBitString64(P_D[j]));}
 	 printf("\nP_S_or_P_D:  ");for(j=0;j<NWords;j++){printf("%s ",convertToBitString64(P_S_or_P_D[j]));}
 	 */
+
+	//***end of identical code to Edit_Distance_multiple_word
 	
+    // printf("\n\nFinal:");
+    // printf("\nP_D:         ");
+    // for(j=0;j<NWords;j++){
+    //     if (j==NWords-1) printf("\n%s ",convertToBitString64(P_D[j]&junkBitsMask));
+    //     else printf("\n%s ",convertToBitString64(P_D[j]));
+    // }
+    // printf("\n");
+    // for (i=0; i<wordSize-junkBits; i++) {
+    //     printf(" ");
+    // }
+    // printf("^");
+
+    // printf("\nP_I = ~P_S_or_P_D:  ");
+    // for(j=0;j<NWords;j++){
+    //     if (j==NWords-1) printf("\n%s ",convertToBitString64(~P_S_or_P_D[j]&junkBitsMask));
+    //     else printf("\n%s ",convertToBitString64(~P_S_or_P_D[j]));
+    // }
+    // printf("\n");
+    // for (i=0; i<wordSize-junkBits; i++) {
+    //     printf(" ");
+    // }
+    // printf("^");
+    
 	//find best edit distance score in final row
 	mask=0x0000000000000001;
 	bestFinalRowScore=M;
+    bestFinalColumn=0;
 	Score=M;
 	for(j=0;j<NWords;j++)
 	{	
 		P_DErase=P_D[j];
-		P_IErase=~(P_S_or_P_D[j]);
+        //P_IErase=~(P_S_or_P_D[j]);
+        P_IErase=~P_S_or_P_D[j];
+
+		//mask bits past N in final word using JunkBitsMask
+        if (j==NWords-1) {
+            P_DErase  &= junkBitsMask;
+            P_IErase  &= junkBitsMask;
+        }
+
 		for (i=0;i<wordSize;i++) {
 			//do nothing if first NWord, first bit.  
 			//This was set to 1 artifically in both PD and PSorPD
@@ -328,8 +373,11 @@ int Edit_Distance_multiple_word_NoEndPenaltySeq1(char *stringN, char *stringM, i
 			{
 				Score-=(int)P_DErase&mask;
 				Score+=(int)P_IErase&mask;
-				if (Score<bestFinalRowScore) bestFinalRowScore=Score;
-			}
+                if (Score<bestFinalRowScore){
+                    bestFinalRowScore=Score;
+                    bestFinalColumn=j*wordSize+i;
+                }
+            }
 			P_DErase>>=1;
 			P_IErase>>=1;
 			
@@ -342,13 +390,17 @@ int Edit_Distance_multiple_word_NoEndPenaltySeq1(char *stringN, char *stringM, i
 		
 	}
 	
-	//***end of identical code to Edit_Distance_multiple_word
 	
 	//debug
 	
-	/*
-	printf("\nBest Final Row Score is %d",bestFinalRowScore);
-	*/ 
+    // printf("\n");
+    // for (i=0; i<bestFinalColumn-1; i++) {
+    //     printf(" ");
+    // }
+ //    printf("^%d, %d",bestFinalColumn,NWords*wordSize-junkBits);
+ //    printf("\nGlobal Score: %d",Score);
+	// printf("\nBest Final Row Score is %d",bestFinalRowScore);
+	 
 	
 	freeMultipleWords;
 	return(bestFinalRowScore);
