@@ -667,7 +667,7 @@ if ( $STEP == 4 ) {
 # psearch output can still be files but this step will then collect them and
 # insert into the db. (Maybe merge in next step's `join_clusters.exe`)
 # For now, extract the file we need using the database
-    my $dbh = get_ref_dbh(@opts{qw(REFERENCE_SEQ REFERENCE_FILE REFERENCE_INDIST), 0});
+    my $dbh = get_ref_dbh(@opts{qw(REFERENCE_SEQ REFERENCE_FILE REFERENCE_INDIST REDO_REFDB)});
 
     # Must negate rids for refset
     my $get_ref_leb36 = q{SELECT -rid, length(pattern) AS patsize,
@@ -850,15 +850,7 @@ if ( $STEP == 8 ) {
     my $extra_param = ( $opts{STRIP_454_KEYTAGS} ) ? '1' : '0';
 
     # TODO Use get_ref_dbh here
-    ( my $dbfile = $opts{REFERENCE_SEQ} ) =~ s/.(seq|leb36)$/.db/;
-    my $dbh = DBI->connect(
-        "DBI:SQLite:dbname=$dbfile",
-        undef, undef,
-        {   AutoCommit                 => 1,
-            RaiseError                 => 1,
-            sqlite_see_if_its_a_number => 1,
-        }
-    ) or die "Could not connect to database: $DBI::errstr";
+    my $dbh = get_ref_dbh(@opts{qw(REFERENCE_SEQ REFERENCE_FILE REFERENCE_INDIST REDO_REFDB)});
     my $reference_folder = File::Temp->newdir();
 
     # Get rotindex saved in db
