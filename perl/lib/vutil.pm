@@ -326,7 +326,7 @@ sub get_statistics {
 
     # my $DBSUFFIX = shift;
     my @stats = @_;
-    my $dbh   = get_dbh();
+    my $dbh   = get_dbh( { readonly => 1 } );
     my $sql_clause;
     ( $ENV{DEBUG} ) && warn Dumper( \@stats ) . "\n";
 
