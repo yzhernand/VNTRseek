@@ -849,6 +849,7 @@ if ( $STEP == 8 ) {
         "\n\nExecuting step #$STEP (inserting READS flanks into database)...";
     my $extra_param = ( $opts{STRIP_454_KEYTAGS} ) ? '1' : '0';
 
+    # TODO Use get_ref_dbh here
     ( my $dbfile = $opts{REFERENCE_SEQ} ) =~ s/.(seq|leb36)$/.db/;
     my $dbh = DBI->connect(
         "DBI:SQLite:dbname=$dbfile",

@@ -484,7 +484,8 @@ sub get_dbh {
             {   AutoCommit                 => 1,
                 RaiseError                 => 1,
                 sqlite_see_if_its_a_number => 1,
-                ReadOnly => 1 * ( exists $opts->{readonly} ) || 0
+                ReadOnly                   => 1
+                    * ( exists $opts->{readonly} && $opts->{readonly} )
             }
         ) or die "Could not connect to database $dbfile: $DBI::errstr";
 
@@ -702,7 +703,13 @@ sub load_refprofiles_db {
                 perl => "DBD::SQLite::VirtualTable::PerlData" );
         }
         catch {
-            warn "Not creating VirtualTable; module already registered.\n";
+            if (/sqlite_create_module failed with error not an error/) {
+                warn
+                    "Not creating VirtualTable; module already registered.\n";
+            }
+            else{
+                die "Error installing VirtualTable in SQLite db handle: $_\n.";
+            }
         };
 
         our $leb36_rows = [];

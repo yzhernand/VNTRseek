@@ -53,16 +53,16 @@ sub RC {
 }
 
 sub write_vcf_rec {
-    croak "write_vcf_rec requires two arguments"
-        unless @_ == 2;
-    my ( $vcffile, $supported_tr ) = @_;
+    croak "write_vcf_rec requires three arguments"
+        unless @_ == 3;
+    my ( $spanN_vcffile, $allwithsupport_vcffile, $supported_tr ) = @_;
 
     # warn ">", $supported_tr->{rid}, "\n" if $ENV{DEBUG};
     warn "Supported TR hash (before joins):\n", Dumper( \$supported_tr ), "\n"
         if ( $ENV{DEBUG} );
 
     # extra code for single allele, v 1.07
-    if ( $supported_tr->{alleleWithSupportFound} == 1 ) {
+    if ( $supported_tr->{alleles_supported} == 1 ) {
         $supported_tr->{gt_string}
             = ( $supported_tr->{subSameAsRef1} == 1 ) ? "0/0" : "1/1";
     }
@@ -97,21 +97,25 @@ sub write_vcf_rec {
     );
     my $format = "GT:SP:CGL";
 
-    if ( $supported_tr->{alleleWithSupportFound} ) {
-        print $vcffile join(
-            "\t",
-            $supported_tr->{head},
-            ( $supported_tr->{pos1} - 1 ),
-            "td" . $supported_tr->{rid},
-            $supported_tr->{seq},
-            $supported_tr->{alt},
-            $qual, $filter, $info, $format,
-            join( ":",
-                $supported_tr->{gt_string}, $supported_tr->{read_support},
-                $supported_tr->{copy_diff} )
-            ),
-            "\n";
-    }
+    # Commented out since this should always be true
+    # if ( $supported_tr->{alleles_supported} > 0 ) {
+    my $vcf_rec = join(
+        "\t",
+        $supported_tr->{head},
+        ( $supported_tr->{pos1} - 1 ),
+        "td" . $supported_tr->{rid},
+        $supported_tr->{seq},
+        $supported_tr->{alt},
+        $qual, $filter, $info, $format,
+        join( ":",
+            $supported_tr->{gt_string}, $supported_tr->{read_support},
+            $supported_tr->{copy_diff} )
+    ) . "\n";
+
+    $supported_tr->{is_called_vntr} && print $spanN_vcffile $vcf_rec;
+    print $allwithsupport_vcffile $vcf_rec;
+
+    # }
 }
 
 ####################################
@@ -190,7 +194,8 @@ sub commify {
 # then this function will only produce a VCF file for supported VNTRs. If true, all
 # supported TRs are included in the file.
 sub print_vcf {
-    my $allwithsupport = shift;
+
+    # my $allwithsupport = shift;
 
     # Get needed stats
     my @stats = qw(PARAM_TRF
@@ -236,14 +241,16 @@ sub print_vcf {
     }
 
     # $update_spanN_sth->finish;
-    my $filename
-        = "${result_prefix}."
-        . ( ($allwithsupport) ? "allwithsupport." : "" )
-        . "span${MIN_SUPPORT_REQUIRED}" . ".vcf";
-    open my $vcffile, ">", $filename
-        or die "\nCan't open for writing $filename\n\n";
+    my $spanN_fn = "${result_prefix}.span${MIN_SUPPORT_REQUIRED}.vcf";
+    open my $spanN_vcffile, ">", $spanN_fn
+        or die "Can't open for writing $spanN_fn\n\n";
+    my $allwithsupport_fn
+        = "${result_prefix}.allwithsupport.span${MIN_SUPPORT_REQUIRED}.vcf";
+    open my $allwithsupport_vcffile, ">", $allwithsupport_fn
+        or die "Can't open for writing $allwithsupport_fn\n\n";
 
-    print $vcffile "##fileformat=VCFv4.1\n"
+    my $vcf_header
+        = "##fileformat=VCFv4.1\n"
         . strftime( "##fileDate=\"%Y%m%d\"\n", localtime )
         . qq[##source="Vntrseek ver. $VERSION"
 ##TRFParameters="$stat_hash->{PARAM_TRF}"
@@ -270,6 +277,9 @@ sub print_vcf {
 #CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t$DBSUFFIX
 ];
 
+    print $spanN_vcffile $vcf_header;
+    print $allwithsupport_vcffile $vcf_header;
+
 # Get information on all VNTRs
 # "SELECT rid,alleles_sup,allele_sup_same_as_ref,is_singleton,is_dist,is_indist,firstindex,lastindex,copynum,pattern,clusterid,reserved,reserved2,head,sequence,flankleft,direction FROM fasta_ref_reps INNER JOIN clusterlnk ON fasta_ref_reps.rid=-clusterlnk.repeatid INNER JOIN clusters ON clusters.cid=clusterlnk.clusterid WHERE support_vntr>0 ORDER BY head, firstindex;"
 # $dbh->sqlite_create_function(
@@ -280,20 +290,17 @@ sub print_vcf {
 #         return substr( $lflank, -60 ) . "|" . substr( $rflank, 0, 60 );
 #     }
 # );
-    my $allwithsupport_clause
-        = ( ($allwithsupport) ? "" : "WHERE support_vntr>0" );
     my $get_supported_reftrs_query
         = qq{SELECT reftab.rid, is_singleton, is_dist, firstindex,
             (lastindex - firstindex) + 1 AS arlen, reftab.copynum, reftab.pattern, reftab.head,
             sequence, c1.direction AS refdir, copies, sameasref,
-            support, first, last, dna, c2.direction AS readdir
-        FROM refdb.fasta_ref_reps reftab INNER JOIN vntr_support ON -reftab.rid=vntr_support.refid
-        INNER JOIN main.fasta_ref_reps mainreftab ON -mainreftab.rid=vntr_support.refid
+            support, first, last, dna, c2.direction AS readdir, support_vntr
+        FROM refdb.fasta_ref_reps reftab INNER JOIN vntr_support ON reftab.rid=-vntr_support.refid
+        INNER JOIN main.fasta_ref_reps mainreftab ON mainreftab.rid=-vntr_support.refid
         INNER JOIN clusterlnk c1 ON vntr_support.refid=c1.repeatid
         INNER JOIN replnk ON vntr_support.representative=replnk.rid
         INNER JOIN clusterlnk c2 ON c2.repeatid=replnk.rid
         INNER JOIN fasta_reads ON replnk.sid=fasta_reads.sid
-        $allwithsupport_clause
         ORDER BY reftab.head ASC, reftab.firstindex ASC, sameasref DESC};
     my $get_supported_reftrs_sth = $dbh->prepare($get_supported_reftrs_query);
     $get_supported_reftrs_sth->execute()
@@ -302,14 +309,14 @@ sub print_vcf {
         $arlen,   $copiesfloat, $consenuspat, $head,
         $seq,     $refdir,      $copies,      $sameasref,
         $support, $readTRStart, $readTRStop,  $dna,
-        $readdir
+        $readdir, $support_vntr
     );
     $get_supported_reftrs_sth->bind_columns(
         \(  $rid,     $singleton,   $disting,     $pos1,
             $arlen,   $copiesfloat, $consenuspat, $head,
             $seq,     $refdir,      $copies,      $sameasref,
             $support, $readTRStart, $readTRStop,  $dna,
-            $readdir
+            $readdir, $support_vntr
         )
     );
 
@@ -323,10 +330,11 @@ sub print_vcf {
 #     = ("") x 6;
 # TODO Doesn't work properly. Look at original code. Might need to rewrite completely
     while ( $get_supported_reftrs_sth->fetch() ) {
-        if ( ( $supported_tr->{rid} != -1 )
+        if (   $supported_tr->{rid} != -1
             && $supported_tr->{rid} != $rid )
         {
-            write_vcf_rec( $vcffile, $supported_tr );
+            write_vcf_rec( $spanN_vcffile, $allwithsupport_vcffile,
+                $supported_tr );
         }
 
         if ( $supported_tr->{rid} != $rid ) {
@@ -336,22 +344,22 @@ sub print_vcf {
 
                 # Start at 0 if the ref allele was supported, else start at 1
                 al => ($sameasref) ? 0 : 1,
-                arlen       => $arlen,
-                pos1        => $pos1,
-                copiesfloat => $copiesfloat,
-                singleton   => $singleton,
-                head        => $head,
-                seq         => ($seq) ? uc( nowhitespace($seq) ) : "",
-                consenuspat => $consenuspat,
-                alleleWithSupportFound => 1,
-                subSameAsRef1          => $sameasref,
-                j                      => 0,
-                gt_string              => [],
-                read_support           => [],
-                copy_diff              => [],
-                read_support1          => "",
-                copy_diff1             => "",
-                alt                    => []
+                arlen             => $arlen,
+                pos1              => $pos1,
+                copiesfloat       => $copiesfloat,
+                singleton         => $singleton,
+                head              => $head,
+                seq               => ($seq) ? uc( nowhitespace($seq) ) : "",
+                consenuspat       => $consenuspat,
+                subSameAsRef1     => $sameasref,
+                is_called_vntr    => $support_vntr,
+                alleles_supported => 0,
+                gt_string         => [],
+                read_support      => [],
+                copy_diff         => [],
+                read_support1     => "",
+                copy_diff1        => "",
+                alt               => []
             };
         }
 
@@ -412,15 +420,16 @@ sub print_vcf {
         push @{ $supported_tr->{read_support} }, $support;
         push @{ $supported_tr->{copy_diff} },    $cdiff;
 
-        $supported_tr->{j}++;
+        $supported_tr->{alleles_supported}++;
     }
 
     # Print last record:
-    write_vcf_rec( $vcffile, $supported_tr );
+    write_vcf_rec( $spanN_vcffile, $allwithsupport_vcffile, $supported_tr );
 
     $get_supported_reftrs_sth->finish;
 
-    close $vcffile;
+    close $spanN_vcffile;
+    close $allwithsupport_vcffile;
     $dbh->disconnect;
 }
 
@@ -2147,7 +2156,7 @@ my $get_supported_reftrs_sth = $dbh->prepare(
 warn "\n\nUpdating fasta_ref_reps table...\n";
 
 my $ReadTRsSupport = 0;
-my $ref;
+my $ref = { refid => -1 };
 
 # my $refid = -1;
 my $entr;
@@ -2157,9 +2166,11 @@ $i = 0;
 while ( my @data = $get_supported_reftrs_sth->fetchrow_array() ) {
     warn "Row $i: ", join( ", ", @data ), "\n"
         if ( $ENV{DEBUG} );
-    if ( ( !exists $ref->{refid} ) || ( $ref->{refid} != $data[0] ) ) {
+    if ( $ref->{refid} != -1 && $ref->{refid} != $data[0] ) {
         update_ref_table( $ref, $update_ref_table_sth );
+    }
 
+    if ( $ref->{refid} != $data[0] ) {
         # Note: refid is positive
         $ref = {
             refid              => $data[0],
@@ -2373,12 +2384,12 @@ print_latex($ReadTRsSupport);
 warn "Producing distribution file...\n";
 print_distr();
 
-# Print VCF for VNTRs with N support
-warn "Producing VCF (span ${MIN_SUPPORT_REQUIRED} support)...\n";
+# Print VCF
+warn "Producing VCF...\n";
 print_vcf();
 
 # All with support
-warn "Producing VCF (all with support)...\n";
-print_vcf(1);
+# warn "Producing VCF (all with support)...\n";
+# print_vcf(1);
 
 warn "Done!\n";
