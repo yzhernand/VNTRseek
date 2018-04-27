@@ -2111,6 +2111,8 @@ $ref_dbh->disconnect;
     . Dumper($supported_reftr_patterns) . "\n";
 
 # warn "\nTurning off AutoCommit\n";
+$dbh->do("PRAGMA foreign_keys = OFF");
+$dbh->do("PRAGMA synchronous = OFF");
 $dbh->begin_work;
 $dbh->do( get_trunc_query( $run_conf{BACKEND}, "main.fasta_ref_reps" ) )
     or die "Couldn't do statement: " . $dbh->errstr;
@@ -2149,8 +2151,6 @@ my $ReadTRsSupport = 0;
 my @supported_refTRs;
 
 # my $refid = -1;
-$dbh->do("PRAGMA foreign_keys = OFF");
-$dbh->do("PRAGMA synchronous = OFF");
 $get_supported_reftrs_sth->execute()
     or die "Cannot execute: " . $get_supported_reftrs_sth->errstr();
 $i = 0;
@@ -2319,11 +2319,10 @@ $dbh->do(
         NUMBER_REFS_VNTR_SPAN_N = $num_spanN}
 ) or die "Couldn't do statement: " . $dbh->errstr;
 
+$dbh->commit;
 # set old db settings
 $dbh->do("PRAGMA foreign_keys = ON");
 $dbh->do("PRAGMA synchronous = ON");
-
-$dbh->commit;
 $dbh->disconnect;
 
 warn "Producing output LaTeX file...\n";
