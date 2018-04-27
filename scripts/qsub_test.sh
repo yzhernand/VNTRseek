@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 if (($# != 2));
 then
      echo "Error: Please pass DBSUFIX and NPROCESSORS to this script. Aborting!"
