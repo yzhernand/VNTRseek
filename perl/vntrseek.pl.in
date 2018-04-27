@@ -401,11 +401,6 @@ if ( $STEP != 0 ) {
         exit 0;
     }
 
-    # get next step
-    if ( $STEP == 99 ) {
-        exit GetNextStep();
-    }
-
     my $err_hash = GetError();
     if ( $err_hash->{ERROR_STEP} != 0 ) {
         die printf(
@@ -414,6 +409,11 @@ if ( $STEP != 0 ) {
             $err_hash->{ERROR_CODE},
             $err_hash->{ERROR_DESC}
         );
+    }
+
+    # get next step
+    if ( $STEP == 99 ) {
+        exit GetNextStep();
     }
 
 }

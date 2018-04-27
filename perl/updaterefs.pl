@@ -367,9 +367,8 @@ sub print_vcf {
         # else {
         $dna = ($dna) ? uc( nowhitespace($dna) ) : "";
         my $cdiff = $copies;
-        warn "\tAllele: $cdiff, support $support, alt: ",
-            $supported_tr->{alt}, "\n"
-            if $ENV{DEBUG};
+        ( $ENV{DEBUG} ) && warn "\tAllele: $cdiff, support $support, alt: ",
+            Dumper( $supported_tr->{alt} ), "\n";
 
         # If an alternate allele
         if ( 0 == $sameasref ) {
@@ -390,8 +389,8 @@ sub print_vcf {
 
             # flip read if opposite dirs
             if ( $refdir ne $readdir ) {
-                warn "\t\tRead TR is on complement strand\n"
-                    if $ENV{DEBUG};
+                ( $ENV{DEBUG} )
+                    && warn "\t\tRead TR is on complement strand\n";
                 my $tdlen = length($dna);
                 $dna = RC($dna);
 
@@ -401,9 +400,9 @@ sub print_vcf {
                 $readTRStop  = ( $tdlen - $temp ) + 1;
             }
 
-            warn
-                "\t\tSequence: $dna, TR start: $readTRStart, TR stop: $readTRStop\n"
-                if $ENV{DEBUG};
+            ( $ENV{DEBUG} )
+                && warn
+                "\t\tSequence: $dna, TR start: $readTRStart, TR stop: $readTRStop\n";
 
             my $atemp = substr(
                 $dna,
@@ -412,7 +411,8 @@ sub print_vcf {
             );
 
             push @{ $supported_tr->{alt} }, $atemp;
-            warn "\t\tAlt: ", $supported_tr->{alt}, "\n" if $ENV{DEBUG};
+
+            # warn "\t\tAlt: ", $supported_tr->{alt}, "\n" if $ENV{DEBUG};
 
         }
 
@@ -2075,40 +2075,28 @@ my $dbh = get_dbh()
 
 # Select all refids from vntr_support table.
 # Must negate refid to match.
-our $supported_refs = $dbh->selectcol_arrayref(
-    q{SELECT -refid
+our $supported_alleles = $dbh->selectall_arrayref(
+    q{SELECT -refid,copies,sameasref,support
     FROM vntr_support}
 ) or die "Couldn't select from supported VNTRs: " . $dbh->errstr;
+my ($supported_vntr_count) = $dbh->selectrow_array(q{SELECT COUNT(DISTINCT refid) FROM vntr_support});
 
 ( $ENV{DEBUG} )
-    && warn "Supported ref tr ids:\n" . Dumper($supported_refs) . "\n";
+    && warn "Supported ref alleles:\n" . Dumper($supported_alleles) . "\n";
 
 # Connect to refdb
-my $ref_dbh = get_ref_dbh(
-    @run_conf{qw( REFERENCE_SEQ REFERENCE_FILE REFERENCE_INDIST )}, 0 );
+my $ref_dbh
+    = get_ref_dbh(
+    @run_conf{qw( REFERENCE_SEQ REFERENCE_FILE REFERENCE_INDIST REDO_REFDB )}
+    );
 
 # register the module and declare the virtual table
 $ref_dbh->sqlite_create_module(
     perl => "DBD::SQLite::VirtualTable::PerlData" );
 $ref_dbh->do(
     q{CREATE VIRTUAL TABLE temp.vntr_support
-    USING perl(rid INT, colref="main::supported_refs")}
+    USING perl(refid INT, copies INT, sameasref INT, support INT, arrayrefs="main::supported_alleles")}
 );
-
-# now we can SELECT from reference TR table, using the virtual table
-# as a constraint.
-our $supported_reftr_patterns = $ref_dbh->selectall_arrayref(
-    q{SELECT rid, pattern
-    FROM fasta_ref_reps INNER JOIN vntr_support USING (rid)
-    ORDER BY rid ASC}
-    )
-    or die "Couldn't get supported VNTR patterns from reference DB: "
-    . $ref_dbh->errstr;
-$ref_dbh->disconnect;
-
-( $ENV{DEBUG} )
-    && warn "Supported ref tr patterns:\n"
-    . Dumper($supported_reftr_patterns) . "\n";
 
 # warn "\nTurning off AutoCommit\n";
 $dbh->do("PRAGMA foreign_keys = OFF");
@@ -2117,15 +2105,11 @@ $dbh->begin_work;
 $dbh->do( get_trunc_query( $run_conf{BACKEND}, "main.fasta_ref_reps" ) )
     or die "Couldn't do statement: " . $dbh->errstr;
 
-$dbh->sqlite_create_module( perl => "DBD::SQLite::VirtualTable::PerlData" );
-$dbh->do(
-    q{CREATE VIRTUAL TABLE temp.supported_vntr_data
-    USING perl(rid INT, pattern TEXT, arrayrefs="main::supported_reftr_patterns")}
-);
-
-my $get_supported_reftrs_sth = $dbh->prepare(
+# now we can SELECT from reference TR table, using the virtual table
+# to JOIN.
+my $get_supported_reftrs_sth = $ref_dbh->prepare(
     q{SELECT rid,pattern,copies,sameasref,support
-    FROM supported_vntr_data INNER JOIN vntr_support ON (rid=-refid)
+    FROM fasta_ref_reps INNER JOIN temp.vntr_support ON (rid=refid)
     ORDER BY rid ASC}
 ) or die "Couldn't prepare statement: " . $dbh->errstr;
 
@@ -2214,21 +2198,20 @@ while ( my @data = $get_supported_reftrs_sth->fetchrow_array() ) {
     $ref->{readsum} += $support;
 }
 
-my $refsInRefsTable = $get_supported_reftrs_sth->rows;
+my $updfromtable = $i;
 $get_supported_reftrs_sth->finish;
+$ref_dbh->disconnect;
 
 # $sth6->finish;
-my $updfromtable;
 
-# Insert last row:
+# Insert last rows:
+push @supported_refTRs, $ref;
 while ( my $r = shift @supported_refTRs ) {
     update_ref_table( $r, $update_ref_table_sth );
 }
 $dbh->commit;
 
-$updfromtable = $refsInRefsTable;
-
-if ( $updfromtable != $refsInRefsTable ) {
+if ( $updfromtable != $supported_vntr_count ) {
     die
         "Updated number of entries($updfromtable) not equal to the number of references, aborting!";
 }
@@ -2320,6 +2303,7 @@ $dbh->do(
 ) or die "Couldn't do statement: " . $dbh->errstr;
 
 $dbh->commit;
+
 # set old db settings
 $dbh->do("PRAGMA foreign_keys = ON");
 $dbh->do("PRAGMA synchronous = ON");
