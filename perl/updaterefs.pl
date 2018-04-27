@@ -2073,32 +2073,6 @@ my $dbh = get_dbh()
 
 #goto AAA;
 
-# create temp table for updates
-my $query;
-
-$dbh->do("PRAGMA foreign_keys = OFF");
-$dbh->do( get_trunc_query( $run_conf{BACKEND}, "main.fasta_ref_reps" ) )
-    or die "Couldn't do statement: " . $dbh->errstr;
-
-# warn "\nTurning off AutoCommit\n";
-$dbh->begin_work;
-
-# my $placeholders = join ",", ("?") x 14;
-# $query = qq{INSERT INTO updtable VALUES($placeholders)};
-# For SQLite we'll just update fasta_ref_reps immediately.
-$query = qq{INSERT INTO main.fasta_ref_reps
-        (rid, alleles_sup, allele_sup_same_as_ref, entropy,
-            has_support, span1, spanN, homez_same, homez_diff,
-            hetez_same, hetez_diff, hetez_multi, support_vntr,
-            support_vntr_span1)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    };
-
-##############################
-
-my $update_ref_table_sth = $dbh->prepare($query)
-    or die "Couldn't prepare statement: " . $dbh->errstr;
-
 # Select all refids from vntr_support table.
 # Must negate refid to match.
 our $supported_refs = $dbh->selectcol_arrayref(
@@ -2136,6 +2110,11 @@ $ref_dbh->disconnect;
     && warn "Supported ref tr patterns:\n"
     . Dumper($supported_reftr_patterns) . "\n";
 
+# warn "\nTurning off AutoCommit\n";
+$dbh->begin_work;
+$dbh->do( get_trunc_query( $run_conf{BACKEND}, "main.fasta_ref_reps" ) )
+    or die "Couldn't do statement: " . $dbh->errstr;
+
 $dbh->sqlite_create_module( perl => "DBD::SQLite::VirtualTable::PerlData" );
 $dbh->do(
     q{CREATE VIRTUAL TABLE temp.supported_vntr_data
@@ -2155,22 +2134,41 @@ my $get_supported_reftrs_sth = $dbh->prepare(
 
 warn "\n\nUpdating fasta_ref_reps table...\n";
 
+my $query = qq{INSERT INTO main.fasta_ref_reps
+        (rid, alleles_sup, allele_sup_same_as_ref, entropy,
+            has_support, span1, spanN, homez_same, homez_diff,
+            hetez_same, hetez_diff, hetez_multi, support_vntr,
+            support_vntr_span1)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    };
+
+my $update_ref_table_sth = $dbh->prepare($query)
+    or die "Couldn't prepare statement: " . $dbh->errstr;
+
 my $ReadTRsSupport = 0;
-my $ref = { refid => -1 };
+my @supported_refTRs;
 
 # my $refid = -1;
-my $entr;
+$dbh->do("PRAGMA foreign_keys = OFF");
+$dbh->do("PRAGMA synchronous = OFF");
 $get_supported_reftrs_sth->execute()
     or die "Cannot execute: " . $get_supported_reftrs_sth->errstr();
 $i = 0;
+my $ref = { refid => -1 };
 while ( my @data = $get_supported_reftrs_sth->fetchrow_array() ) {
     warn "Row $i: ", join( ", ", @data ), "\n"
         if ( $ENV{DEBUG} );
-    if ( $ref->{refid} != -1 && $ref->{refid} != $data[0] ) {
-        update_ref_table( $ref, $update_ref_table_sth );
+    if ( $i > 0
+        && ( $ref->{refid} != $data[0] && ( @supported_refTRs % 1e4 == 0 ) ) )
+    {
+        while ( my $r = shift @supported_refTRs ) {
+            update_ref_table( $r, $update_ref_table_sth );
+        }
     }
 
     if ( $ref->{refid} != $data[0] ) {
+        ( $i > 0 ) && push( @supported_refTRs, $ref );
+
         # Note: refid is positive
         $ref = {
             refid              => $data[0],
@@ -2223,7 +2221,9 @@ $get_supported_reftrs_sth->finish;
 my $updfromtable;
 
 # Insert last row:
-update_ref_table( $ref, $update_ref_table_sth );
+while ( my $r = shift @supported_refTRs ) {
+    update_ref_table( $r, $update_ref_table_sth );
+}
 $dbh->commit;
 
 $updfromtable = $refsInRefsTable;
@@ -2235,33 +2235,6 @@ if ( $updfromtable != $refsInRefsTable ) {
 
 # cleanup temp file
 unlink("$TEMPDIR/updaterefs_$DBSUFFIX.txt");
-
-#print STDERR "Updating cluster table...\n";
-#
-#$sth5->execute() or die "Cannot execute: " . $sth5->errstr();;
-#$sth5->finish;
-#
-#$sth2->execute() or die "Cannot execute: " . $sth2->errstr();;
-#$num = $sth2->rows;
-#$i=0;
-#while ($i<$num) {
-#
-#  my @data = $sth2->fetchrow_array();
-#
-#  $clusterid = $data[0];
-#  $aveent = $data[2];
-#
-#  $i++;
-#
-#  $sth3->execute($aveent,$REPHASH{$clusterid},$clusterid) or die "Cannot execute: " . $sth3->errstr();;
-#  if (exists $DHASH{$clusterid} && $DHASH{$clusterid} ne "None") {
-#     $sth4->execute($DHASH{$clusterid},$clusterid) or die "Cannot execute: " . $sth4->errstr();;
-#  }
-#}
-
-#$sth2->finish;
-#$sth3->finish;
-#$sth4->finish;
 
 # updating stats table
 $dbh->begin_work;
@@ -2279,32 +2252,6 @@ my $update_stats_sth = $dbh->prepare(
 $update_stats_sth->execute()
     or die "Cannot execute: " . $update_stats_sth->errstr();
 $update_stats_sth->finish;
-
-# create singlton entries
-#$sth2 = $dbh->prepare("CREATE TEMPORARY TABLE tempmap (rid int  PRIMARY KEY);")
-#                or die "Couldn't prepare statement: " . $dbh->errstr;
-#$sth2->execute() or die "Cannot execute: " . $sth2->errstr();;
-#$sth2->finish;
-
-#$sth2 = $dbh->prepare("INSERT INTO tempmap(rid)  select -f.rid FROM (select min(repeatid) as rid,count(*) as thecount from clusterlnk where repeatid<0 group by clusterid having thecount=1) f;")
-#                or die "Couldn't prepare statement: " . $dbh->errstr;
-#$sth2->execute() or die "Cannot execute: " . $sth2->errstr();;
-#$sth2->finish;
-
-#$sth2 = $dbh->prepare("UPDATE fasta_ref_reps SET is_singleton=1 WHERE rid IN (SELECT rid from tempmap);")
-#                or die "Couldn't prepare statement: " . $dbh->errstr;
-#$sth2->execute() or die "Cannot execute: " . $sth2->errstr();;
-#$sth2->finish;
-
-#$sth2 = $dbh->prepare("UPDATE fasta_ref_reps SET is_dist=0 WHERE is_singleton=1;")
-#                or die "Couldn't prepare statement: " . $dbh->errstr;
-#$sth2->execute() or die "Cannot execute: " . $sth2->errstr();;
-#$sth2->finish;
-
-#$sth2 = $dbh->prepare("drop table tempmap;")
-#                or die "Couldn't prepare statement: " . $dbh->errstr;
-#$sth2->execute() or die "Cannot execute: " . $sth2->errstr();;
-#$sth2->finish;
 
 $dbh->do('CREATE TABLE t1 (c1 INT PRIMARY KEY NOT NULL);')
     or die "Couldn't do statement: " . $dbh->errstr;
@@ -2374,6 +2321,7 @@ $dbh->do(
 
 # set old db settings
 $dbh->do("PRAGMA foreign_keys = ON");
+$dbh->do("PRAGMA synchronous = ON");
 
 $dbh->commit;
 $dbh->disconnect;
