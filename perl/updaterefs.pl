@@ -13,7 +13,7 @@ use Data::Dumper;
 use lib "$FindBin::RealBin/lib";
 
 use vutil
-    qw(get_config get_dbh get_ref_dbh get_trunc_query stats_get set_statistics get_statistics);
+    qw(get_config get_dbh get_ref_dbh get_trunc_query set_statistics get_statistics);
 
 #use GD::Graph::linespoints;
 
