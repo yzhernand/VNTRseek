@@ -56,7 +56,7 @@ use lib "$FindBin::RealBin/lib";
 use lib "$FindBin::RealBin/perl/lib";    # for testing
 
 use vutil
-    qw(get_config set_config set_statistics get_statistics set_credentials write_mysql write_sqlite get_dbh get_ref_dbh stats_get set_datetime print_config create_blank_file run_redund trim);
+    qw(get_config set_config set_statistics get_statistics set_credentials write_mysql write_sqlite get_dbh get_ref_dbh set_datetime print_config create_blank_file run_redund trim);
 
 my $DOALLSTEPS = 0
     ; # set to 0 to do one step at a time (recommended for test run), 1 to run though all steps (THIS IS OTIONAL AS SPECIFYING END STEP IS POSSIBLE)
@@ -159,7 +159,7 @@ for my $k ( keys %conf_vars ) {
         if ( !exists $opts{$k} );
 }
 
-if ( ( $conf_vars{NEW_RUN} == 1 ) && ( $STEP != 0 ) ) {
+if ( ( $conf_vars{NEW_RUN} == 1 ) && ( $STEP != 100 && $STEP != 0 ) ) {
     die
         "Error: run configuration file not found at $config_file and this is not a new run.
 Please make sure that the DB suffix you supplied is correct.\n";
@@ -318,12 +318,7 @@ sub ClearError {
         set_statistics( \%clear_stats );
 
         # Fill in the previous step with some dummy date/time if needed
-        if (stats_get(
-                $opts{DBSUFFIX}, $opts{LOGIN},
-                $opts{PASS},     $opts{HOST},
-                $stats[ $set_step - 1 ]
-            ) eq ""
-            )
+        if (get_statistics($stats[ $set_step - 1 ]) eq "")
         {
             set_datetime( $stats[ $set_step - 1 ] );
         }
@@ -426,22 +421,9 @@ if ( $STEP == 0 ) {
 
     print STDERR "Executing step #$STEP (creating MySQL database)...\n";
 
-    if ( !-e "$output_folder" && !mkdir("$output_folder") ) {
-        warn "\nWarning: Failed to create data directory!\n";
-    }
-
-    if ( $opts{BACKEND} eq "mysql" ) {
-        my $exstring;
-        write_mysql();
-        $exstring
-            = "mysql -u $opts{LOGIN} --password=$opts{PASS} -h $opts{HOST} < $opts{TMPDIR}/${DBNAME}.sql";
-        system($exstring);
-        $exstring = "rm -f $opts{TMPDIR}/${DBNAME}.sql";
-        system($exstring);
-    }
-    else {
-        write_sqlite();
-    }
+    # This function checks if the output directory exists,
+    # and creates it if it doesn't exist.
+    write_sqlite();
 
     if ( !-e "$read_profiles_folder" && !mkdir("$read_profiles_folder") ) {
         warn "\nWarning: Failed to create output directory!\n";

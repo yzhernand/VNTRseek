@@ -14,7 +14,7 @@ if ( $ENV{DEBUG} ) {
 
 use base 'Exporter';
 our @EXPORT_OK
-    = qw(read_config_file get_config set_config set_credentials get_dbh get_ref_dbh write_mysql make_refseq_db load_refprofiles_db run_redund write_sqlite set_statistics get_statistics stats_get set_datetime print_config trim create_blank_file get_trunc_query);
+    = qw(read_config_file get_config set_config set_credentials get_dbh get_ref_dbh write_mysql make_refseq_db load_refprofiles_db run_redund write_sqlite set_statistics get_statistics set_datetime print_config trim create_blank_file get_trunc_query);
 
 # vutil.pm
 # author: Yevgeniy Gelfand
@@ -326,7 +326,7 @@ sub get_statistics {
 
     # my $DBSUFFIX = shift;
     my @stats = @_;
-    my $dbh   = get_dbh( { readonly => 1 } );
+    my $dbh = get_dbh( { readonly => 1 } );
     my $sql_clause;
     ( $ENV{DEBUG} ) && warn Dumper( \@stats ) . "\n";
 
@@ -338,55 +338,6 @@ sub get_statistics {
 
     $dbh->disconnect();
     return $sql_res;
-}
-
-################################################################
-
-sub stats_get {
-    croak 'Cannot use "stats_get" in list context' if wantarray;
-
-    my $argc = @_;
-    if ( $argc < 5 ) {
-        die "stats_set: expects 5 parameters, passed $argc !\n";
-    }
-
-    my $DBSUFFIX = $_[0];
-    my $LOGIN    = $_[1];
-    my $PASS     = $_[2];
-    my $HOST     = $_[3];
-    my $NAME     = $_[4];
-    my $VALUE    = undef;
-
-    my $dbh = get_dbh();
-
-    # check if database exists first, return undef if not
-    unless ($dbh) {
-        return;
-    }
-
-    # get the namve/value pair
-    my $sth = $dbh->prepare("SELECT $NAME FROM stats;")
-        or die "Couldn't prepare statement: " . $dbh->errstr;
-
-    $sth->execute()    # Execute the query
-        or die "Couldn't execute statement: " . $sth->errstr;
-
-    my @data = $sth->fetchrow_array();
-
-    unless (@data) {
-        print STDERR "No field in database  stats.`$NAME'. Aborting!\n\n";
-        exit(1);
-    }
-
-    $VALUE = $data[0];
-    $sth->finish;
-
-    if ( !defined $VALUE ) { $VALUE = ""; }
-    ( $ENV{DEBUG} ) && warn "$NAME stat is $VALUE\n";
-
-    $dbh->disconnect();
-
-    return $VALUE;
 }
 
 ################################################################
@@ -478,6 +429,10 @@ sub get_dbh {
 
 # TODO First connect to a temp location, backup database to that location
 # then return handle to that location. This is primarily for running on clusters.
+        if ( !-e $dbfile || -z $dbfile ) {
+            write_sqlite();
+        }
+
         $dbh = DBI->connect(
             "DBI:SQLite:dbname=$dbfile",
             undef, undef,
@@ -488,6 +443,8 @@ sub get_dbh {
                     * ( exists $opts->{readonly} && $opts->{readonly} )
             }
         ) or die "Could not connect to database $dbfile: $DBI::errstr";
+
+      # my ($num_rows) = $dbh->selectrow_array(q{SELECT COUNT(*) FROM stats});
 
         # Set default journal to write-ahead log
         # $dbh->do(q{PRAGMA journal_mode = WAL})
@@ -707,8 +664,9 @@ sub load_refprofiles_db {
                 warn
                     "Not creating VirtualTable; module already registered.\n";
             }
-            else{
-                die "Error installing VirtualTable in SQLite db handle: $_\n.";
+            else {
+                die
+                    "Error installing VirtualTable in SQLite db handle: $_\n.";
             }
         };
 
@@ -971,7 +929,21 @@ sub write_sqlite {
             "Error: must call `get_config(dbsuffix, config_loc)` before this function.\n";
     }
 
+    my $output_folder = "$VSCNF_FILE{OUTPUT_ROOT}/vntr_$VSCNF_FILE{DBSUFFIX}";
+    if ( !-e "$output_folder" ) {
+        unless ( mkdir("$output_folder") ) {
+            if ( $!{EEXIST} ) {
+                warn
+                    "Warning: Not creating data directory, directory exists.\n";
+            }
+            else {
+                warn "Warning: Failed to create data directory!\n";
+            }
+        }
+    }
+
     my $installdir = "$FindBin::RealBin";
+    ( $ENV{DEBUG} ) && warn "Creating SQLite database...\n";
     my $exestring
         = "sqlite3 $VSCNF_FILE{OUTPUT_ROOT}/vntr_$VSCNF_FILE{DBSUFFIX}/$VSCNF_FILE{DBSUFFIX}.db < $installdir/sqlite_schema.sql";
     warn "Executing: $exestring\n";
