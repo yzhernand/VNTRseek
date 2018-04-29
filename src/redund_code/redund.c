@@ -524,7 +524,7 @@ int main(int argc, char **argv)
                     return 1;
                 }
 
-                rc = sqlite3_exec(db, "PRAGMA journal_mode = MEMORY", 0, 0, &err_msg);
+                rc = sqlite3_exec(db, "PRAGMA synchronous = OFF", 0, 0, &err_msg);
 
                 if (rc != SQLITE_OK) {
                     fprintf(stderr, "SQL error: %s\n", err_msg);
