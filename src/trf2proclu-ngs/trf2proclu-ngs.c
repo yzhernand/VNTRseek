@@ -193,7 +193,7 @@ int *MinimumRepresentation(int *indptr, int len, int *indptrrc, int lenrc, int *
 {
 
     int i, j;
-    int *src, *srcrc, *tar, *sourceptr, *destinptr, tmp, *indices;
+    int *src, *srcrc, *tar, tmp;
 
     RC = 0;
 
@@ -369,12 +369,13 @@ int main(int argc, char **argv)
             break;
 
         case 'o':
-            if ((indexfile = malloc(strlen(optarg) + 1)) == NULL) {
-                fputs("Could not allocate memory. Aborting.\n", stderr);
-                return (4);
-            }
+            indexfile = optarg;
+            // if (indexfile == NULL) {
+            //     perror("Could not allocate memory to store indexfile name");
+            //     return (4);
+            // }
 
-            strcpy(indexfile, optarg);
+            // strncpy(indexfile, optarg, strlen(optarg));
             break;
 
         case '?':	// getopt_long already printed an error message

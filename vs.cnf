@@ -44,6 +44,11 @@ STRIP_454_KEYTAGS=0
 # eg, 1 - yes
 IS_PAIRED_READS=1
 
+# Force reinitialization of the reference set database
+# eg, 0 = no 
+# eg, 1 - yes
+REDO_REFDB=0
+
 # html directory (must be writable and executable!)
 # eg, /var/www/html/vntrview
 HTML_DIR=
@@ -51,7 +56,7 @@ HTML_DIR=
 # input data directory 
 # (plain or gzipped fasta/fastq files)
 # eg, /input
-FASTA_DIR=
+INPUT_DIR=
 
 # output directory (must be writable and executable!)
 # eg, /output

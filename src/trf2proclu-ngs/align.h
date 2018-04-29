@@ -443,7 +443,7 @@ BASICALIGNPAIR* GetBasicPatternGlobalTextLocalAlignPair( char* seq1, char* seq2,
     }
 
     /*  allocate memory     */
-    ap = (BASICALIGNPAIR*) malloc(sizeof(COMPOSITIONALIGNPAIR));
+    ap = malloc(sizeof(*ap));
     if(ap==NULL) return NULL;
 
     ap->sequence1side = (char*) malloc((length+1)*sizeof(char));
@@ -3041,7 +3041,7 @@ char* init_complement_ascii(void)
   /* complement has 256 entries so that finding the entries for A, C, G and T which are complement ascii values */
   /* require no calculation */
   int i;
-  char *Complementascii=(char *)calloc(256,sizeof(long int));
+  char *Complementascii= calloc(256,sizeof(*Complementascii));
   
   if(Complementascii==NULL){ return NULL; }
   

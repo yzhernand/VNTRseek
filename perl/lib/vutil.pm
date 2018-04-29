@@ -171,9 +171,9 @@ sub set_config {
         croak("Could not create html_dir directory ($in_hash{HTML_DIR}).\n");
     }
 
-    unless ( exists $in_hash{FASTA_DIR} && $in_hash{FASTA_DIR} ) {
+    unless ( exists $in_hash{INPUT_DIR} && $in_hash{INPUT_DIR} ) {
         croak(
-            "Please set fasta directory (fasta_dir) variable on the command line or in the configuration file.\n"
+            "Please set fasta directory (input_dir) variable on the command line or in the configuration file.\n"
         );
     }
 
@@ -218,8 +218,8 @@ sub set_config {
     {
         die("File '$in_hash{REFERENCE_INDIST}' not found!");
     }
-    unless ( -e $in_hash{FASTA_DIR} ) {
-        die("Directory '$in_hash{FASTA_DIR}' not found!");
+    unless ( -e $in_hash{INPUT_DIR} ) {
+        die("Directory '$in_hash{INPUT_DIR}' not found!");
     }
     if ( !-e $in_hash{OUTPUT_ROOT} && !mkdir( $in_hash{OUTPUT_ROOT} ) ) {
         die("Error creating output root ($in_hash{OUTPUT_ROOT}). Please check the path or manually create this directory and try again."
@@ -1429,8 +1429,8 @@ sub print_config {
         $VSCNF_FILE{"IS_PAIRED_READS"} = -1;
     }
     if ( !defined $VSCNF_FILE{"HTML_DIR"} ) { $VSCNF_FILE{"HTML_DIR"} = ""; }
-    if ( !defined $VSCNF_FILE{"FASTA_DIR"} ) {
-        $VSCNF_FILE{"FASTA_DIR"} = "";
+    if ( !defined $VSCNF_FILE{"INPUT_DIR"} ) {
+        $VSCNF_FILE{"INPUT_DIR"} = "";
     }
     if ( !defined $VSCNF_FILE{"OUTPUT_ROOT"} ) {
         $VSCNF_FILE{"OUTPUT_ROOT"} = "";
@@ -1508,7 +1508,7 @@ HTML_DIR=$VSCNF_FILE{"HTML_DIR"}
 # input data directory 
 # (plain or gzipped fasta/fastq files)
 # eg, /input
-FASTA_DIR=$VSCNF_FILE{"FASTA_DIR"}
+INPUT_DIR=$VSCNF_FILE{"INPUT_DIR"}
 
 # output directory (must be writable and executable!)
 # eg, /output

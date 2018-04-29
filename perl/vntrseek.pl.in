@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/usr/bin/env perl
 
 # MASTER SCRIPT TO RUN THE TR VARIANT SEARCH PIPELINE
 #
@@ -53,7 +53,6 @@ my $install_dir = "$FindBin::RealBin";
 my $run_dir = getcwd();
 
 use lib "$FindBin::RealBin/lib";
-use lib "$FindBin::RealBin/perl/lib";    # for testing
 
 use vutil
     qw(get_config set_config set_statistics get_statistics set_credentials write_mysql write_sqlite get_dbh get_ref_dbh set_datetime print_config create_blank_file run_redund trim);
@@ -82,21 +81,19 @@ if ( !chdir("$install_dir") ) {
 my $HELPSTRING
     = "\nUsage: $0 <start step> <end step> To tell the master script what step to execute. The first step is 0, last step is 19. \n\nOPTIONS:\n\n"
     . "\t--HELP                        prints this help message\n"
-    . "\t--LOGIN                       mysql login\n"
-    . "\t--PASS                        mysql pass\n"
-    . "\t--HOST                        mysql host (default localhost)\n"
     . "\t--NPROCESSES                  number of processors on your system\n"
     . "\t--MIN_FLANK_REQUIRED          minimum required flank on both sides for a read TR to be considered (default 10)\n"
     . "\t--MAX_FLANK_CONSIDERED        maximum flank length used in flank alignments, set to big number to use full flank (default 50)\n"
     . "\t--MIN_SUPPORT_REQUIRED        minimum number of mapped reads which agree on copy number to call an allele (default 2)\n"
     . "\t--KEEPPCRDUPS                      if this flag is given, PCR duplicates will not be looked for or removed. (default: PCR duplicates are removed)"
     . "\t--DBSUFFIX                    suffix for database name\n"
-    . "\t--BACKEND                     Specify the database backend {valid values are 'mysql' and 'sqlite'\n"
     . "\t--SERVER                      server name, used for html generating links\n"
     . "\t--STRIP_454_KEYTAGS           for 454 platform, strip leading 'TCAG', 0/1 (default 0)\n"
-    . "\t--IS_PAIRED_READS             data is paired reads, 0/1 (default 0)\n"
+    . "\t--IS_PAIRED_READS             data is paired reads, 0/1 (default 1)\n"
+    . "\t--REDO_REFDB                  force reinitialization of the reference set database, 0/1 (default 0)\n"
     . "\t--HTML_DIR                    html directory (must be writable and executable!)\n"
-    . "\t--FASTA_DIR                   input data directory (plain or gzipped fasta/fastq files)\n"
+    . "\t--INPUT_DIR                   input data directory (BAM or plain or gzipped fasta/fastq files)\n"
+    . "\t--FASTA_DIR                   same as INPUT_DIR, kept for backwards compatibility\n"
     . "\t--OUTPUT_ROOT                 output directory (must be writable and executable!)\n"
     . "\t--TMPDIR                      temp (scratch) directory (must be writable!)\n"
     . "\t--REFERENCE_FILE              reference profile file (default set in global config file)\n"
@@ -106,7 +103,7 @@ my $HELPSTRING
     . "\t\n\nADDITIONAL USAGE:\n\n"
     . "\t$0 100                       clear error\n"
     . "\t$0 100 N                     clear error and set NextRunStep to N (0-19, this is only when running on a cluster using the advanced cluster script that checks for NextRunStep)\n"
-    . "\t\n\n";
+    . "\n\n";
 
 # get dbsuffix from command line
 my %opts;
@@ -122,7 +119,7 @@ GetOptions(
     "BACKEND=s",              "DBSUFFIX=s",
     "SERVER=s",               "STRIP_454_KEYTAGS=i",
     "IS_PAIRED_READS=i",      "REDO_REFDB=i",
-    "HTML_DIR=s",             "FASTA_DIR=s",
+    "HTML_DIR=s",             "INPUT_DIR|FASTA_DIR=s",
     "OUTPUT_ROOT=s",          "TMPDIR=s",
     "REFERENCE_FILE=s",       "REFERENCE_SEQ=s",
     "REFERENCE_INDIST=s",     "REFERENCE_INDIST_PRODUCE=i"
@@ -458,7 +455,7 @@ if ( $STEP == 1 ) {
     my $extra_param  = ( $opts{STRIP_454_KEYTAGS} ) ? '-s' : '';
     my $extra_param2 = ( $opts{IS_PAIRED_READS} )   ? '-r' : '';
     system(
-        "./run_trf.pl -t \"$TRF_PARAM\" -u \"$TRF2PROCLU_PARAM\" $extra_param $extra_param2 -p $opts{NPROCESSES} $opts{FASTA_DIR} $read_profiles_folder"
+        "./run_trf.pl -t \"$TRF_PARAM\" -u \"$TRF2PROCLU_PARAM\" $extra_param $extra_param2 -p $opts{NPROCESSES} $opts{INPUT_DIR} $read_profiles_folder"
     );
     if ( $? == -1 ) {
         SetError( $STEP, "command failed: $!", -1 );
@@ -474,7 +471,7 @@ if ( $STEP == 1 ) {
 
     set_statistics(
         {   PARAM_TRF       => $TRF_PARAM,
-            FOLDER_FASTA    => $opts{FASTA_DIR},
+            FOLDER_FASTA    => $opts{INPUT_DIR},
             FOLDER_PROFILES => $read_profiles_folder,
             TIME_TRF        => time() - $timestart,
         }
@@ -840,7 +837,7 @@ if ( $STEP == 8 ) {
     $dbh->disconnect();
 
     my $exstring
-        = "./insert_reads.pl $read_profiles_folder_clean/all.clusters $read_profiles_folder  $opts{FASTA_DIR} $read_profiles_folder_clean $reference_folder/reference.leb36.rotindex $extra_param $opts{DBSUFFIX} $run_dir $opts{TMPDIR} $opts{IS_PAIRED_READS}";
+        = "./insert_reads.pl $read_profiles_folder_clean/all.clusters $read_profiles_folder  $opts{INPUT_DIR} $read_profiles_folder_clean $reference_folder/reference.leb36.rotindex $extra_param $opts{DBSUFFIX} $run_dir $opts{TMPDIR} $opts{IS_PAIRED_READS}";
     system($exstring);
     if ( $? == -1 ) {
         SetError( $STEP, "command failed: $!", -1 );
