@@ -61,7 +61,7 @@ my $dbh = get_dbh( { userefdb => 1, readonly => 1 } );
     = $dbh->selectrow_array(
     q{SELECT COUNT(*) FROM ref_profiles WHERE redund = 0});
 
-open( $input, "-|", "wc -l $readpf/*.indexhist | tail -1" );
+open( $input, "-|", "cat $readpf/*.indexhist | wc -l" );
 $rc = <$input>;
 if ( $rc =~ /(\d+)/ ) {
     $stats{NUMBER_TRS_IN_READS} = $1;
@@ -70,7 +70,7 @@ close($input);
 
 $dbh->disconnect;
 
-open( $input, "-|", "wc -l $rpfc/*.rotindex | tail -1" );
+open( $input, "-|", "cat $rpfc/*.rotindex | wc -l" );
 $rc = <$input>;
 if ( $rc =~ /(\d+)/ ) {
     $stats{NUMBER_TRS_IN_READS_AFTER_REDUND} = $1;
@@ -97,7 +97,7 @@ if ( $rc =~ /(\d+) (\d+) (\d+)/ ) {
 }
 close($input);
 
-open( $input, "-|", "wc -l $rpfc/*.rotindex | tail -1" );
+open( $input, "-|", "cat $rpfc/*.rotindex | wc -l" );
 $rc = <$input>;
 if ( $rc =~ /^(\d+)/ ) {
     $stats{NUMBER_READS_WITHTRS_GE7_AFTER_REDUND} = $1;

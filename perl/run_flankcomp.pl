@@ -69,23 +69,9 @@ $dbh->do( get_trunc_query( $run_conf{BACKEND}, "clusters" ) )
 $dbh->do( get_trunc_query( $run_conf{BACKEND}, "clusterlnk" ) )
     or die "Couldn't do statement: " . $dbh->errstr;
 
-if ( $run_conf{BACKEND} eq "mysql" ) {
-    $dbh->do('ALTER TABLE clusterlnk DISABLE KEYS;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-
-    $dbh->do('SET AUTOCOMMIT = 0;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-
-    $dbh->do('SET FOREIGN_KEY_CHECKS = 0;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-
-    $dbh->do('SET UNIQUE_CHECKS = 0;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-}
-elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-    $dbh->do("PRAGMA foreign_keys = OFF");
-    $dbh->{AutoCommit} = 0;
-}
+$dbh->do("PRAGMA foreign_keys = OFF");
+    $dbh->do("PRAGMA synchronous = OFF");
+    $dbh->begin_work;
 
 #############################################################################################
 #############################################################################################
@@ -99,24 +85,14 @@ print STDERR "\nInserting into clusterlnk table...\n";
 open my $fh, "<$inputfile" or die $!;
 my $TEMPFILE;
 
-#open QFILE, ">$inputfile.reads.fq" or die $!;
-
-if ( $run_conf{BACKEND} eq "mysql" ) {
-    $sth
-        = $dbh->prepare(
-        "LOAD DATA LOCAL INFILE '$TEMPDIR/clusterlnk_$DBSUFFIX.txt' INTO TABLE clusterlnk FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';"
-        ) or die "Couldn't prepare statement: " . $dbh->errstr;
-    open( $TEMPFILE, ">$TEMPDIR/clusterlnk_$DBSUFFIX.txt" ) or die $!;
-}
-elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-    $sth = $dbh->prepare(q{INSERT INTO clusterlnk VALUES (?, ?, ?, 0, 0)})
+$sth = $dbh->prepare(q{INSERT INTO clusterlnk VALUES (?, ?, ?, 0, 0)})
         or die "Couldn't prepare statement: " . $dbh->errstr;
-}
 
 # insert into clusterlnk
 my $totalreps = 0;
 
 # DBI->trace("3|SQL", "dbitrace.log");
+my (@bind_cids, @bind_refids, @bind_dirs);
 while (<$fh>) {
     $clusters_processed++;
 
@@ -132,38 +108,37 @@ while (<$fh>) {
 
         my $dir = q{'};
         if ( $val =~ s/([\'\"])// ) { $dir = $1; }
+        push @bind_cids, $clusters_processed;
+        push @bind_refids, $val;
+        push @bind_dirs, $dir;
 
-        if (   ( $run_conf{BACKEND} eq "mysql" )
-            && ( $totalreps % $RECORDS_PER_INFILE_INSERT == 0 ) )
+        if ( ( $totalreps % $RECORDS_PER_INFILE_INSERT == 0 ) )
         {
-            print $TEMPFILE $clusters_processed, ",", $val, ",", $dir, ",", 0,
-                ",", 0, "\n";
-            close($TEMPFILE);
-            $sth->execute();
-            open( $TEMPFILE, ">$TEMPDIR/clusterlnk_$DBSUFFIX.txt" ) or die $!;
-        }
-        elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-            $sth->execute( $clusters_processed, $val, $dir );
-            if ( $ENV{DEBUG} ) {
-                warn
-                    "clusterlnk... Cluster $clusters_processed, value: $val, direction: $dir\n";
-            }
+            $sth->execute_array( {}, \@bind_cids, \@bind_refids, \@bind_dirs );
+            # if ( $ENV{DEBUG} ) {
+            #     warn
+            #         "clusterlnk... Cluster $clusters_processed, value: $val, direction: $dir\n";
+            # }
+            @bind_cids = ();
+            @bind_refids = ();
+            @bind_dirs = ();
         }
 
     }
 
 }    # end of while loop
 
-if ( $run_conf{BACKEND} eq "mysql" ) {
-
-    # finish clustelnk load infile
-    close($TEMPFILE);
-    $sth->execute();
-    unlink("$TEMPDIR/clusterlnk_$DBSUFFIX.txt");
-
-    # reenable indices
-    $dbh->do('ALTER TABLE clusterlnk ENABLE KEYS;')
-        or die "Couldn't do statement: " . $dbh->errstr;
+# Finish insert
+if ( @bind_cids )
+{
+    $sth->execute_array( {}, \@bind_cids, \@bind_refids, \@bind_dirs );
+    # if ( $ENV{DEBUG} ) {
+    #     warn
+    #         "clusterlnk... Cluster $clusters_processed, value: $val, direction: $dir\n";
+    # }
+    @bind_cids = ();
+    @bind_refids = ();
+    @bind_dirs = ();
 }
 
 $dbh->commit;
@@ -342,7 +317,7 @@ if ( $run_conf{BACKEND} eq "mysql" ) {
 }
 elsif ( $run_conf{BACKEND} eq "sqlite" ) {
     $dbh->do("PRAGMA foreign_keys = ON");
-    $dbh->{AutoCommit} = 1;
+    $dbh->do("PRAGMA synchronous = ON");
 }
 
 $dbh->disconnect();
