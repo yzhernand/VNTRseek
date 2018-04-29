@@ -31,9 +31,6 @@
 
 //#define _WIN_32_YES
 
-#define max(a,b) (((a)>=(b))?(a):(b))
-#define min(a,b) (((a)<=(b))?(a):(b))
-
 #include "../libs/easylife/easylife.h"
 #include "patupdt.h"
 #include "profile.h"
@@ -56,10 +53,10 @@
 typedef struct {
 
     char *header;
-    char *pattern;
-    char *sequence;
-    char *left;
-    char *right;
+    unsigned char *pattern;
+    unsigned char *sequence;
+    unsigned char *left;
+    unsigned char *right;
 
     int *minRepresentation;
     PROFILE *prof;
@@ -284,7 +281,8 @@ int main(int argc, char **argv)
     int thecount;
     float copynum = 0, entropy = 0;
     FILE *fp, *fph, *logfp;
-    char *header, *pattern, *sequence, *flankleft, *flankright;
+    char *header, *flankleft, *flankright;
+    unsigned char *sequence, *pattern;
     int startid = -1000000, match = -1000000, mismatch = -1000000, indel = -1000000, minperiod = -1000000, minflank = -1000000, *sm;
     REPEAT rep;
     REP_STRUCT *repPtr;
@@ -294,11 +292,11 @@ int main(int argc, char **argv)
     char *indexfile = NULL;
     char indexfileh[1024] = "";
 
-    header = (char *)smalloc(sizeof(char) * (LBI_MAX_HEADER_SIZE + 1));
-    pattern = (char *)smalloc(sizeof(char) * (LBI_MAX_PATTERN_SIZE + 1));
-    sequence = (char *)smalloc(sizeof(char) * (LBI_MAX_SEQUENCE_SIZE + 1));
-    flankleft = (char *)smalloc(sizeof(char) * (LBI_MAX_FLANK_SIZE + 1));
-    flankright = (char *)smalloc(sizeof(char) * (LBI_MAX_FLANK_SIZE + 1));
+    header = smalloc(sizeof(*header) * (LBI_MAX_HEADER_SIZE + 1));
+    pattern = smalloc(sizeof(*pattern) * (LBI_MAX_PATTERN_SIZE + 1));
+    sequence = smalloc(sizeof(*sequence) * (LBI_MAX_SEQUENCE_SIZE + 1));
+    flankleft = smalloc(sizeof(*flankleft) * (LBI_MAX_FLANK_SIZE + 1));
+    flankright = smalloc(sizeof(*flankright) * (LBI_MAX_FLANK_SIZE + 1));
 
     while (1) {
         static struct option long_options[] = {
@@ -558,8 +556,8 @@ int main(int argc, char **argv)
             repPtr->gcount = gcount;
             repPtr->tcount = tcount;
             repPtr->entropy = entropy;
-            repPtr->pattern = strdup(pattern);
-            repPtr->sequence = strdup(sequence);
+            repPtr->pattern = (unsigned char *)strdup((char *)pattern);
+            repPtr->sequence = (unsigned char *)strdup((char *)sequence);
             repPtr->spanning = 1;
             repPtr->prof = NULL;
             repPtr->profrc = NULL;
@@ -567,14 +565,14 @@ int main(int argc, char **argv)
 
 
             if (flankleft[0] == '.')
-                repPtr->left = strdup("");
+                repPtr->left = (unsigned char*)strdup("");
             else
-                repPtr->left = strdup(flankleft);
+                repPtr->left = (unsigned char*) strdup(flankleft);
 
             if (flankright[0] == '.')
-                repPtr->right = strdup("");
+                repPtr->right = (unsigned char*)strdup("");
             else
-                repPtr->right = strdup(flankright);
+                repPtr->right = (unsigned char*) strdup(flankright);
 
 
             /* if header ends with _RCYES, we need to rccomp the results first and eliminate duplicates */
@@ -583,7 +581,8 @@ int main(int argc, char **argv)
 
             if (headerlen >= 6 && 0 == strcmp(repPtr->header + headerlen - 6, "_RCYES")) {
                 int seqlen = 0;
-                char *strtemp, *strtemp2, *src;
+                char *src;
+                unsigned char *strtemp, *strtemp2;
 
                 rcyes = 1;
 
@@ -619,8 +618,8 @@ int main(int argc, char **argv)
             rep.concensussize = repPtr->patsize;
             rep.firstindex = repPtr->firstindex;
             rep.lastindex = repPtr->lastindex;
-            rep.pattern = strdup(repPtr->pattern);
-            rep.subsequence = strdup(repPtr->sequence);
+            rep.pattern = (unsigned char *)strdup((char *)repPtr->pattern);
+            rep.subsequence = (unsigned char *)strdup((char *)repPtr->sequence);
             rep.profile = NULL;
             rep.proflen = 0;
 
@@ -640,7 +639,7 @@ int main(int argc, char **argv)
             repPtr->indelperc = rep.percentindels;
             repPtr->score = rep.score;
             free(repPtr->pattern);
-            repPtr->pattern = strdup(rep.pattern);
+            repPtr->pattern = (unsigned char *)strdup((char *)rep.pattern);
 
 
             
@@ -868,7 +867,7 @@ int main(int argc, char **argv)
         if (0 == repPtr->spanning) continue;
 
         // write profile to standard output
-        WriteProfileWithRC(stdout, repPtr->prof, repPtr->profrc, repPtr->left, repPtr->right);
+        WriteProfileWithRC(stdout, repPtr->prof, repPtr->profrc, (char *) repPtr->left, (char *) repPtr->right);
     }
 
     // free data

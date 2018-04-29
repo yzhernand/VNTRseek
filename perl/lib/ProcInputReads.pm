@@ -230,7 +230,7 @@ sub fork_proc {
 
             # $trf_pipe, $header, $body, $debug_reads_processed );
             # $debug_reads_processed++;
-            if ( ( $reads_processed++ % $records_before_split ) == 0 ) {
+            if ( ( ++$reads_processed % $records_before_split ) == 0 ) {
                 if ( !close $trf_pipe ) {
                     check_trf_pipe_close( $!, $?, $output_prefix,
                         $current_file, $current_fragment );

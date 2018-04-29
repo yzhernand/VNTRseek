@@ -56,7 +56,14 @@
 #define MAX_ALPHABETSIZ 25
 int ALPHABETSIZ = MAX_ALPHABETSIZ;              /* the alphabet size for compositional alignment */
 
-
+#define max(a,b) \
+   ({ __typeof__ (a) _a = (a); \
+       __typeof__ (b) _b = (b); \
+     _a >= _b ? _a : _b; })
+#define min(a,b) \
+      ({ __typeof__ (a) _a = (a); \
+       __typeof__ (b) _b = (b); \
+     _a <= _b ? _a : _b; })
 
 /*************************************************************************
 *                      -type definitions-
@@ -181,7 +188,7 @@ COMPOSITIONALIGNPAIR* GetCompositionLocalAlignPair(char* seq1, char* seq2, int l
 
 
 /* added by Gary Benson 1/2003 */
-int* GetCompositionSubstringMatchLengths(char* seq1, char* seq2, int len1, int len2,
+int* GetCompositionSubstringMatchLengths(unsigned char* seq1, unsigned char* seq2, int len1, int len2,
 																				 int limit, int ALPHABETSIZE);
 
 void FreeBasicAlignPair(BASICALIGNPAIR* ap);
@@ -195,7 +202,7 @@ void FreeCyclicAlignPair(CYCLICALIGNPAIR* ap);
 /* added by Gary Benson 1/2003 */
 void FreeCompositionAlignPair(COMPOSITIONALIGNPAIR* ap);
 
-char*   GetReverseComplement( char* original);
+unsigned char*   GetReverseComplement(unsigned char* original);
 
 int*    CreateSubstitutionMatrix(int match,int mismatch);
 
@@ -1549,7 +1556,7 @@ WDPALIGNPAIR* GetWDPGlobalAlignPair( char* sequence, char* pattern,
 }
 
 /***************************************************************/
-int* GetCompositionSubstringMatchLengths(char* seq1, char* seq2, int len1, int len2,
+int* GetCompositionSubstringMatchLengths(unsigned char* seq1, unsigned char* seq2, int len1, int len2,
 																				 int limit, int ALPHABETSIZE)
 																				 /*
 																				 Returns a two dimensional array (created and used as a one dimensional array) 
@@ -1563,10 +1570,10 @@ int* GetCompositionSubstringMatchLengths(char* seq1, char* seq2, int len1, int l
 	int Mlen=0;
 	COMPOSITIONVECTOR *Diffvectors, *dfi, *dfic;
   int *M, *Radsort1, *Radsort2, *Counts;
-  int g,k,size,m,n,d,xstart,ystart,length;
+  unsigned int g,k,size,m,n,d,xstart,ystart,length;
 	int minval,maxval,val,*rsi,*trs;
 	int current,previous,match,i,j,substring_length;
-  char *X, *Y;
+  unsigned char *X, *Y;
   int *Index;	
 	
 #ifdef _WIN_32_YES
@@ -3061,12 +3068,12 @@ char* init_complement_ascii(void)
 }
 
 /***********************************************************************/
-char*   GetReverseComplement(char* original)
+unsigned char*   GetReverseComplement(unsigned char* original)
 {
     static char *Complementascii = NULL;            /* precomputed array used for the reverse complement function */
-    char *sourceptr,*destinptr;
+    unsigned char *sourceptr,*destinptr;
     int length;
-    char *buffer;
+    unsigned char *buffer;
 
 
 
@@ -3077,10 +3084,10 @@ char*   GetReverseComplement(char* original)
 	}
 
     /* find out how long the string is */
-    length = strlen(original);
+    length = strlen((char*) original);
 
     /* allocate the new string */
-    buffer = (char*) malloc(sizeof(char)*(length+1));
+    buffer = calloc((length+1), sizeof(*buffer));
     if(buffer==NULL)
     {
 		return NULL;

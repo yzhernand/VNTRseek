@@ -171,6 +171,11 @@ sub set_config {
         croak("Could not create html_dir directory ($in_hash{HTML_DIR}).\n");
     }
 
+    # For older runs where FASTA_DIR was the name of the option
+    if ( exists $in_hash{FASTA_DIR} && $in_hash{FASTA_DIR} ) {
+        $in_hash{INPUT_DIR} = $in_hash{FASTA_DIR};
+    }
+
     unless ( exists $in_hash{INPUT_DIR} && $in_hash{INPUT_DIR} ) {
         croak(
             "Please set fasta directory (input_dir) variable on the command line or in the configuration file.\n"

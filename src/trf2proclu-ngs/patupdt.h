@@ -58,8 +58,8 @@ typedef struct tagREPEAT
     int countmatch;
     int countindel;
     int countmismatch;
-    char* pattern;
-    char* subsequence;
+    unsigned char* pattern;
+    unsigned char* subsequence;
     int proflen;
     COMPOSIT* profile;
     int gappedlength;
@@ -98,7 +98,7 @@ int     ComputeBetterPattern(REPEAT *repeat,int alpha,int beta, int* sm)
     {
 
         /* get a WDP alignment */
-        wdpap = GetWDPGlobalAlignPair(repeat->subsequence, repeat->pattern,
+        wdpap = GetWDPGlobalAlignPair((char *)repeat->subsequence, (char *) repeat->pattern,
                                     repeat->lastindex-repeat->firstindex+1,
                                     repeat->concensussize, alpha, beta, sm);
         if(wdpap==NULL)
@@ -244,10 +244,10 @@ int     ComputeBetterPattern(REPEAT *repeat,int alpha,int beta, int* sm)
         *ptr='\0';
 
         /* only proceed if pattern obtained is not the original pattern */
-        if(strcmp(newpattern,repeat->pattern))
+        if(strcmp(newpattern,(char *)repeat->pattern))
         {
             /* get an alignment */
-            newwdpap = GetWDPGlobalAlignPair(repeat->subsequence,
+            newwdpap = GetWDPGlobalAlignPair((char *)repeat->subsequence,
                           newpattern,repeat->lastindex-repeat->firstindex+1,
                           newlength,alpha,beta,sm);
 
@@ -258,8 +258,8 @@ int     ComputeBetterPattern(REPEAT *repeat,int alpha,int beta, int* sm)
             {
                 /* swap old pattern with new */
                 ptr = newpattern;
-                newpattern = repeat->pattern;
-                repeat->pattern = ptr;
+                newpattern = (char *)repeat->pattern;
+                repeat->pattern = (unsigned char *)ptr;
 
                 /* fix length and score */
                 repeat->concensussize = newlength;
