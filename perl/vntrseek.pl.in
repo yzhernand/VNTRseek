@@ -294,8 +294,8 @@ sub ClearError {
         DATE_PROCLU
         DATE_JOINCLUST
         DATE_JOINCLUST
-        DATE_DB_INSTERT_REFS
-        DATE_DB_INSTERT_READS
+        DATE_DB_INSERT_REFS
+        DATE_DB_INSERT_READS
         DATE_WRITE_FLANKS
         DATE_MAP_FLANKS
         DATE_MAP_REFFLANKS
@@ -351,8 +351,8 @@ sub GetNextStep {
         DATE_PROCLU
         DATE_JOINCLUST
         DATE_JOINCLUST
-        DATE_DB_INSTERT_REFS
-        DATE_DB_INSTERT_READS
+        DATE_DB_INSERT_REFS
+        DATE_DB_INSERT_READS
         DATE_WRITE_FLANKS
         DATE_MAP_FLANKS
         DATE_MAP_REFFLANKS
@@ -800,24 +800,11 @@ if ( $STEP == 7 ) {
 
     $timestart = time();
     my $exstring;
-    print STDERR
-        "\n\nExecuting step #$STEP (inserting REFERENCE flanks into database)...";
+    warn
+        "Executing step #$STEP (this step is EMPTY!)...";
 
- # If using SQLite, this step is already done automatically by step 0 at least
- # once per reference set, as an initialization step. Only columns which
- # change on every run are in the run database, and those aren't touched yet
-    if ( $opts{BACKEND} eq "mysql" ) {
-        my $dbh = get_dbh();
-        $dbh->do("TRUNCATE TABLE fasta_ref_reps;");
-        $dbh->do(
-            "LOAD DATA LOCAL INFILE '$install_dir/$opts{REFERENCE_SEQ}' INTO TABLE $DBNAME.fasta_ref_reps FIELDS TERMINATED BY ',' IGNORE 1 LINES;"
-        );
-        $dbh->commit;
-        $dbh->disconnect();
-    }
-
-    set_statistics( { TIME_DB_INSTERT_REFS => time() - $timestart } );
-    set_datetime("DATE_DB_INSTERT_REFS");
+    set_statistics( { TIME_DB_INSERT_REFS => time() - $timestart } );
+    set_datetime("DATE_DB_INSERT_REFS");
 
     print STDERR "done!\n";
 
@@ -868,8 +855,8 @@ if ( $STEP == 8 ) {
         }
     }
 
-    set_statistics( { TIME_DB_INSTERT_READS => time() - $timestart } );
-    set_datetime("DATE_DB_INSTERT_READS");
+    set_statistics( { TIME_DB_INSERT_READS => time() - $timestart } );
+    set_datetime("DATE_DB_INSERT_READS");
     print STDERR "done!\n";
 
     if    ( $STEPEND == $STEP ) { $STEP = 100; }

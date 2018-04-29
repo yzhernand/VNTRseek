@@ -251,8 +251,11 @@ sub set_config {
         die("Directory '$in_hash{TMPDIR}' not writable!");
     }
 
-    %VSCNF_FILE = %in_hash;
-    $VSREAD     = 1;
+    # DELETEME While testing, this option is always sqlite.
+    # In final version, this option will be gone completely.
+    $in_hash{BACKEND} = "sqlite";
+    %VSCNF_FILE       = %in_hash;
+    $VSREAD           = 1;
 }
 
 ################################################################
@@ -423,54 +426,181 @@ sub get_dbh {
     my $opts = shift // {};
 
     my $dbh;
-    if ( $VSCNF_FILE{BACKEND} eq "sqlite" ) {
-        my $dbfile
-            = "$VSCNF_FILE{OUTPUT_ROOT}/vntr_$VSCNF_FILE{DBSUFFIX}/$VSCNF_FILE{DBSUFFIX}.db";
+    my $dbfile
+        = "$VSCNF_FILE{OUTPUT_ROOT}/vntr_$VSCNF_FILE{DBSUFFIX}/$VSCNF_FILE{DBSUFFIX}.db";
 
-# TODO First connect to a temp location, backup database to that location
-# then return handle to that location. This is primarily for running on clusters.
-        if ( !-e $dbfile || -z $dbfile ) {
-            write_sqlite();
+    # If the db file doesn't exist, or is size 0, initialize the db
+    if ( !-e $dbfile || -z $dbfile ) {
+        write_sqlite();
+    }
+
+    $dbh = DBI->connect(
+        "DBI:SQLite:dbname=$dbfile",
+        undef, undef,
+        {   AutoCommit                 => 1,
+            RaiseError                 => 1,
+            sqlite_see_if_its_a_number => 1,
+            ReadOnly => 1 * ( exists $opts->{readonly} && $opts->{readonly} )
         }
+    ) or die "Could not connect to database $dbfile: $DBI::errstr";
 
+    my ($stats_schema) = $dbh->selectrow_array(
+        q{SELECT sql FROM sqlite_master
+        WHERE name = 'stats'}
+    );
+    # If the stats table does not exist, init the db.
+    unless ($stats_schema) {
+        write_sqlite();
+    }
+    if ($stats_schema =~ /_DB_INSTERT_/) {
+        $dbh->disconnect;
+        $dbh = DBI->connect(
+            "DBI:SQLite:dbname=$dbfile",
+            undef, undef,
+            {   AutoCommit                 => 1,
+                RaiseError                 => 1,
+                sqlite_see_if_its_a_number => 1
+            }
+        ) or die "Could not connect to database $dbfile: $DBI::errstr";
+        $dbh->do(q{PRAGMA foreign_keys = off});
+        $dbh->begin_work;
+        $dbh->do(q{ALTER TABLE stats RENAME TO _old_stats});
+        $dbh->do(q{CREATE TABLE `stats` (
+  `id` integer NOT NULL,
+  `MAP_ROOT` varchar(500) DEFAULT NULL,
+  `PARAM_TRF` varchar(500) DEFAULT NULL,
+  `PARAM_PROCLU` varchar(500) DEFAULT NULL,
+  `FOLDER_FASTA` varchar(500) DEFAULT NULL,
+  `FOLDER_PROFILES` varchar(500) DEFAULT NULL,
+  `FOLDER_PROFILES_CLEAN` varchar(500) DEFAULT NULL,
+  `FOLDER_REFERENCE` varchar(500) DEFAULT NULL,
+  `FILE_REFERENCE_LEB` varchar(500) DEFAULT NULL,
+  `FILE_REFERENCE_SEQ` varchar(500) DEFAULT NULL,
+  `NUMBER_READS` integer DEFAULT NULL,
+  `NUMBER_TRS_IN_READS` integer DEFAULT NULL,
+  `NUMBER_TRS_IN_READS_GE7` integer DEFAULT NULL,
+  `NUMBER_READS_WITHTRS` integer DEFAULT NULL,
+  `NUMBER_READS_WITHTRS_GE7` integer DEFAULT NULL,
+  `NUMBER_READS_WITHTRS_GE7_AFTER_REDUND` integer DEFAULT NULL,
+  `NUMBER_TRS_IN_READS_AFTER_REDUND` integer DEFAULT NULL,
+  `NUMBER_REF_TRS` integer DEFAULT NULL,
+  `NUMBER_REFS_TRS_AFTER_REDUND` integer DEFAULT NULL,
+  `CLUST_NUMBER_OF_PROCLU_CLUSTERS` integer DEFAULT NULL,
+  `CLUST_NUMBER_OF_PROCLU_CLUSTERS_BEFORE_REJOIN` integer DEFAULT NULL,
+  `CLUST_NUMBER_OF_EXACTPAT_CLUSTERS` integer DEFAULT NULL,
+  `CLUST_NUMBER_OF_REF_REPS_IN_CLUSTERS` integer DEFAULT NULL,
+  `CLUST_NUMBER_OF_READ_REPS_IN_CLUSTERS` integer DEFAULT NULL,
+  `CLUST_LARGEST_NUMBER_OF_TRS_IN_PROCLU_CLUSTER` integer DEFAULT NULL,
+  `CLUST_LARGEST_NUMBER_OF_REFS_IN_PROCLU_CLUSTER` integer DEFAULT NULL,
+  `CLUST_LARGEST_PATRANGE_IN_PROCLU_CLUSTER` integer DEFAULT NULL,
+  `CLUST_LARGEST_NUMBER_OF_TRS_IN_EXACTPAT_CLUSTER` integer DEFAULT NULL,
+  `CLUST_LARGEST_NUMBER_OF_REFS_IN_EXACTPAT_CLUSTER` integer DEFAULT NULL,
+  `CLUST_NUMBER_OF_REFS_WITH_PREDICTED_VNTR` integer DEFAULT NULL,
+  `CLUST_NUMBER_OF_CLUSTERS_WITH_PREDICTED_VNTR` integer DEFAULT NULL,
+  `NUMBER_REFS_VNTR_SPAN_N` integer DEFAULT NULL,
+  `NUMBER_REFS_SINGLE_REF_CLUSTER` integer DEFAULT NULL,
+  `NUMBER_REFS_SINGLE_REF_CLUSTER_WITH_READS_MAPPED` integer DEFAULT NULL,
+  `NUMBER_REFS_SINGLE_REF_CLUSTER_WITH_NO_READS_MAPPED` integer DEFAULT NULL,
+  `NUMBER_MAPPED` integer DEFAULT NULL,
+  `NUMBER_RANK` integer DEFAULT NULL,
+  `NUMBER_RANKFLANK` integer DEFAULT NULL,
+  `INTERSECT_RANK_AND_RANKFLANK` integer DEFAULT NULL,
+  `INTERSECT_RANK_AND_RANKFLANK_BEFORE_PCR` integer DEFAULT NULL,
+  `BBB_WITH_MAP_DUPS` integer DEFAULT NULL,
+  `BBB` integer DEFAULT NULL,
+  `RANK_EDGES_OVERCUTOFF` integer DEFAULT NULL,
+  `RANK_REMOVED_SAMEREF` integer DEFAULT NULL,
+  `RANK_REMOVED_SAMESEQ` integer DEFAULT NULL,
+  `RANK_REMOVED_PCRDUP` integer DEFAULT NULL,
+  `RANKFLANK_EDGES_INSERTED` integer DEFAULT NULL,
+  `RANKFLANK_REMOVED_SAMEREF` integer DEFAULT NULL,
+  `RANKFLANK_REMOVED_SAMESEQ` integer DEFAULT NULL,
+  `RANKFLANK_REMOVED_PCRDUP` integer DEFAULT NULL,
+  `TIME_MYSQLCREATE` integer DEFAULT NULL,
+  `TIME_TRF` integer DEFAULT NULL,
+  `TIME_RENUMB` integer DEFAULT NULL,
+  `TIME_REDUND` integer DEFAULT NULL,
+  `TIME_PROCLU` integer DEFAULT NULL,
+  `TIME_JOINCLUST` integer DEFAULT NULL,
+  `TIME_DB_INSERT_REFS` integer DEFAULT NULL,
+  `TIME_DB_INSERT_READS` integer DEFAULT NULL,
+  `TIME_WRITE_FLANKS` integer DEFAULT NULL,
+  `TIME_MAP_FLANKS` integer DEFAULT NULL,
+  `TIME_MAP_REFFLANKS` integer DEFAULT NULL,
+  `TIME_MAP_INSERT` integer DEFAULT NULL,
+  `TIME_EDGES` integer DEFAULT NULL,
+  `TIME_INDEX_PCR` integer DEFAULT NULL,
+  `TIME_PCR_DUP` integer DEFAULT NULL,
+  `TIME_MAP_DUP` integer DEFAULT NULL,
+  `TIME_VNTR_PREDICT` integer DEFAULT NULL,
+  `TIME_ASSEMBLYREQ` integer DEFAULT NULL,
+  `TIME_REPORTS` integer DEFAULT NULL,
+  `DATE_MYSQLCREATE` text DEFAULT NULL,
+  `DATE_TRF` text DEFAULT NULL,
+  `DATE_RENUMB` text DEFAULT NULL,
+  `DATE_REDUND` text DEFAULT NULL,
+  `DATE_PROCLU` text DEFAULT NULL,
+  `DATE_JOINCLUST` text DEFAULT NULL,
+  `DATE_DB_INSERT_REFS` text DEFAULT NULL,
+  `DATE_DB_INSERT_READS` text DEFAULT NULL,
+  `DATE_WRITE_FLANKS` text DEFAULT NULL,
+  `DATE_MAP_FLANKS` text DEFAULT NULL,
+  `DATE_MAP_REFFLANKS` text DEFAULT NULL,
+  `DATE_MAP_INSERT` text DEFAULT NULL,
+  `DATE_EDGES` text DEFAULT NULL,
+  `DATE_INDEX_PCR` text DEFAULT NULL,
+  `DATE_PCR_DUP` text DEFAULT NULL,
+  `DATE_MAP_DUP` text DEFAULT NULL,
+  `DATE_VNTR_PREDICT` text DEFAULT NULL,
+  `DATE_ASSEMBLYREQ` text DEFAULT NULL,
+  `DATE_REPORTS` text DEFAULT NULL,
+  `ERROR_STEP` integer NOT NULL DEFAULT '0',
+  `ERROR_DESC` varchar(500) NOT NULL DEFAULT '',
+  `ERROR_CODE` integer NOT NULL DEFAULT '0',
+  `N_MIN_SUPPORT` integer NOT NULL DEFAULT '0',
+  `MIN_FLANK_REQUIRED` integer NOT NULL DEFAULT '0',
+  `MAX_FLANK_CONSIDERED` integer NOT NULL DEFAULT '0',
+  PRIMARY KEY (`id`)
+);});
+        $dbh->do(q{INSERT INTO stats SELECT * FROM _old_stats});
+        $dbh->do(q{DROP TABLE _old_stats});
+        $dbh->commit;
+        $dbh->do(q{PRAGMA foreign_keys = on});
+        $dbh->disconnect;
         $dbh = DBI->connect(
             "DBI:SQLite:dbname=$dbfile",
             undef, undef,
             {   AutoCommit                 => 1,
                 RaiseError                 => 1,
                 sqlite_see_if_its_a_number => 1,
-                ReadOnly                   => 1
-                    * ( exists $opts->{readonly} && $opts->{readonly} )
+                ReadOnly => 1 * ( exists $opts->{readonly} && $opts->{readonly} )
             }
         ) or die "Could not connect to database $dbfile: $DBI::errstr";
+    }
 
-      # my ($num_rows) = $dbh->selectrow_array(q{SELECT COUNT(*) FROM stats});
+    # Set default journal to write-ahead log
+    # $dbh->do(q{PRAGMA journal_mode = WAL})
+    # or die "Could not do statement on database $dbfile: $DBI::errstr";
 
-        # Set default journal to write-ahead log
-        # $dbh->do(q{PRAGMA journal_mode = WAL})
-        # or die "Could not do statement on database $dbfile: $DBI::errstr";
+    # 800MB cache
+    $dbh->do("PRAGMA cache_size = 800000")
+        or die "Could not do statement on database $dbfile: $DBI::errstr";
 
-        # 800MB cache
-        $dbh->do("PRAGMA cache_size = 800000")
-            or die "Could not do statement on database $dbfile: $DBI::errstr";
+    # Attach reference set database
+    if ( exists $opts->{userefdb} && $opts->{userefdb} ) {
+        my $refdbfile = $VSCNF_FILE{REFERENCE_DB};
 
-        # Attach reference set database
-        if ( exists $opts->{userefdb} && $opts->{userefdb} ) {
-            my $refdbfile = $VSCNF_FILE{REFERENCE_DB};
-
-            # First initialize the reference DB, if needed
-            # Don't save the returned dbh
-            _init_ref_dbh(
-                @VSCNF_FILE{
-                    qw(REFERENCE_SEQ REFERENCE_FILE REFERENCE_INDIST REDO_REFDB)
-                }
-            );
-            ( $ENV{DEBUG} )
-                && warn "Connecting to refseq db at $refdbfile\n";
-            $dbh->do(qq{ATTACH DATABASE "$refdbfile" AS refdb})
-                or die
-                "Could not attach refseq db '$refdbfile': $DBI::errstr";
-        }
+        # First initialize the reference DB, if needed
+        # Don't save the returned dbh
+        _init_ref_dbh(
+            @VSCNF_FILE{
+                qw(REFERENCE_SEQ REFERENCE_FILE REFERENCE_INDIST REDO_REFDB)
+            }
+        );
+        ( $ENV{DEBUG} )
+            && warn "Connecting to refseq db at $refdbfile\n";
+        $dbh->do(qq{ATTACH DATABASE "$refdbfile" AS refdb})
+            or die "Could not attach refseq db '$refdbfile': $DBI::errstr";
     }
 
     return $dbh;
@@ -1214,8 +1344,8 @@ stats (
 `TIME_REDUND` INT(11) NULL,
 `TIME_PROCLU` INT(11) NULL,
 `TIME_JOINCLUST` INT(11) NULL,
-`TIME_DB_INSTERT_REFS` INT(11) NULL,
-`TIME_DB_INSTERT_READS` INT(11) NULL,
+`TIME_DB_INSERT_REFS` INT(11) NULL,
+`TIME_DB_INSERT_READS` INT(11) NULL,
 `TIME_WRITE_FLANKS` INT(11) NULL,
 `TIME_MAP_FLANKS` INT(11) NULL,
 `TIME_MAP_REFFLANKS` INT(11) NULL,
@@ -1234,8 +1364,8 @@ stats (
 `DATE_REDUND` DATETIME NULL,
 `DATE_PROCLU` DATETIME NULL,
 `DATE_JOINCLUST` DATETIME NULL,
-`DATE_DB_INSTERT_REFS` DATETIME NULL,
-`DATE_DB_INSTERT_READS` DATETIME NULL,
+`DATE_DB_INSERT_REFS` DATETIME NULL,
+`DATE_DB_INSERT_READS` DATETIME NULL,
 `DATE_WRITE_FLANKS` DATETIME NULL,
 `DATE_MAP_FLANKS` DATETIME NULL,
 `DATE_MAP_REFFLANKS` DATETIME NULL,
