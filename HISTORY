@@ -1,4 +1,12 @@
 *******************************************************************************************************
+* ver - 1.09.3
+*
+*   May 2, 2018
+*
+*       - (bugfix) Fixed bug where a variable was checked before increment,
+*       when it should have been checked after. This resulted in some
+*       misleading errors and extranous empty files.
+*******************************************************************************************************
 * ver - 1.09.2
 *
 *   Apr 19, 2018
