@@ -629,7 +629,7 @@ sub make_refseq_db {
     `firstindex` integer NOT NULL,
     `lastindex` integer NOT NULL,
     `copynum` float NOT NULL,
-    `head` varchar(100) DEFAULT NULL,
+    `head` varchar(500) DEFAULT NULL,
     `flankleft` text COLLATE BINARY,
     `pattern` text NOT NULL,
     `sequence` text NOT NULL,

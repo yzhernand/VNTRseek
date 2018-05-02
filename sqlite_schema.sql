@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS `clusters` (
 );
 CREATE TABLE IF NOT EXISTS `fasta_reads` (
   `sid` integer  NOT NULL PRIMARY KEY AUTOINCREMENT,
-  `head` char(100) NOT NULL,
+  `head` varchar(500) NOT NULL,
   `dna` varchar(8000) DEFAULT NULL,
   `qual` varchar(8000) DEFAULT NULL,
   UNIQUE (`head`)
