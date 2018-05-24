@@ -1,4 +1,12 @@
 *******************************************************************************************************
+* ver - 1.09.4
+*
+*   May 24, 2018
+*
+*       - Further address issues with headers not being unique across files for
+*       some data, modify header to include index of file. We might make this
+*       the only change to ensure uniqueness.
+*******************************************************************************************************
 * ver - 1.09.3
 *
 *   May 2, 2018

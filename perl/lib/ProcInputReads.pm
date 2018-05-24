@@ -207,8 +207,13 @@ sub fork_proc {
             #     if ($ENV{DEBUG});
 
             # say $logfile $data[0] . "\n" . $data[1];
+
+            # Modify header to include the current file index
+            # to ensure uniqueness of header in paired end files
+            # where pair information can't be inferred from the
+            # header.
             pipe_to_trf( $reverse_read, $strip_454_TCAG, $warn_454_TCAG,
-                $trf_pipe, $header, $body );
+                $trf_pipe, $header . $current_file, $body );
 
             # $trf_pipe, $header, $body, $debug_reads_processed );
             # $debug_reads_processed++;
