@@ -55,7 +55,7 @@ MESSAGE(STATUS "Your processor is ${CMAKE_SYSTEM_PROCESSOR} and you are running 
 SET(TRFBin "trf${TRFVer}-ngs.linux.exe")
 
 ## Check for required Perl modules
-FIND_PACKAGE(PerlModules COMPONENTS DBI DBD::mysql)
+FIND_PACKAGE(PerlModules COMPONENTS DBI DBD::SQLite Try::Tiny)
 IF(NOT PERLMODULES_FOUND)
     MESSAGE(FATAL_ERROR "Not all required perl modules were found on your system")
 ENDIF(NOT PERLMODULES_FOUND)
