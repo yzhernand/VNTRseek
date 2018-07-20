@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/usr/bin/env perl
 
 use strict;
 use warnings;
@@ -392,6 +392,7 @@ while ( $files_processed < $files_to_process ) {
     my $reader = get_reader( $fastafolder, $input_format, $compression,
         $files_processed, \$files_to_process, \@filenames );
     while ( my ( $headstr, $dnastr ) = $reader->() ) {
+        # TODO Add file index to headstr WITHOUT breaking old runs...
         $headstr = trim($headstr);
         $dnastr  = trimall($dnastr);
         my $dnabak = $dnastr;

@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/usr/bin/env perl
 
 # command line usage example:
 #  ./hist_flank_filter.pl indexfolder fastafolder rotatedfolder strip_454_keytags 

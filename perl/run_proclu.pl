@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/usr/bin/env perl
 
 # command line usage example:
 #  ./run_proclu.pl 1 inputfolder referencefolder " 88 " 8 psearch.exe 4

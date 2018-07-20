@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/usr/bin/env perl
 
 # command line usage example:
 #  ./run_trf.pl 6 fasta

@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/usr/bin/env perl
 
 # command line usage example:
 #  ./checkl3b36.pl inputfolder referencefolder 

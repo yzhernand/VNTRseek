@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/usr/bin/env perl
 
 my $RECORDS_PER_INFILE_INSERT = 100000;
 

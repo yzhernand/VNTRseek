@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/usr/bin/env perl
 
 # takes .index.seq files and calls pcr_dup program to remove duplicates
 
