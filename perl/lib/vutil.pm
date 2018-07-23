@@ -636,8 +636,8 @@ sub make_refseq_db {
     `flankright` text COLLATE BINARY,
     `conserved` float DEFAULT NULL,
     `comment` varchar(500) DEFAULT NULL,
-    `is_singleton` integer NOT NULL DEFAULT '0',
-    `is_dist` integer NOT NULL DEFAULT '0',
+    `is_singleton` integer NOT NULL DEFAULT '1',
+    `is_dist` integer NOT NULL DEFAULT '1',
     `is_indist` integer NOT NULL DEFAULT '0',
     PRIMARY KEY (`rid`),
     UNIQUE (`rid`,`comment`))};
