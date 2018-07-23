@@ -9,6 +9,7 @@ use POSIX qw(strftime);
 use Carp qw(croak carp);
 use FindBin;
 use File::Basename;
+use Try::Tiny;
 use Data::Dumper;
 use lib "$FindBin::RealBin/lib";
 
@@ -344,7 +345,7 @@ sub print_vcf {
                 first => $copies,
 
                 # Start at 0 if the ref allele was supported, else start at 1
-                al => ($sameasref) ? 0 : 1,
+                al                => ($sameasref) ? 0 : 1,
                 arlen             => $arlen,
                 pos1              => $pos1,
                 copiesfloat       => $copiesfloat,
@@ -2080,7 +2081,9 @@ our $supported_alleles = $dbh->selectall_arrayref(
     q{SELECT -refid,copies,sameasref,support
     FROM vntr_support}
 ) or die "Couldn't select from supported VNTRs: " . $dbh->errstr;
-my ($supported_vntr_count) = $dbh->selectrow_array(q{SELECT COUNT(DISTINCT refid) FROM vntr_support});
+my ($supported_vntr_count)
+    = $dbh->selectrow_array(
+    q{SELECT COUNT(DISTINCT refid) FROM vntr_support});
 
 ( $ENV{DEBUG} )
     && warn "Supported ref alleles:\n" . Dumper($supported_alleles) . "\n";
@@ -2092,8 +2095,18 @@ my $ref_dbh
     );
 
 # register the module and declare the virtual table
-$ref_dbh->sqlite_create_module(
-    perl => "DBD::SQLite::VirtualTable::PerlData" );
+try {
+    $ref_dbh->sqlite_create_module(
+        perl => "DBD::SQLite::VirtualTable::PerlData" );
+}
+catch {
+    if (/sqlite_create_module failed with error not an error/) {
+        warn "Not creating VirtualTable; module already registered.\n";
+    }
+    else {
+        die "Error installing VirtualTable in SQLite db handle: $_\n.";
+    }
+};
 $ref_dbh->do(
     q{CREATE VIRTUAL TABLE temp.vntr_support
     USING perl(refid INT, copies INT, sameasref INT, support INT, arrayrefs="main::supported_alleles")}
