@@ -89,7 +89,7 @@ sub get_config {
     unless ($VSREAD) {
 
         # Must read global file first. Sets up the defaults.
-        warn "Could not read global config\n"
+        die "Could not read global config. Perhaps you don't have read permissions?\n"
             unless read_config_file("$installdir/vs.cnf");
         $VSCNF_FILE{NEW_RUN} = 0;
         unless ( read_config_file($config_file) ) {

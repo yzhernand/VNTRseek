@@ -28,7 +28,7 @@ MIN_SUPPORT_REQUIRED=2
 
 # Whether or not to keep reads detected as PCR duplicates. A nonzero (true) value
 # means that detected PCR duplicates will not be removed. Default is 0.
-KEEPPCRDUPS=0
+KEEPPCRDUPS=1
 
 # server name, used for html generating links
 # eg, orca.bu.edu

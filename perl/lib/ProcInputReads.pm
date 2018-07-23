@@ -87,10 +87,11 @@ used to determine it from a file name.
 
 sub set_install_dir {
     $install_dir = shift;
-    croak "Argument to set_install_dir must be a defined and non-empty path to the install directory."
-        unless ((defined $install_dir) && ($install_dir ne ""));
+    croak
+        "Argument to set_install_dir must be a defined and non-empty path to the install directory."
+        unless ( ( defined $install_dir ) && ( $install_dir ne "" ) );
     warn "Set install_dir to $install_dir"
-        if ($ENV{DEBUG})
+        if ( $ENV{DEBUG} );
 }
 
 =item C<formats_regexs>
@@ -190,7 +191,7 @@ sub fork_proc {
         $warn_454_TCAG,    $format,           $compression,
         $current_file,     $files_to_process, $filelist
     ) = @_;
-    
+
     defined( my $pid = fork() )
         or die "Unable to fork: $!\n";
     if ( $pid == 0 ) {    #Child
@@ -226,12 +227,8 @@ sub fork_proc {
 
             # say $logfile $data[0] . "\n" . $data[1];
 
-            # Modify header to include the current file index
-            # to ensure uniqueness of header in paired end files
-            # where pair information can't be inferred from the
-            # header.
             pipe_to_trf( $reverse_read, $strip_454_TCAG, $warn_454_TCAG,
-                $trf_pipe, $header . $current_file, $body );
+                $trf_pipe, $header, $body );
 
             # $trf_pipe, $header, $body, $debug_reads_processed );
             # $debug_reads_processed++;
@@ -275,8 +272,9 @@ sub get_reader {
         $files_to_process, $filelist )
         = @_;
 
-    croak "Calling script must call set_install_dir with the install dir path before using other functions in this package\n"
-        unless ((defined $install_dir) && ($install_dir ne ""));
+    croak
+        "Calling script must call set_install_dir with the install dir path before using other functions in this package\n"
+        unless ( ( defined $install_dir ) && ( $install_dir ne "" ) );
 
     my $reader = $reader_table{$format}->(
         $input_dir, $compression, $current_file, $files_to_process, $filelist
@@ -531,7 +529,7 @@ sub read_fastaq {
     }
 
     warn "Using $install_dir for seqtk location.\n"
-        if ($ENV{DEBUG});
+        if ( $ENV{DEBUG} );
     my $seqtk_bin = $install_dir . "/seqtk";
 
 # warn "Need to process " . scalar(@$filelist) . " files, working on $current_file\n";
@@ -563,6 +561,7 @@ sub read_fastaq {
 
    # Consume first empty record because of the way $/ splits the FASTA format.
     <$fasta_fh>;
+    use feature 'state';
     return sub {
         local $/ = ">";
         my $fasta_rec = <$fasta_fh>;
@@ -570,6 +569,17 @@ sub read_fastaq {
         my ( $header, $seq ) = split( /\n+/, $fasta_rec );
         chomp $header;
         chomp $seq;
+
+        # Add a number (the file index) to the read
+        # if the read information cannot be determined
+        # from the read header
+        state $need_idx = !(
+            # Illumina BaseSpace FASTQ header
+            ( $header =~ / [12]:[YN]:\d+:(\d+|[ACGTacgt]+)/ )
+            ||
+            # Other flag seen to indicate pair
+            ( $header =~ /\/[12]/ ) );
+        ($need_idx) && ($header .= " vs=$current_file");
 
         # warn "header: '$header'";
         # my $seq = join( "", @seqlines );
@@ -599,8 +609,9 @@ sub init_bam {
     my @samcmds;
 
     # $start is always 1
-    my $samviewcmd        = "samtools view";
-    my $unpairedflag      = "-F 1"; # Probably not required: only single-end fragments in a single-end template anyway
+    my $samviewcmd   = "samtools view";
+    my $unpairedflag = "-F 1"
+        ; # Probably not required: only single-end fragments in a single-end template anyway
     my $firstsegflag      = "-f 64";
     my $lastsegflag       = "-f 128";
     my $unmappedflag      = "-f 4";

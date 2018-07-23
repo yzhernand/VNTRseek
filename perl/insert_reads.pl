@@ -337,7 +337,7 @@ my ( $input_format, $compression );
 my %supported_formats_regexs = formats_regexs();
 while ( my ( $sf, $pat_re ) = each %supported_formats_regexs ) {
     if (@filenames = sort
-        grep( /^${pat_re}.*$/, @dircontents )
+        grep( /${pat_re}/, @dircontents )
         )
     {
         $input_format = $sf;
