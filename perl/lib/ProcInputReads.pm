@@ -204,8 +204,17 @@ sub fork_proc {
 
         my $current_fragment = 0;
         my $output_prefix = "$output_dir/${current_file}_$current_fragment";
-        warn
-            "Running child, current_file = $current_file ($filelist->[$current_file])...\n";
+        my $stat_diag     = "Running child, current_file = $current_file";
+        if ( ref( $filelist->[$current_file] ) eq "HASH" ) {
+            while ( my ( $k, $v ) = each %{ $filelist->[$current_file] } ) {
+                $stat_diag .= qq{, $k = "$v"};
+            }
+        }
+        else {
+            $stat_diag .= " ($filelist->[$current_file])";
+        }
+
+        warn $stat_diag, "...\n";
 
         # TODO Error checking if TRF, in the start of the pipe, breaks down
         local $SIG{PIPE} = sub { die "Error in trf+trf2proclu pipe: $?\n" };
@@ -574,12 +583,15 @@ sub read_fastaq {
         # if the read information cannot be determined
         # from the read header
         state $need_idx = !(
+
             # Illumina BaseSpace FASTQ header
             ( $header =~ / [12]:[YN]:\d+:(\d+|[ACGTacgt]+)/ )
             ||
+
             # Other flag seen to indicate pair
-            ( $header =~ /\/[12]/ ) );
-        ($need_idx) && ($header .= " vs=$current_file");
+            ( $header =~ /\/[12]/ )
+        );
+        ($need_idx) && ( $header .= " vs=$current_file" );
 
         # warn "header: '$header'";
         # my $seq = join( "", @seqlines );
@@ -655,8 +667,6 @@ sub init_bam {
 # We need to read the regions in the bam file and construct samtools commands
 # These are all saved in an array which are interated through like the FASTA files before.
 # Then we catch the output of these through a file handle, and process into FASTA.
-# DONE Modify this to label reads by which mate of a pair each read is, if this is a paired-end run. (We expect unique reads)
-# DONE Maybe also modify this so that only the longes/best(?) alignments for each read (we expect unique reads)
 # TODO Change how we segment these: should we divide the sequences into fixed read portions? Divide each chromosome into even parts? Etc..
         for my $r (@regions) {
             my ( $chr, $end, $num_aln, $num_unaln ) = split /\s+/, $r;
@@ -718,7 +728,8 @@ sub read_bam {
 
     # warn "$current_idx\n";
     my $cmdhash = $cmdlist->[$current_idx];
-    warn "Processing bam chunk using: " . $cmdhash->{cmd} . "\n";
+    ( $ENV{DEBUG} )
+        && warn "Processing bam chunk using: " . $cmdhash->{cmd} . "\n";
 
     local $SIG{PIPE} = sub { die "Error in samtools pipe: $?\n" };
     open my $samout, "-|", $cmdhash->{cmd}

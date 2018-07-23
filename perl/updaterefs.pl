@@ -301,6 +301,7 @@ sub print_vcf {
         INNER JOIN replnk ON vntr_support.representative=replnk.rid
         INNER JOIN clusterlnk c2 ON c2.repeatid=replnk.rid
         INNER JOIN fasta_reads ON replnk.sid=fasta_reads.sid
+        WHERE support >= ${MIN_SUPPORT_REQUIRED}
         ORDER BY reftab.head ASC, reftab.firstindex ASC, sameasref DESC};
     my $get_supported_reftrs_sth = $dbh->prepare($get_supported_reftrs_query);
     $get_supported_reftrs_sth->execute()
