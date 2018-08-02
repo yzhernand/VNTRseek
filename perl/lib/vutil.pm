@@ -1487,6 +1487,10 @@ MAX_FLANK_CONSIDERED=$VSCNF_FILE{"MAX_FLANK_CONSIDERED"}
 # eg, 2
 MIN_SUPPORT_REQUIRED=$VSCNF_FILE{"MIN_SUPPORT_REQUIRED"}
 
+# Whether or not to keep reads detected as PCR duplicates. A nonzero (true) value
+# means that detected PCR duplicates will not be removed. Default is 0.
+KEEPPCRDUPS=$VSCNF_FILE{"KEEPPCRDUPS"}
+
 # server name, used for html generating links
 # eg, orca.bu.edu
 SERVER=$VSCNF_FILE{"SERVER"}
