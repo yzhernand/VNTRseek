@@ -174,6 +174,7 @@ $sth2 = $dbh->prepare(
 my $i;
 seek( $fh, 0, 0 );
 $clusters_processed = 0;
+$dbh->begin_work;
 while (<$fh>) {
     $clusters_processed++;
 
@@ -282,7 +283,7 @@ while (<$fh>) {
     $sth2->execute( $clusters_processed, $minpat, $maxpat, $repeatcount,
         $refcount )    # Execute the query
         or die "Couldn't execute statement: " . $sth2->errstr;
-    $dbh->commit;
+    # $dbh->commit;
 
     # stats
     $range = int( ( $maxpat / $minpat - 1.0 ) * 100 + .5 );
