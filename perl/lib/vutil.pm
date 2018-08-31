@@ -361,6 +361,7 @@ sub _init_ref_dbh {
         undef, undef,
         {   AutoCommit                 => 1,
             RaiseError                 => 1,
+            PrintError                 => 0,
             sqlite_see_if_its_a_number => 1,
         }
         )
@@ -444,6 +445,7 @@ sub get_dbh {
         undef, undef,
         {   AutoCommit                 => 1,
             RaiseError                 => 1,
+            PrintError                 => 0,
             sqlite_see_if_its_a_number => 1,
             ReadOnly => 1 * ( exists $opts->{readonly} && $opts->{readonly} )
         }

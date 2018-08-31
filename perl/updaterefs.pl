@@ -74,7 +74,11 @@ sub write_vcf_rec {
 
     my $qual = ".";
     if ( "" eq $supported_tr->{seq} ) { $supported_tr->{seq} = "."; }
-    if ( "" eq $supported_tr->{alt} ) { $supported_tr->{alt} = "."; }
+    if ( @{ $supported_tr->{alt} } == 0 ) {
+        # VCF spec says site with no alternate alleles gets
+        # "missing value" field
+        push @{ $supported_tr->{alt} }, ".";
+    }
 
     my $filter = ( $supported_tr->{singleton} == 1 ) ? "PASS" : "SC";
 

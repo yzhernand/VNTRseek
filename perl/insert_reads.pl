@@ -8,7 +8,7 @@ use DBI;
 use POSIX qw(strftime);
 use FindBin;
 use File::Basename;
-
+use Try::Tiny;
 use lib "$FindBin::RealBin/lib";
 require "vutil.pm";
 use ProcInputReads
@@ -392,7 +392,6 @@ while ( $files_processed < $files_to_process ) {
     my $reader = get_reader( $fastafolder, $input_format, $compression,
         $files_processed, \$files_to_process, \@filenames );
     while ( my ( $headstr, $dnastr ) = $reader->() ) {
-        # TODO Add file index to headstr WITHOUT breaking old runs...
         $headstr = trim($headstr);
         $dnastr  = trimall($dnastr);
         my $dnabak = $dnastr;
@@ -426,8 +425,21 @@ while ( $files_processed < $files_to_process ) {
                 }
             }
             elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-                $sth->execute( $HEADHASH{"$headstr"}, "$headstr", "$dnastr" );
-                $inserted++;
+                try {
+                    $sth->execute( $HEADHASH{"$headstr"}, "$headstr", "$dnastr" );
+                    $inserted++;
+                }
+                catch {
+                    if (/UNIQUE constraint failed/) {
+                        warn "A read header was encountered more than once. Problem in input data?\n";
+                        warn "Duplicated header: $headstr\n";
+                    }
+                    else {
+                        # Don't know what else might go wrong
+                        die "An error occurred when inserting read sequences: $_";
+                    }
+                    $dbh->rollback;
+                }
             }
 
         }
