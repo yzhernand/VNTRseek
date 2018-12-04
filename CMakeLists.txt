@@ -5,7 +5,7 @@ CMAKE_MINIMUM_REQUIRED(VERSION 2.8)
 PROJECT(VNTRseek)
 
 # Set current VNTRseek version. Not user configurable
-SET(VNTRVer "1.10.0-rc.1")
+SET(VNTRVer "1.10.0-rc.2")
 SET(InstallSuffix "vntrseek${VNTRVer}")
 
 # Set current TRF version. Not user configurable
