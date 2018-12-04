@@ -348,7 +348,7 @@ sub print_vcf {
             $supported_tr = {
 
                 # Start at 0 if the ref allele was supported, else start at 1
-                al                => !($sameasref),
+                al                => 1*!($sameasref),
                 rid               => $rid,
                 first             => $copies,
                 arlen             => $arlen,
