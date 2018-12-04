@@ -13,3 +13,5 @@ The full documentation is located on the [wiki](https://github.com/yzhernand/VNT
 # Download
 
 The latest version of VNTRseek is 1.09.2. You can download it from the [releases tab](https://github.com/yzhernand/VNTRseek/releases) on our GitHub repo, or from our [download page](http://orca.bu.edu/vntrseek/download.php).
+
+The master branch is currently tracking the development of the unstable version 1.10.
