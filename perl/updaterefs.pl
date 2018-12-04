@@ -75,6 +75,7 @@ sub write_vcf_rec {
     my $qual = ".";
     if ( "" eq $supported_tr->{seq} ) { $supported_tr->{seq} = "."; }
     if ( @{ $supported_tr->{alt} } == 0 ) {
+
         # VCF spec says site with no alternate alleles gets
         # "missing value" field
         push @{ $supported_tr->{alt} }, ".";
@@ -307,7 +308,7 @@ sub print_vcf {
         INNER JOIN clusterlnk c2 ON c2.repeatid=replnk.rid
         INNER JOIN fasta_reads ON replnk.sid=fasta_reads.sid
         WHERE support >= ${MIN_SUPPORT_REQUIRED}
-        ORDER BY reftab.head ASC, reftab.firstindex ASC, sameasref DESC};
+        ORDER BY reftab.head ASC, reftab.firstindex ASC, sameasref DESC, copies ASC};
     my $get_supported_reftrs_sth = $dbh->prepare($get_supported_reftrs_query);
     $get_supported_reftrs_sth->execute()
         or die "Cannot execute: " . $get_supported_reftrs_sth->errstr();
@@ -345,11 +346,11 @@ sub print_vcf {
 
         if ( $supported_tr->{rid} != $rid ) {
             $supported_tr = {
-                rid   => $rid,
-                first => $copies,
 
                 # Start at 0 if the ref allele was supported, else start at 1
-                al                => ($sameasref) ? 0 : 1,
+                al                => !($sameasref),
+                rid               => $rid,
+                first             => $copies,
                 arlen             => $arlen,
                 pos1              => $pos1,
                 copiesfloat       => $copiesfloat,
@@ -2036,13 +2037,13 @@ sub calc_entropy {
         ) + (
             ( $diversity[1] == 0 ) ? 0
             : ( $diversity[1] * ( log( $diversity[1] ) / log(2) ) )
-        ) + (
+            ) + (
             ( $diversity[2] == 0 ) ? 0
             : ( $diversity[2] * ( log( $diversity[2] ) / log(2) ) )
-        ) + (
+            ) + (
             ( $diversity[3] == 0 ) ? 0
             : ( $diversity[3] * ( log( $diversity[3] ) / log(2) ) )
-        )
+            )
     );
 
     if ( $entropy < 0 ) { $entropy = -$entropy; }
@@ -2090,7 +2091,7 @@ my ($supported_vntr_count)
     q{SELECT COUNT(DISTINCT refid) FROM vntr_support});
 
 ( $ENV{DEBUG} )
-    && warn "Supported ref alleles:\n" . Dumper($supported_alleles) . "\n";
+    && warn "Supported alleles:\n" . Dumper($supported_alleles) . "\n";
 
 # Connect to refdb
 my $ref_dbh
