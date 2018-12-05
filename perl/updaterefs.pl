@@ -74,11 +74,23 @@ sub write_vcf_rec {
 
     my $qual = ".";
     if ( "" eq $supported_tr->{seq} ) { $supported_tr->{seq} = "."; }
+    
+    # No alternate alleles were seen
     if ( @{ $supported_tr->{alt} } == 0 ) {
 
         # VCF spec says site with no alternate alleles gets
         # "missing value" field
         push @{ $supported_tr->{alt} }, ".";
+    }
+    
+    # No reference allele was seen
+    if ( $supported_tr->{subSameAsRef1} == 0 ) {
+        # New with 1.10, VCF 4.2 spec says FORMAT specs with
+        # Number=R need to specify ref allele always, so 
+        # here we place a "missing value" for it when we don't see
+        # it for those fields
+        unshift @{ $supported_tr->{read_support} }, ".";
+        unshift @{ $supported_tr->{copy_diff} }, ".";
     }
 
     my $filter = ( $supported_tr->{singleton} == 1 ) ? "PASS" : "SC";
@@ -256,7 +268,7 @@ sub print_vcf {
         or die "Can't open for writing $allwithsupport_fn\n\n";
 
     my $vcf_header
-        = "##fileformat=VCFv4.1\n"
+        = "##fileformat=VCFv4.2\n"
         . strftime( "##fileDate=\"%Y%m%d\"\n", localtime )
         . qq[##source="Vntrseek ver. $VERSION"
 ##TRFParameters="$stat_hash->{PARAM_TRF}"
@@ -278,8 +290,8 @@ sub print_vcf {
 ##INFO=<ID=ALGNURL,Number=1,Type=String,Description="Alignment URL">
 ##FILTER=<ID=SC,Description="Reference is Singleton">
 ##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
-##FORMAT=<ID=SP,Number=A,Type=Integer,Description="Number of Spanning Reads">
-##FORMAT=<ID=CGL,Number=A,Type=Integer,Description="Copies Gained or Lost with respect to reference">
+##FORMAT=<ID=SP,Number=R,Type=Integer,Description="Number of Spanning Reads">
+##FORMAT=<ID=CGL,Number=R,Type=Integer,Description="Copies Gained or Lost with respect to reference">
 #CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t$DBSUFFIX
 ];
 
