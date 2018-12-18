@@ -55,7 +55,7 @@ my $run_dir = getcwd();
 use lib "$FindBin::RealBin/lib";
 
 use vutil
-    qw(get_config set_config set_statistics get_statistics set_credentials write_mysql write_sqlite get_dbh get_ref_dbh set_datetime print_config create_blank_file run_redund trim);
+    qw(get_config set_config set_statistics get_statistics write_mysql write_sqlite get_dbh get_ref_dbh set_datetime print_config create_blank_file run_redund trim);
 
 my $DOALLSTEPS = 0
     ; # set to 0 to do one step at a time (recommended for test run), 1 to run though all steps (THIS IS OTIONAL AS SPECIFYING END STEP IS POSSIBLE)
@@ -1379,6 +1379,3 @@ if ( $STEP == 19 ) {
 }
 
 print STDERR "\n\nFinished!\n\n";
-
-0;
-

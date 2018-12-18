@@ -270,19 +270,19 @@ sub print_vcf {
     my $vcf_header
         = "##fileformat=VCFv4.2\n"
         . strftime( "##fileDate=\"%Y%m%d\"\n", localtime )
-        . qq[##source="Vntrseek ver. $VERSION"
-##TRFParameters="$stat_hash->{PARAM_TRF}"
-##referenceseq="$stat_hash->{FILE_REFERENCE_SEQ}"
-##referenceprofile="$stat_hash->{FILE_REFERENCE_LEB}"
-##numrefTRs="$stat_hash->{NUMBER_REF_TRS}"
-##readseqfolder="$stat_hash->{FOLDER_FASTA}"
-##readprofilefolder="$stat_hash->{FOLDER_PROFILES}"
-##numreads="$stat_hash->{NUMBER_READS}"
-##numreadTRs="$stat_hash->{NUMBER_TRS_IN_READS}"
-##numVNTRs="$numvntrs"
-##numTRsWithSupport="$numsup"
-##database="VNTRPIPE_$DBSUFFIX"
-##databaseurl="http://${HTTPSERVER}/result.php?db=VNTRPIPE_${DBSUFFIX}"
+        . qq[##source=Vntrseek ver. $VERSION
+##TRFParameters=$stat_hash->{PARAM_TRF}
+##referenceseq=$stat_hash->{FILE_REFERENCE_SEQ}
+##referenceprofile=$stat_hash->{FILE_REFERENCE_LEB}
+##numrefTRs=$stat_hash->{NUMBER_REF_TRS}
+##readseqfolder=$stat_hash->{FOLDER_FASTA}
+##readprofilefolder=$stat_hash->{FOLDER_PROFILES}
+##numreads=$stat_hash->{NUMBER_READS}
+##numreadTRs=$stat_hash->{NUMBER_TRS_IN_READS}
+##numVNTRs=$numvntrs
+##numTRsWithSupport=$numsup
+##database=VNTRPIPE_$DBSUFFIX
+##databaseurl=http://${HTTPSERVER}/result.php?db=VNTRPIPE_${DBSUFFIX}
 ##INFO=<ID=RC,Number=1,Type=Float,Description="Reference Copies">
 ##INFO=<ID=RPL,Number=1,Type=Integer,Description="Reference Pattern Length">
 ##INFO=<ID=RAL,Number=1,Type=Integer,Description="Reference Tandem Array Length">
@@ -342,12 +342,8 @@ sub print_vcf {
     # Loop over all supported ref TRs
     my $supported_tr = { rid => -1 };
 
-# my $oldrefid     = -1;
-# my ( $alleleWithSupportFound, $first, $subSameAsRef1, $j, $al, $patlen )
-#     = (0) x 6;
-# my ( $gt_string, $read_support, $copy_diff, $read_support1, $copy_diff1, $alt )
-#     = ("") x 6;
-# TODO Doesn't work properly. Look at original code. Might need to rewrite completely
+    # If we're now seeing a new TR, write out the record for the
+    # previous one (unless the rid is -1)
     while ( $get_supported_reftrs_sth->fetch() ) {
         if (   $supported_tr->{rid} != -1
             && $supported_tr->{rid} != $rid )
@@ -1532,21 +1528,8 @@ sub print_latex {
     }
     $sth->finish();
 
-    my $refTRsMappedDistinguishable
-        = -999;    # INITIAL REF-TRs RDE GE7 PC ADDBACK MAP DISTINGUISHABLE
     my $refTRsMappedIndistinguishable
         = -999;    # INITIAL REF-TRs RDE GE7 PC ADDBACK MAP INDISTINGUISHABLE
-
- # this would be 0 now that we use psearch to get singleton/indist information
-    $sth
-        = $dbh->prepare(
-        "SELECT count(distinct rid) FROM refdb.fasta_ref_reps reftab INNER JOIN map ON reftab.rid=map.refid WHERE bbb=1 AND is_dist=1 and is_singleton=0;"
-        ) or die "Couldn't prepare statement: " . $dbh->errstr;
-    $sth->execute() or die "Cannot execute: " . $sth->errstr();
-    if ( my @data = $sth->fetchrow_array() ) {
-        $refTRsMappedDistinguishable = $data[0];
-    }
-    $sth->finish();
 
     $sth
         = $dbh->prepare(
@@ -1678,8 +1661,6 @@ sub print_latex {
     my $form_refTRsMappedSpan1      = commify($refTRsMappedSpan1);
     my $form_refTRsMappedSpanN      = commify($refTRsMappedSpanN);
     my $form_refTRsMappedSingleton  = commify($refTRsMappedSingleton);
-    my $form_refTRsMappedDistinguishable
-        = commify($refTRsMappedDistinguishable);
     my $form_refTRsMappedIndistinguishable
         = commify($refTRsMappedIndistinguishable);
 
@@ -1701,7 +1682,6 @@ sub print_latex {
     my $percentRefTRsProfileClustered;
     my $percentRefTRsMapped;
     my $percentRefTRsMappedSingleton;
-    my $percentRefTRsMappedDistinguishable;
     my $percentRefTRsMappedIndistinguishable;
     my $percentReadTRsMappedToSingleton;
     my $percentReadTRsMappedToDistinguishable;
@@ -1762,10 +1742,6 @@ sub print_latex {
     $percentRefTRsMappedSingleton
         = $refTRsMapped
         ? int( 100 * $refTRsMappedSingleton / $refTRsMapped )
-        : 0;
-    $percentRefTRsMappedDistinguishable
-        = $refTRsMapped
-        ? int( 100 * $refTRsMappedDistinguishable / $refTRsMapped )
         : 0;
     $percentRefTRsMappedIndistinguishable
         = $refTRsMapped
@@ -2171,8 +2147,6 @@ $get_supported_reftrs_sth->execute()
 $i = 0;
 my $ref = { refid => -1 };
 while ( my @data = $get_supported_reftrs_sth->fetchrow_array() ) {
-    warn "Row $i: ", join( ", ", @data ), "\n"
-        if ( $ENV{DEBUG} );
     if ( $i > 0
         && ( $ref->{refid} != $data[0] && ( @supported_refTRs % 1e4 == 0 ) ) )
     {
@@ -2206,6 +2180,8 @@ while ( my @data = $get_supported_reftrs_sth->fetchrow_array() ) {
         $i++;
     }
 
+    warn "TR $i: ", join( ", ", @data ), "\n"
+        if ( $ENV{DEBUG} );
     my $copies    = $data[2];
     my $sameasref = $data[3];
     my $support   = $data[4];

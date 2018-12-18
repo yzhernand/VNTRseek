@@ -14,7 +14,7 @@ if ( $ENV{DEBUG} ) {
 
 use base 'Exporter';
 our @EXPORT_OK
-    = qw(read_config_file get_config set_config set_credentials get_dbh get_ref_dbh write_mysql make_refseq_db load_refprofiles_db run_redund write_sqlite set_statistics get_statistics set_datetime print_config trim create_blank_file get_trunc_query);
+    = qw(read_config_file get_config set_config set_credentials get_dbh get_ref_dbh write_mysql make_refseq_db load_refprofiles_db run_redund write_sqlite set_statistics get_statistics set_datetime print_config trim create_blank_file get_trunc_query sqlite_install_RC_function);
 
 # vutil.pm
 # author: Yevgeniy Gelfand
@@ -89,7 +89,8 @@ sub get_config {
     unless ($VSREAD) {
 
         # Must read global file first. Sets up the defaults.
-        die "Could not read global config. Perhaps you don't have read permissions?\n"
+        die
+            "Could not read global config. Perhaps you don't have read permissions?\n"
             unless read_config_file("$installdir/vs.cnf");
         $VSCNF_FILE{NEW_RUN} = 0;
         unless ( read_config_file($config_file) ) {
@@ -455,11 +456,12 @@ sub get_dbh {
         q{SELECT sql FROM sqlite_master
         WHERE name = 'stats'}
     );
+
     # If the stats table does not exist, init the db.
     unless ($stats_schema) {
         write_sqlite();
     }
-    if ($stats_schema =~ /_DB_INSTERT_/) {
+    if ( $stats_schema =~ /_DB_INSTERT_/ ) {
         $dbh->disconnect;
         $dbh = DBI->connect(
             "DBI:SQLite:dbname=$dbfile",
@@ -472,7 +474,8 @@ sub get_dbh {
         $dbh->do(q{PRAGMA foreign_keys = off});
         $dbh->begin_work;
         $dbh->do(q{ALTER TABLE stats RENAME TO _old_stats});
-        $dbh->do(q{CREATE TABLE `stats` (
+        $dbh->do(
+            q{CREATE TABLE `stats` (
   `id` integer NOT NULL,
   `MAP_ROOT` varchar(500) DEFAULT NULL,
   `PARAM_TRF` varchar(500) DEFAULT NULL,
@@ -568,7 +571,8 @@ sub get_dbh {
   `MIN_FLANK_REQUIRED` integer NOT NULL DEFAULT '0',
   `MAX_FLANK_CONSIDERED` integer NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`)
-);});
+);}
+        );
         $dbh->do(q{INSERT INTO stats SELECT * FROM _old_stats});
         $dbh->do(q{DROP TABLE _old_stats});
         $dbh->commit;
@@ -580,7 +584,8 @@ sub get_dbh {
             {   AutoCommit                 => 1,
                 RaiseError                 => 1,
                 sqlite_see_if_its_a_number => 1,
-                ReadOnly => 1 * ( exists $opts->{readonly} && $opts->{readonly} )
+                ReadOnly                   => 1
+                    * ( exists $opts->{readonly} && $opts->{readonly} )
             }
         ) or die "Could not connect to database $dbfile: $DBI::errstr";
     }
@@ -1085,6 +1090,24 @@ sub write_sqlite {
         = "sqlite3 $VSCNF_FILE{OUTPUT_ROOT}/vntr_$VSCNF_FILE{DBSUFFIX}/$VSCNF_FILE{DBSUFFIX}.db < $installdir/sqlite_schema.sql";
     warn "Executing: $exestring\n";
     system($exestring);
+}
+
+################################################################
+sub sqlite_install_RC_function {
+    my ($dbh) = @_;
+    $dbh->sqlite_create_function(
+        'RC', 1,
+        sub {
+            # complement reversed DNA sequence
+            my $seq = shift;
+
+            $seq = reverse $seq;
+
+            $seq =~ tr/ACGT/TGCA/;
+
+            return $seq;
+        }
+    );
 }
 
 ################################################################
