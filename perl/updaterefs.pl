@@ -136,6 +136,48 @@ sub write_vcf_rec {
     # }
 }
 
+sub write_vcf_rec_alt {
+    croak "write_vcf_rec requires three arguments"
+        unless @_ == 3;
+    my ( $spanN_vcffile, $allwithsupport_vcffile, $supported_tr ) = @_;
+
+    my $qual = ".";
+
+    my $filter = ( $supported_tr->{singleton} == 1 ) ? "PASS" : "SC";
+
+    my $info = sprintf(
+        "RC=%.2lf;RPL=%d;RAL=%d;RCP=%s;ALGNURL=http://%s/index.php?db=VNTRPIPE_%s&ref=-%d&isref=1&istab=1&ispng=1&rank=3",
+        $supported_tr->{copiesfloat},
+        length( $supported_tr->{consenuspat} ),
+        $supported_tr->{arlen},
+        $supported_tr->{consenuspat},
+        $HTTPSERVER,
+        $DBSUFFIX,
+        $supported_tr->{rid}
+    );
+    my $format = "GT:SP:CGL";
+
+    # Commented out since this should always be true
+    # if ( $supported_tr->{alleles_supported} > 0 ) {
+    my $vcf_rec = join(
+        "\t",
+        $supported_tr->{head},
+        ( $supported_tr->{pos1} - 1 ),
+        "td" . $supported_tr->{rid},
+        $supported_tr->{seq},
+        $supported_tr->{alt},
+        $qual, $filter, $info, $format,
+        join( ":",
+            $supported_tr->{gt_string}, $supported_tr->{read_support},
+            $supported_tr->{copy_diff} )
+    ) . "\n";
+
+    $supported_tr->{is_called_vntr} && print $spanN_vcffile $vcf_rec;
+    print $allwithsupport_vcffile $vcf_rec;
+
+    # }
+}
+
 ####################################
 sub update_ref_table {
     croak "update_ref_table requires two arguments"
@@ -442,6 +484,227 @@ sub print_vcf {
     write_vcf_rec( $spanN_vcffile, $allwithsupport_vcffile, $supported_tr );
 
     $get_supported_reftrs_sth->finish;
+
+    close $spanN_vcffile;
+    close $allwithsupport_vcffile;
+    $dbh->disconnect;
+}
+
+####################################
+# Takes a boolean as an argument. If the boolean is anything perl considers false,
+# then this function will only produce a VCF file for supported VNTRs. If true, all
+# supported TRs are included in the file.
+sub print_vcf_alt {
+
+    # my $allwithsupport = shift;
+
+    # Get needed stats
+    my @stats = qw(PARAM_TRF
+        FILE_REFERENCE_SEQ
+        FILE_REFERENCE_LEB
+        NUMBER_REF_TRS
+        FOLDER_FASTA
+        FOLDER_PROFILES
+        NUMBER_READS
+        NUMBER_TRS_IN_READS);
+    my $stat_hash = get_statistics(@stats);
+    my $dbh = get_dbh( { readonly => 1, userefdb => 1 } );
+
+    # Get total number of TRs supported
+    my $numsup_sth
+        = $dbh->prepare(
+        "select count(distinct vntr_support.refid) FROM vntr_support WHERE support >= $MIN_SUPPORT_REQUIRED"
+        ) or die "Couldn't prepare statement: " . $dbh->errstr;
+
+    my $numsup = 0;
+    $numsup_sth->execute() or die "Cannot execute: " . $numsup_sth->errstr();
+    $numsup_sth->bind_columns( \$numsup );
+    $numsup_sth->fetch;
+    if ( !defined $numsup ) {
+        die "Error getting number of supported TRs: " . $dbh->errstr;
+    }
+    $numsup_sth->finish;
+
+    # Get number of VNTRs supported
+    my $numvntrs_sth
+        = $dbh->prepare(
+        "select count(*) FROM fasta_ref_reps WHERE support_vntr>0")
+        or die "Couldn't prepare statement: " . $dbh->errstr;
+
+    my $numvntrs = 0;
+    $numvntrs_sth->execute()
+        or die "Cannot execute: " . $numvntrs_sth->errstr();
+    $numvntrs_sth->bind_columns( \$numvntrs );
+    $numvntrs_sth->fetch;
+    $numvntrs_sth->finish;
+    if ( !defined $numsup ) {
+        die "Error getting number of supported VNTRs: " . $dbh->errstr;
+    }
+
+    # $update_spanN_sth->finish;
+    my $spanN_fn = "${result_prefix}.span${MIN_SUPPORT_REQUIRED}.vcf";
+    open my $spanN_vcffile, ">", $spanN_fn
+        or die "Can't open for writing $spanN_fn\n\n";
+    my $allwithsupport_fn
+        = "${result_prefix}.allwithsupport.span${MIN_SUPPORT_REQUIRED}.vcf";
+    open my $allwithsupport_vcffile, ">", $allwithsupport_fn
+        or die "Can't open for writing $allwithsupport_fn\n\n";
+
+    my $vcf_header
+        = "##fileformat=VCFv4.2\n"
+        . strftime( "##fileDate=\"%Y%m%d\"\n", localtime )
+        . qq[##source=Vntrseek ver. $VERSION
+##TRFParameters=$stat_hash->{PARAM_TRF}
+##referenceseq=$stat_hash->{FILE_REFERENCE_SEQ}
+##referenceprofile=$stat_hash->{FILE_REFERENCE_LEB}
+##numrefTRs=$stat_hash->{NUMBER_REF_TRS}
+##readseqfolder=$stat_hash->{FOLDER_FASTA}
+##readprofilefolder=$stat_hash->{FOLDER_PROFILES}
+##numreads=$stat_hash->{NUMBER_READS}
+##numreadTRs=$stat_hash->{NUMBER_TRS_IN_READS}
+##numVNTRs=$numvntrs
+##numTRsWithSupport=$numsup
+##database=VNTRPIPE_$DBSUFFIX
+##databaseurl=http://${HTTPSERVER}/result.php?db=VNTRPIPE_${DBSUFFIX}
+##INFO=<ID=RC,Number=1,Type=Float,Description="Reference Copies">
+##INFO=<ID=RPL,Number=1,Type=Integer,Description="Reference Pattern Length">
+##INFO=<ID=RAL,Number=1,Type=Integer,Description="Reference Tandem Array Length">
+##INFO=<ID=RCP,Number=1,Type=String,Description="Reference Consensus Pattern">
+##INFO=<ID=ALGNURL,Number=1,Type=String,Description="Alignment URL">
+##FILTER=<ID=SC,Description="Reference is Singleton">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##FORMAT=<ID=SP,Number=R,Type=Integer,Description="Number of Spanning Reads">
+##FORMAT=<ID=CGL,Number=R,Type=Integer,Description="Copies Gained or Lost with respect to reference">
+#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t$DBSUFFIX
+];
+
+    print $spanN_vcffile $vcf_header;
+    print $allwithsupport_vcffile $vcf_header;
+
+# Get information on all VNTRs
+# "SELECT rid,alleles_sup,allele_sup_same_as_ref,is_singleton,is_dist,is_indist,firstindex,lastindex,copynum,pattern,clusterid,reserved,reserved2,head,sequence,flankleft,direction FROM fasta_ref_reps INNER JOIN clusterlnk ON fasta_ref_reps.rid=-clusterlnk.repeatid INNER JOIN clusters ON clusters.cid=clusterlnk.clusterid WHERE support_vntr>0 ORDER BY head, firstindex;"
+# $dbh->sqlite_create_function(
+#     'mkflank',
+#     2,
+#     sub {
+#         my ( $lflank, $rflank ) = @_;
+#         return substr( $lflank, -60 ) . "|" . substr( $rflank, 0, 60 );
+#     }
+# );
+    my $get_supported_reftrs_query
+        = qq{SELECT rid, is_singleton, firstindex, arlen, copynum, pattern,
+    head, sequence, refdir, GROUP_CONCAT(copies), (MAX(sameasref) == 1) AS refdetected,
+    GROUP_CONCAT(support), GROUP_CONCAT(readarray), GROUP_CONCAT(readdir),
+    COUNT(*) AS num_alleles
+    FROM (SELECT reftab.rid, is_singleton, firstindex,
+        (lastindex - firstindex) + 1 AS arlen, reftab.copynum, reftab.pattern,
+        reftab.head, UPPER(sequence) AS sequence, c1.direction AS refdir,
+        copies, sameasref, support,
+        UPPER(SUBSTR(dna, first, (last-first)+1)) AS readarray,
+        c2.direction AS readdir
+        FROM main.fasta_ref_reps mainreftab INNER JOIN vntr_support ON mainreftab.rid=-vntr_support.refid
+        INNER JOIN refdb.fasta_ref_reps reftab ON reftab.rid=-vntr_support.refid
+        INNER JOIN clusterlnk c1 ON vntr_support.refid=c1.repeatid
+        INNER JOIN replnk ON vntr_support.representative=replnk.rid
+        INNER JOIN clusterlnk c2 ON c2.repeatid=replnk.rid
+        INNER JOIN fasta_reads ON replnk.sid=fasta_reads.sid
+        WHERE support >= ${MIN_SUPPORT_REQUIRED}
+        ORDER BY reftab.head ASC, reftab.firstindex ASC, sameasref DESC, copies ASC
+    ) GROUP BY rid;};
+    my $get_supported_reftrs_sth = $dbh->prepare($get_supported_reftrs_query);
+    $get_supported_reftrs_sth->execute()
+        or die "Cannot execute: " . $get_supported_reftrs_sth->errstr();
+    # rid, is_singleton, firstindex, arlen, copynum, pattern,
+    # head, sequence, refdir, GROUP_CONCAT(copies), (MAX(sameasref) == 1) AS refdetected,
+    # GROUP_CONCAT(support), GROUP_CONCAT(readarray), GROUP_CONCAT(readdir),
+    # COUNT(*) AS num_alleles
+    my ($rid,     $singleton,   $pos1,
+        $arlen,   $copiesfloat, $consenuspat, $head,
+        $seq,     $refdir,      $copies,      $refdetected,
+        $support, $alt_seqs, $readdir, $num_alleles
+    );
+    $get_supported_reftrs_sth->bind_columns(
+        \(  $rid,     $singleton,   $pos1,
+            $arlen,   $copiesfloat, $consenuspat, $head,
+            $seq,     $refdir,      $copies,      $refdetected,
+            $support, $alt_seqs, $readdir, $num_alleles
+        )
+    );
+
+    # Loop over all supported ref TRs
+
+    # If we're now seeing a new TR, write out the record for the
+    # previous one (unless the rid is -1)
+    while ( $get_supported_reftrs_sth->fetch() ) {
+        # If homozygous genotype called, either "0/0" or "1/1",
+        # depending on whether or not the reference was detected.
+        # Else, join a sequence from either 0 or 1 until the number
+        # of alleles detected.
+        my $gt_string = join("/", ($num_alleles == 1) ?
+        (!$refdetected) x 2 :
+        (!$refdetected .. ($num_alleles-1)));
+
+        # Split fields, and modify as needed
+        my @alt_seqs = split /,/, nowhitespace($alt_seqs);
+        my @read_dirs = split /,/, $readdir;
+        my @cgl = split /,/, $copies;
+        my @read_support = split /,/, $support;
+
+        # If there is no DNA string for an allele, exit with error
+        my @err_alleles = map {($alt_seqs[$_] eq "") ? ($cgl[$_]) : () } 0 .. @cgl-1;
+        if ( @err_alleles ) {
+            die
+                "Error: sequence not found in database for ref ($rid) alternate allele(s): ",
+                join(", ", @err_alleles), "! Stopped at";
+        }
+
+        if ($refdetected) {
+            # Shift off ref sequence if reference was detected
+            shift @alt_seqs;
+            shift @read_dirs;
+        }
+        else {
+            # New with 1.10, VCF 4.2 spec says FORMAT specs with
+            # Number=R need to specify ref allele always, so 
+            # here we place a missing value (".") for it when we
+            # don't see it for those fields
+            unshift @cgl, ".";
+            unshift @read_support, ".";
+        }
+
+        # Reverse complement sequences if opposite dirs.
+        # VCF spec says site with no alternate alleles gets
+        # a missing value (".") for ALT field, so set default
+        # to list containing just ".".
+        my @rev_seqs = (".");
+        @rev_seqs = map {($read_dirs[$_] ne $refdir) ? (RC($alt_seqs[$_])) : ($alt_seqs[$_]) } 0 .. @read_dirs-1
+        if (@alt_seqs);
+
+        my $supported_tr = {
+
+            # Start at 0 if the ref allele was supported, else start at 1
+            rid               => $rid,
+            first             => $copies,
+            arlen             => $arlen,
+            pos1              => $pos1,
+            copiesfloat       => $copiesfloat,
+            singleton         => $singleton,
+            head              => $head,
+            seq               => ($seq) ? nowhitespace($seq) : ".",
+            consenuspat       => $consenuspat,
+            refdetected       => $refdetected,
+            is_called_vntr    => ($num_alleles > 1 || !$refdetected),
+            alleles_supported => $num_alleles,
+            gt_string         => $gt_string,
+            read_support      => join(",", @read_support),
+            copy_diff         => join(",", @cgl),
+            alt               => join(",", @rev_seqs),
+        };
+
+        write_vcf_rec_alt( $spanN_vcffile, $allwithsupport_vcffile, $supported_tr );
+    }
+
+    # $get_supported_reftrs_sth->finish;
 
     close $spanN_vcffile;
     close $allwithsupport_vcffile;
@@ -2324,7 +2587,7 @@ print_distr();
 
 # Print VCF
 warn "Producing VCF...\n";
-print_vcf();
+print_vcf_alt();
 
 # All with support
 # warn "Producing VCF (all with support)...\n";
