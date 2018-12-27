@@ -641,8 +641,8 @@ sub print_vcf_alt {
         # Else, join a sequence from either 0 or 1 until the number
         # of alleles detected.
         my $gt_string = join("/", ($num_alleles == 1) ?
-        (!$refdetected) x 2 :
-        (!$refdetected .. ($num_alleles-1)));
+        (1*!$refdetected) x 2 :
+        (1*!$refdetected .. ($num_alleles-1)));
 
         # Split fields, and modify as needed
         my @alt_seqs = split /,/, nowhitespace($alt_seqs);
