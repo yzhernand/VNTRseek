@@ -640,9 +640,9 @@ sub print_vcf_alt {
         # depending on whether or not the reference was detected.
         # Else, join a sequence from either 0 or 1 until the number
         # of alleles detected.
-        my $gt_string = join("/", ($num_alleles == 1) ?
+        my @gt = ($num_alleles == 1) ?
         (1*!$refdetected) x 2 :
-        (1*!$refdetected .. ($num_alleles-1)));
+        (1*!$refdetected .. ($num_alleles-1));
 
         # Split fields, and modify as needed
         my @alt_seqs = split /,/, nowhitespace($alt_seqs);
@@ -695,7 +695,7 @@ sub print_vcf_alt {
             refdetected       => $refdetected,
             is_called_vntr    => ($num_alleles > 1 || !$refdetected),
             alleles_supported => $num_alleles,
-            gt_string         => $gt_string,
+            gt_string         => join("/", @gt),
             read_support      => join(",", @read_support),
             copy_diff         => join(",", @cgl),
             alt               => join(",", @rev_seqs),
