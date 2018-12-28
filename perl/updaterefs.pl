@@ -74,7 +74,7 @@ sub write_vcf_rec {
 
     my $qual = ".";
     if ( "" eq $supported_tr->{seq} ) { $supported_tr->{seq} = "."; }
-    
+
     # No alternate alleles were seen
     if ( @{ $supported_tr->{alt} } == 0 ) {
 
@@ -82,15 +82,16 @@ sub write_vcf_rec {
         # "missing value" field
         push @{ $supported_tr->{alt} }, ".";
     }
-    
+
     # No reference allele was seen
     if ( $supported_tr->{subSameAsRef1} == 0 ) {
+
         # New with 1.10, VCF 4.2 spec says FORMAT specs with
-        # Number=R need to specify ref allele always, so 
+        # Number=R need to specify ref allele always, so
         # here we place a "missing value" for it when we don't see
         # it for those fields
         unshift @{ $supported_tr->{read_support} }, ".";
-        unshift @{ $supported_tr->{copy_diff} }, ".";
+        unshift @{ $supported_tr->{copy_diff} },    ".";
     }
 
     my $filter = ( $supported_tr->{singleton} == 1 ) ? "PASS" : "SC";
@@ -398,7 +399,7 @@ sub print_vcf {
             $supported_tr = {
 
                 # Start at 0 if the ref allele was supported, else start at 1
-                al                => 1*!($sameasref),
+                al                => 1 * !($sameasref),
                 rid               => $rid,
                 first             => $copies,
                 arlen             => $arlen,
@@ -614,20 +615,21 @@ sub print_vcf_alt {
     my $get_supported_reftrs_sth = $dbh->prepare($get_supported_reftrs_query);
     $get_supported_reftrs_sth->execute()
         or die "Cannot execute: " . $get_supported_reftrs_sth->errstr();
-    # rid, is_singleton, firstindex, arlen, copynum, pattern,
-    # head, sequence, refdir, GROUP_CONCAT(copies), (MAX(sameasref) == 1) AS refdetected,
-    # GROUP_CONCAT(support), GROUP_CONCAT(readarray), GROUP_CONCAT(readdir),
-    # COUNT(*) AS num_alleles
-    my ($rid,     $singleton,   $pos1,
-        $arlen,   $copiesfloat, $consenuspat, $head,
-        $seq,     $refdir,      $copies,      $refdetected,
-        $support, $alt_seqs, $readdir, $num_alleles
+
+# rid, is_singleton, firstindex, arlen, copynum, pattern,
+# head, sequence, refdir, GROUP_CONCAT(copies), (MAX(sameasref) == 1) AS refdetected,
+# GROUP_CONCAT(support), GROUP_CONCAT(readarray), GROUP_CONCAT(readdir),
+# COUNT(*) AS num_alleles
+    my ($rid,         $singleton,   $pos1,        $arlen,
+        $copiesfloat, $consenuspat, $head,        $seq,
+        $refdir,      $copies,      $refdetected, $support,
+        $alt_seqs,    $readdir,     $num_alleles
     );
     $get_supported_reftrs_sth->bind_columns(
-        \(  $rid,     $singleton,   $pos1,
-            $arlen,   $copiesfloat, $consenuspat, $head,
-            $seq,     $refdir,      $copies,      $refdetected,
-            $support, $alt_seqs, $readdir, $num_alleles
+        \(  $rid,         $singleton,   $pos1,        $arlen,
+            $copiesfloat, $consenuspat, $head,        $seq,
+            $refdir,      $copies,      $refdetected, $support,
+            $alt_seqs,    $readdir,     $num_alleles
         )
     );
 
@@ -636,39 +638,43 @@ sub print_vcf_alt {
     # If we're now seeing a new TR, write out the record for the
     # previous one (unless the rid is -1)
     while ( $get_supported_reftrs_sth->fetch() ) {
+
         # If homozygous genotype called, either "0/0" or "1/1",
         # depending on whether or not the reference was detected.
         # Else, join a sequence from either 0 or 1 until the number
         # of alleles detected.
-        my @gt = ($num_alleles == 1) ?
-        (1*!$refdetected) x 2 :
-        (1*!$refdetected .. ($num_alleles-1));
+        my @gt
+            = ( $num_alleles == 1 )
+            ? ( 1 * !$refdetected ) x 2
+            : ( 1 * !$refdetected .. ( $num_alleles - 1 ) );
 
         # Split fields, and modify as needed
-        my @alt_seqs = split /,/, nowhitespace($alt_seqs);
-        my @read_dirs = split /,/, $readdir;
-        my @cgl = split /,/, $copies;
+        my @alt_seqs     = split /,/, nowhitespace($alt_seqs);
+        my @read_dirs    = split /,/, $readdir;
+        my @cgl          = split /,/, $copies;
         my @read_support = split /,/, $support;
 
         # If there is no DNA string for an allele, exit with error
-        my @err_alleles = map {($alt_seqs[$_] eq "") ? ($cgl[$_]) : () } 0 .. @cgl-1;
-        if ( @err_alleles ) {
+        my @err_alleles = map { ( $alt_seqs[$_] eq "" ) ? ( $cgl[$_] ) : () }
+            0 .. @cgl - 1;
+        if (@err_alleles) {
             die
                 "Error: sequence not found in database for ref ($rid) alternate allele(s): ",
-                join(", ", @err_alleles), "! Stopped at";
+                join( ", ", @err_alleles ), "! Stopped at";
         }
 
         if ($refdetected) {
+
             # Shift off ref sequence if reference was detected
             shift @alt_seqs;
             shift @read_dirs;
         }
         else {
             # New with 1.10, VCF 4.2 spec says FORMAT specs with
-            # Number=R need to specify ref allele always, so 
+            # Number=R need to specify ref allele always, so
             # here we place a missing value (".") for it when we
             # don't see it for those fields
-            unshift @cgl, ".";
+            unshift @cgl,          ".";
             unshift @read_support, ".";
         }
 
@@ -677,31 +683,36 @@ sub print_vcf_alt {
         # a missing value (".") for ALT field, so set default
         # to list containing just ".".
         my @rev_seqs = (".");
-        @rev_seqs = map {($read_dirs[$_] ne $refdir) ? (RC($alt_seqs[$_])) : ($alt_seqs[$_]) } 0 .. @read_dirs-1
-        if (@alt_seqs);
+        @rev_seqs = map {
+                  ( $read_dirs[$_] ne $refdir )
+                ? ( RC( $alt_seqs[$_] ) )
+                : ( $alt_seqs[$_] )
+            } 0 .. @read_dirs - 1
+            if (@alt_seqs);
 
         my $supported_tr = {
 
             # Start at 0 if the ref allele was supported, else start at 1
-            rid               => $rid,
-            first             => $copies,
-            arlen             => $arlen,
-            pos1              => $pos1,
-            copiesfloat       => $copiesfloat,
-            singleton         => $singleton,
-            head              => $head,
-            seq               => ($seq) ? nowhitespace($seq) : ".",
-            consenuspat       => $consenuspat,
-            refdetected       => $refdetected,
-            is_called_vntr    => ($num_alleles > 1 || !$refdetected),
+            rid         => $rid,
+            first       => $copies,
+            arlen       => $arlen,
+            pos1        => $pos1,
+            copiesfloat => $copiesfloat,
+            singleton   => $singleton,
+            head        => $head,
+            seq         => ($seq) ? nowhitespace($seq) : ".",
+            consenuspat => $consenuspat,
+            refdetected => $refdetected,
+            is_called_vntr => ( $num_alleles > 1 || !$refdetected ),
             alleles_supported => $num_alleles,
-            gt_string         => join("/", @gt),
-            read_support      => join(",", @read_support),
-            copy_diff         => join(",", @cgl),
-            alt               => join(",", @rev_seqs),
+            gt_string         => join( "/", @gt ),
+            read_support      => join( ",", @read_support ),
+            copy_diff         => join( ",", @cgl ),
+            alt               => join( ",", @rev_seqs ),
         };
 
-        write_vcf_rec_alt( $spanN_vcffile, $allwithsupport_vcffile, $supported_tr );
+        write_vcf_rec_alt( $spanN_vcffile, $allwithsupport_vcffile,
+            $supported_tr );
     }
 
     # $get_supported_reftrs_sth->finish;
@@ -1742,14 +1753,17 @@ sub print_latex {
 
     $sth
         = $dbh->prepare(
-        "SELECT count(distinct map.readid) FROM map WHERE bbb=1;")
-        or die "Couldn't prepare statement: " . $dbh->errstr;
+        "SELECT count(distinct refid), count(distinct readid) FROM map WHERE bbb=1"
+        ) or die "Couldn't prepare statement: " . $dbh->errstr;
+    my $refTRsMapped  = 0;
     my $readTRsMapped = 0;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
     {
         my @data = $sth->fetchrow_array();
-        $readTRsMapped
-            = $data[0];    # INITIAL READ-TRs RDE GE7 PC ADDBACK MAP TIE-OK
+        $refTRsMapped = $data[0];
+
+        # INITIAL READ-TRs RDE GE7 PC ADDBACK MAP TIE-OK
+        $readTRsMapped = $data[1];
     }
     $sth->finish();
 
@@ -1762,127 +1776,96 @@ sub print_latex {
         = $stat_hash->{CLUST_NUMBER_OF_REF_REPS_IN_CLUSTERS}
         ;    # INITIAL REF-TRs RDE GE7 PC ADDBACK
 
-    $sth
-        = $dbh->prepare(
-        "SELECT count(distinct map.refid) FROM map WHERE bbb=1;")
-        or die "Couldn't prepare statement: " . $dbh->errstr;
-    my $refTRsMapped = 0;
-    $sth->execute() or die "Cannot execute: " . $sth->errstr();
-    {
-        my @data = $sth->fetchrow_array();
-        $refTRsMapped = $data[0];    # INITIAL REF-TRs RDE GE7 PC ADDBACK MAP
-    }
-    $sth->finish();
-
     my $refTRsMappedSpan1
         = $sum_span1;    # INITIAL REF-TRs RDE GE7 PC ADDBACK MAP SPAN1
     my $refTRsMappedSpanN
         = $sum_spanN;    # INITIAL REF-TRs RDE GE7 PC ADDBACK MAP SPANN
      #my $refTRsMappedSingleton = GetStatistics("NUMBER_REFS_SINGLE_REF_CLUSTER_WITH_READS_MAPPED");  # INITIAL REF-TRs RDE GE7 PC ADDBACK MAP SINGLETON
-    $sth
-        = $dbh->prepare(
-        "SELECT count(distinct rid) FROM refdb.fasta_ref_reps reftab INNER JOIN map ON reftab.rid=map.refid WHERE bbb=1 AND is_singleton=1;"
-        ) or die "Couldn't prepare statement: " . $dbh->errstr;
-    $sth->execute() or die "Cannot execute: " . $sth->errstr();
-
-    my $refTRsMappedSingleton;
-    if ( my @data = $sth->fetchrow_array() ) {
-        $refTRsMappedSingleton = $data[0];
-    }
-    $sth->finish();
-
-    my $refTRsMappedIndistinguishable
-        = -999;    # INITIAL REF-TRs RDE GE7 PC ADDBACK MAP INDISTINGUISHABLE
-
-    $sth
-        = $dbh->prepare(
-        "SELECT count(distinct rid) FROM refdb.fasta_ref_reps reftab INNER JOIN map ON reftab.rid=map.refid WHERE bbb=1 AND is_indist=1;"
-        )
-
-        or die "Couldn't prepare statement: " . $dbh->errstr;
-    $sth->execute() or die "Cannot execute: " . $sth->errstr();
-    if ( my @data = $sth->fetchrow_array() ) {
-        $refTRsMappedIndistinguishable = $data[0];
-    }
-    $sth->finish();
 
     my $readTRsMappedToSingleton
         = -777;    # INITIAL READ-TRs RDE GE7 PC ADDBACK MAP SINGLETON
-    my $readTRsMappedToDistinguishable = -777
-        ;    # INITIAL READ-TRs RDE GE7 PC ADDBACK MAP TIE-OK DISTINGUISHABLE
     my $readTRsMappedToIndistinguishable = -777
         ;   # INITIAL READ-TRs RDE GE7 PC ADDBACK MAP TIE-OK INDISTINGUISHABLE
 
-    $sth
-        = $dbh->prepare(
-        "SELECT count(distinct map.readid) FROM refdb.fasta_ref_reps reftab INNER JOIN map ON reftab.rid=map.refid WHERE bbb=1 AND is_singleton=1;"
-        ) or die "Couldn't prepare statement: " . $dbh->errstr;
+    $sth = $dbh->prepare(
+        q{SELECT is_singleton, count(distinct map.readid)
+    FROM refdb.fasta_ref_reps reftab INNER JOIN map ON reftab.rid=map.refid
+    WHERE bbb=1 GROUP BY is_singleton}
+    ) or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
-    if ( my @data = $sth->fetchrow_array() ) {
-        $readTRsMappedToSingleton = $data[0];
+    while ( my @data = $sth->fetchrow_array() ) {
+        ( $data[0] == 1 ) && ( $readTRsMappedToSingleton         = $data[1] );
+        ( $data[0] == 0 ) && ( $readTRsMappedToIndistinguishable = $data[1] );
     }
-    $sth->finish();
 
-    $sth
-        = $dbh->prepare(
-        "SELECT count(distinct map.readid) FROM refdb.fasta_ref_reps reftab INNER JOIN map ON reftab.rid=map.refid WHERE bbb=1 AND is_dist=1 AND is_singleton=0;"
-        ) or die "Couldn't prepare statement: " . $dbh->errstr;
+    unless ( $readTRsMapped
+        == $readTRsMappedToIndistinguishable + $readTRsMappedToSingleton )
+    {
+        die
+            "Error: mismatch of sum of mapped read TRs by distinguishablility and total read TRs mapped. "
+            . "(Expected $readTRsMapped, got "
+            . $readTRsMappedToIndistinguishable + $readTRsMappedToSingleton
+            . ")\n";
+    }
+
+    # INITIAL REF-TRs RDE GE7 PC ADDBACK MAP SINGLETON
+    my $refTRsMappedSingleton = 0;
+
+    # INITIAL REF-TRs RDE GE7 PC ADDBACK MAP INDISTINGUISHABLE
+    my $refTRsMappedIndistinguishable   = 0;
+    my $InvarTRsMappedSingleton         = 0;
+    my $InvarTRsMappedIndistinguishable = 0;
+
+    # INITIAL REF-TRs RDE GE7 PC ADDBACK MAP SINGLETON VNTR
+    my $VNTRasSingleton = 0;
+
+    # INITIAL REF-TRs RDE GE7 PC ADDBACK MAP INDISTINGUISHABLE VNTR
+    my $VNTRasIndistinguishable = 0;
+
+    $sth = $dbh->prepare(
+        q{SELECT is_singleton, support_vntr, count(distinct rid)
+    FROM main.fasta_ref_reps mainref INNER JOIN refdb.fasta_ref_reps reftab USING (rid)
+    INNER JOIN map ON mainref.rid=map.refid
+    WHERE bbb=1 GROUP BY is_singleton, support_vntr}
+    ) or die "Couldn't prepare statement: " . $dbh->errstr;
     $sth->execute() or die "Cannot execute: " . $sth->errstr();
-    if ( my @data = $sth->fetchrow_array() ) {
-        $readTRsMappedToDistinguishable = $data[0];
+    while ( my @data = $sth->fetchrow_array() ) {
+        ( $data[0] == 0 )
+            && ( $data[1] == 0 )
+            && ( $InvarTRsMappedIndistinguishable = $data[2] );
+        ( $data[0] == 0 )
+            && ( $data[1] == 1 )
+            && ( $VNTRasIndistinguishable = $data[2] );
+        ( $data[0] == 1 )
+            && ( $data[1] == 0 )
+            && ( $InvarTRsMappedSingleton = $data[2] );
+        ( $data[0] == 1 )
+            && ( $data[1] == 1 )
+            && ( $VNTRasSingleton = $data[2] );
     }
-    $sth->finish();
 
-    $sth
-        = $dbh->prepare(
-        "SELECT count(distinct map.readid) FROM refdb.fasta_ref_reps reftab INNER JOIN map ON reftab.rid=map.refid WHERE bbb=1 AND is_indist=1;"
-        )
+    $refTRsMappedSingleton = $InvarTRsMappedSingleton + $VNTRasSingleton;
+    $refTRsMappedIndistinguishable
+        = $InvarTRsMappedIndistinguishable + $VNTRasIndistinguishable;
 
-        or die "Couldn't prepare statement: " . $dbh->errstr;
-    $sth->execute() or die "Cannot execute: " . $sth->errstr();
-    if ( my @data = $sth->fetchrow_array() ) {
-        $readTRsMappedToIndistinguishable = $data[0];
+    unless ( $refTRsMapped
+        == $refTRsMappedIndistinguishable + $refTRsMappedSingleton )
+    {
+        warn Dumper(
+            \(  $refTRsMappedSingleton,
+                $InvarTRsMappedSingleton,
+                $VNTRasSingleton,
+                $refTRsMappedIndistinguishable,
+                $InvarTRsMappedIndistinguishable,
+                $VNTRasIndistinguishable
+            )
+        );
+        die
+            "Error: mismatch of sum of mapped ref TRs by distinguishablility and total ref TRs mapped. "
+            . "(Expected $refTRsMapped, got '$refTRsMappedIndistinguishable' + '$refTRsMappedSingleton' = '"
+            . $refTRsMappedIndistinguishable + $refTRsMappedSingleton
+            . "')\n";
     }
-    $sth->finish();
-
-    my $VNTRasSingleton
-        = -666;    # INITIAL REF-TRs RDE GE7 PC ADDBACK MAP SINGLETON VNTR
-    my $VNTRasDistinguishable
-        = -666;  # INITIAL REF-TRs RDE GE7 PC ADDBACK MAP DISTINGUISHABLE VNTR
-    my $VNTRasIndistinguishable = -666
-        ;    # INITIAL REF-TRs RDE GE7 PC ADDBACK MAP INDISTINGUISHABLE VNTR
-
-    $sth
-        = $dbh->prepare(
-        "SELECT count(distinct rid) FROM refdb.fasta_ref_reps reftab INNER JOIN main.fasta_ref_reps USING (rid) INNER JOIN map ON reftab.rid=map.refid WHERE bbb=1 AND is_singleton=1 AND support_vntr=1;"
-        ) or die "Couldn't prepare statement: " . $dbh->errstr;
-    $sth->execute() or die "Cannot execute: " . $sth->errstr();
-    if ( my @data = $sth->fetchrow_array() ) {
-        $VNTRasSingleton = $data[0];
-    }
-    $sth->finish();
-
-    $sth
-        = $dbh->prepare(
-        "SELECT count(distinct rid) FROM refdb.fasta_ref_reps reftab INNER JOIN main.fasta_ref_reps USING (rid) INNER JOIN map ON reftab.rid=map.refid WHERE bbb=1 AND is_dist=1 AND is_singleton=0 AND support_vntr=1;"
-        ) or die "Couldn't prepare statement: " . $dbh->errstr;
-    $sth->execute() or die "Cannot execute: " . $sth->errstr();
-    if ( my @data = $sth->fetchrow_array() ) {
-        $VNTRasDistinguishable = $data[0];
-    }
-    $sth->finish();
-
-    $sth
-        = $dbh->prepare(
-        "SELECT count(distinct rid) FROM refdb.fasta_ref_reps reftab INNER JOIN main.fasta_ref_reps USING (rid) INNER JOIN map ON reftab.rid=map.refid WHERE bbb=1 AND is_indist=1 AND support_vntr=1;"
-        )
-
-        or die "Couldn't prepare statement: " . $dbh->errstr;
-    $sth->execute() or die "Cannot execute: " . $sth->errstr();
-    if ( my @data = $sth->fetchrow_array() ) {
-        $VNTRasIndistinguishable = $data[0];
-    }
-    $sth->finish();
 
     my $refWithSupport
         = $sum_has_support;   # INITIAL REF-TRs RDE GE7 PC ADDBACK MAP SUPPORT
@@ -1911,8 +1894,6 @@ sub print_latex {
     my $form_readTRsProfileClustered  = commify($readTRsProfileClustered);
     my $form_readTRsMapped            = commify($readTRsMapped);
     my $form_readTRsMappedToSingleton = commify($readTRsMappedToSingleton);
-    my $form_readTRsMappedToDistinguishable
-        = commify($readTRsMappedToDistinguishable);
     my $form_readTRsMappedToIndistinguishable
         = commify($readTRsMappedToIndistinguishable);
 
@@ -1928,7 +1909,6 @@ sub print_latex {
         = commify($refTRsMappedIndistinguishable);
 
     my $form_VNTRasSingleton         = commify($VNTRasSingleton);
-    my $form_VNTRasDistinguishable   = commify($VNTRasDistinguishable);
     my $form_VNTRasIndistinguishable = commify($VNTRasIndistinguishable);
 
     my $form_refWithSupport        = commify($refWithSupport);
@@ -1947,10 +1927,8 @@ sub print_latex {
     my $percentRefTRsMappedSingleton;
     my $percentRefTRsMappedIndistinguishable;
     my $percentReadTRsMappedToSingleton;
-    my $percentReadTRsMappedToDistinguishable;
     my $percentReadTRsMappedToIndistinguishable;
     my $percentVNTRasSingleton;
-    my $percentVNTRasDistinguishable;
     my $percentVNTRasIndistinguishable;
     my $percentRefTRsMappedSpan1;
     my $percentRefTRsMappedSpanN;
@@ -2014,26 +1992,15 @@ sub print_latex {
         = $readTRsMapped
         ? int( 100 * $readTRsMappedToSingleton / $readTRsMapped )
         : 0;
-    $percentReadTRsMappedToDistinguishable
-        = $readTRsMapped
-        ? int( 100 * $readTRsMappedToDistinguishable / $readTRsMapped )
-        : 0;
     $percentReadTRsMappedToIndistinguishable
         = $readTRsMapped
         ? int( 100 * $readTRsMappedToIndistinguishable / $readTRsMapped )
         : 0;
-    $VNTRTotalByRefClass
-        = $VNTRasSingleton
-        + $VNTRasDistinguishable
-        + $VNTRasIndistinguishable;
+    $VNTRTotalByRefClass = $VNTRasSingleton + $VNTRasIndistinguishable;
     my $form_VNTRTotalByRefClass = commify($VNTRTotalByRefClass);
     $percentVNTRasSingleton
         = $VNTRTotalByRefClass
         ? int( 100 * $VNTRasSingleton / $VNTRTotalByRefClass )
-        : 0;
-    $percentVNTRasDistinguishable
-        = $VNTRTotalByRefClass
-        ? int( 100 * $VNTRasDistinguishable / $VNTRTotalByRefClass )
         : 0;
     $percentVNTRasIndistinguishable
         = $VNTRTotalByRefClass
@@ -2577,6 +2544,8 @@ $dbh->commit;
 # set old db settings
 $dbh->do("PRAGMA foreign_keys = ON");
 $dbh->do("PRAGMA synchronous = ON");
+# Optimize queries
+$dbh->do("PRAGMA main.optimize");
 $dbh->disconnect;
 
 warn "Producing output LaTeX file...\n";
