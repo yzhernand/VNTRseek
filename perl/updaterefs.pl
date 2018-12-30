@@ -48,6 +48,7 @@ my ( $HTTPSERVER, $MIN_SUPPORT_REQUIRED, $TEMPDIR )
     = @run_conf{qw(SERVER MIN_SUPPORT_REQUIRED TMPDIR)};
 
 ############################ Procedures ###############################################################
+
 =head1 FUNCTIONS
 
 =head2 RC( sequence )
@@ -55,6 +56,7 @@ my ( $HTTPSERVER, $MIN_SUPPORT_REQUIRED, $TEMPDIR )
 Returns the reverse complement of a DNA sequence
 
 =cut
+
 sub RC {
 
     my $seq = shift;
@@ -76,6 +78,7 @@ spanN file, all supported (VN)TRs are written to
 the allwithsupport file.
 
 =cut
+
 sub write_vcf_rec {
     croak "write_vcf_rec requires three arguments"
         unless @_ == 3;
@@ -122,38 +125,6 @@ sub update_ref_table {
     return
         unless exists $ref->{refid};
 
-    if ( $ref->{readsum} >= 1 ) {
-        $ref->{span1} = 1;
-    }
-    if ( $ref->{readsum} >= $MIN_SUPPORT_REQUIRED ) {
-        $ref->{spanN} = 1;
-    }
-
-    # hetez_multi is true if there is support
-    # for more than one allele
-    # Other genotype classes can only be true if hetez_multi
-    # is false.
-    # TODO Add global config for ploidy. Replace '2'
-    # below with the value for the ploidy (eg, haploid == 1)
-    # Modify last branch to deal with special haploid case
-    if ( $ref->{nsupport} > 2 ) {
-        $ref->{hetez_multi} = 1;
-    }
-    elsif ( $ref->{nsupport} == 2 ) {
-        $ref->{hetez_same} = 1 * ( $ref->{nsameasref} );
-        $ref->{hetez_diff} = 1 * !( $ref->{nsameasref} );
-    }
-    elsif ( $ref->{nsupport} == 1 ) {
-        $ref->{homez_same} = 1 * ( $ref->{nsameasref} );
-        $ref->{homez_diff} = 1 * !( $ref->{nsameasref} );
-    }
-
-    $ref->{support_vntr}
-        = 1 * ($ref->{homez_diff}
-            || $ref->{hetez_same}
-            || $ref->{hetez_diff}
-            || $ref->{hetez_multi} );
-
     warn "Updating fasta_ref_reps table with: ", Dumper($ref), "\n"
         if ( $ENV{DEBUG} );
     $update_sth->execute(
@@ -164,7 +135,7 @@ sub update_ref_table {
         $ref->{homez_diff},   $ref->{hetez_same},
         $ref->{hetez_diff},   $ref->{hetez_multi},
         $ref->{support_vntr}, $ref->{support_vntr_span1}
-    ) or die "Cannot execute: " . $update_sth->errstr;
+    );
 }
 
 #open (VCFFILE2, ">", "${latex}.span2.vcf") or die "Can't open for reading ${latex}.vcf.";
@@ -1988,47 +1959,10 @@ my %REPHASH = ();
 
 set_statistics( { N_MIN_SUPPORT => $MIN_SUPPORT_REQUIRED } );
 
-my $dbh = get_dbh()
+my $dbh = get_dbh( { userefdb => 1 } )
     or die "Could not connect to database: $DBI::errstr";
 
 #goto AAA;
-
-# Select all refids from vntr_support table.
-# Must negate refid to match.
-our $supported_alleles = $dbh->selectall_arrayref(
-    q{SELECT -refid,copies,sameasref,support
-    FROM vntr_support}
-) or die "Couldn't select from supported VNTRs: " . $dbh->errstr;
-my ($supported_vntr_count)
-    = $dbh->selectrow_array(
-    q{SELECT COUNT(DISTINCT refid) FROM vntr_support});
-
-( $ENV{DEBUG} )
-    && warn "Supported alleles:\n" . Dumper($supported_alleles) . "\n";
-
-# Connect to refdb
-my $ref_dbh
-    = get_ref_dbh(
-    @run_conf{qw( REFERENCE_SEQ REFERENCE_FILE REFERENCE_INDIST REDO_REFDB )}
-    );
-
-# register the module and declare the virtual table
-try {
-    $ref_dbh->sqlite_create_module(
-        perl => "DBD::SQLite::VirtualTable::PerlData" );
-}
-catch {
-    if (/sqlite_create_module failed with error not an error/) {
-        warn "Not creating VirtualTable; module already registered.\n";
-    }
-    else {
-        die "Error installing VirtualTable in SQLite db handle: $_\n.";
-    }
-};
-$ref_dbh->do(
-    q{CREATE VIRTUAL TABLE temp.vntr_support
-    USING perl(refid INT, copies INT, sameasref INT, support INT, arrayrefs="main::supported_alleles")}
-);
 
 # warn "\nTurning off AutoCommit\n";
 $dbh->do("PRAGMA foreign_keys = OFF");
@@ -2038,18 +1972,27 @@ $dbh->do( get_trunc_query( $run_conf{BACKEND}, "main.fasta_ref_reps" ) )
     or die "Couldn't do statement: " . $dbh->errstr;
 $dbh->commit;
 
-# now we can SELECT from reference TR table, using the virtual table
+# Create a temporary table of all refids from vntr_support
+# table, with the data aggregated to make parsing easier.
+# Must negate refid to match in JOIN later.
+$dbh->do(
+    q{CREATE TEMPORARY TABLE temp.vntr_support AS
+    SELECT -refid AS rid, GROUP_CONCAT(sameasref) AS sameasref,
+    GROUP_CONCAT(support) AS support
+    FROM vntr_support GROUP BY refid ORDER BY -refid ASC}
+);
+
+my ($supported_vntr_count)
+    = $dbh->selectrow_array(
+    q{SELECT COUNT(DISTINCT rid) FROM temp.vntr_support});
+
+# now we can SELECT from reference TR table, using the temp table
 # to JOIN.
-my $get_supported_reftrs_sth = $ref_dbh->prepare(
-    q{SELECT rid,pattern,copies,sameasref,support
-    FROM fasta_ref_reps INNER JOIN temp.vntr_support ON (rid=refid)
-    ORDER BY rid ASC}
+my $get_supported_reftrs_sth = $dbh->prepare(
+    q{SELECT rid,pattern,sameasref,support
+    FROM refdb.fasta_ref_reps INNER JOIN temp.vntr_support USING (rid)}
 ) or die "Couldn't prepare statement: " . $dbh->errstr;
 
-# my $sth6
-#     = $dbh->prepare(
-#     "SELECT copies,sameasref,support FROM vntr_support WHERE refid=?")
-#     or die "Couldn't prepare statement: " . $dbh->errstr;
 
 warn "\nUpdating fasta_ref_reps table...\n";
 
@@ -2073,9 +2016,7 @@ $get_supported_reftrs_sth->execute()
 $i = 0;
 my $ref = { refid => -1 };
 while ( my @data = $get_supported_reftrs_sth->fetchrow_array() ) {
-    if ( $i > 0
-        && ( $ref->{refid} != $data[0] && ( @supported_refTRs % 1e4 == 0 ) ) )
-    {
+    if ( $i > 0 && ( @supported_refTRs % 1e4 == 0 ) ) {
         $dbh->begin_work;
         try {
             while ( my $r = shift @supported_refTRs ) {
@@ -2085,80 +2026,121 @@ while ( my @data = $get_supported_reftrs_sth->fetchrow_array() ) {
         }
         catch {
             warn "Update failed! Reason given by DBI: $_\n";
+
             # Rollback
-            eval {
-                $dbh->rollback;
-            };
+            eval { $dbh->rollback; };
             if ($@) {
                 die "Database rollback failed.\n";
             }
-            die "Error when inserting entries into our supported reference TRs table.\n";
+            die
+                "Error when inserting entries into our supported reference TRs table.\n";
         }
     }
 
-    if ( $ref->{refid} != $data[0] ) {
-        ( $i > 0 ) && push( @supported_refTRs, $ref );
+    # Note: refid is positive
+    $ref = {
+        refid              => $data[0],
+        entr               => calc_entropy( $data[1] ),
+        homez_same         => 0,
+        homez_diff         => 0,
+        hetez_same         => 0,
+        hetez_diff         => 0,
+        hetez_multi        => 0,
+        support_vntr       => 0,
+        span1              => 0,
+        spanN              => 0,
+        nsupport           => 0,
+        has_support        => 0,
+        nsameasref         => 0,
+        readsum            => 0,
+        support_vntr_span1 => 0
+    };
 
-        # Note: refid is positive
-        $ref = {
-            refid              => $data[0],
-            entr               => calc_entropy( $data[1] ),
-            homez_same         => 0,
-            homez_diff         => 0,
-            hetez_same         => 0,
-            hetez_diff         => 0,
-            hetez_multi        => 0,
-            support_vntr       => 0,
-            span1              => 0,
-            spanN              => 0,
-            nsupport           => 0,
-            has_support        => 0,
-            nsameasref         => 0,
-            readsum            => 0,
-            support_vntr_span1 => 0
-        };
+    $i++;
 
-        $i++;
-    }
-
-    warn "TR $i: ", join( ", ", @data ), "\n"
+    warn "TR $i; ", join( "; ", @data ), "\n"
         if ( $ENV{DEBUG} );
-    my $copies    = $data[2];
-    my $sameasref = $data[3];
-    my $support   = $data[4];
+    my @sameasref = split ",", $data[2];
+    my @support   = split ",", $data[3];
 
-    if ( $support >= $MIN_SUPPORT_REQUIRED ) {
+    for my $i ( 0 .. $#sameasref ) {
+        if ( $support[$i] >= $MIN_SUPPORT_REQUIRED ) {
 
-        $ReadTRsSupport += $support;
+            # Count of alleles having at least MIN_SUPPORT_REQUIRED
+            $ref->{nsupport}++;
 
-        $ref->{has_support} = 1;
-        $ref->{nsupport}++;
+            # Flag if ref has at least MIN_SUPPORT_REQUIRED
+            $ref->{nsameasref} = ( $ref->{nsameasref} || $sameasref[$i] );
 
-        if ( $sameasref > 0 ) {
-            $ref->{nsameasref} = 1;
+            # Running sum of read TRs supporting alleles
+            $ReadTRsSupport += $support[$i];
         }
+
+        # Increments with support for each allele
+        $ref->{readsum} += $support[$i];
+
+        # Flag if this is a vntr with at least one read support
+        $ref->{support_vntr_span1} = ( $ref->{support_vntr_span1}
+                || ( $support[$i] > 0 && $sameasref[$i] == 0 ) );
     }
 
-    if ( $support >= 1 && $sameasref == 0 ) {
-        $ref->{support_vntr_span1} = 1;
+    # Flag: at least one allele has at least MIN_SUPPORT_REQUIRED
+    $ref->{has_support} = ( $ref->{nsupport} > 0 );
+
+    $ref->{span1} = ( $ref->{readsum} >= 1 );
+    $ref->{spanN} = ( $ref->{readsum} >= $MIN_SUPPORT_REQUIRED );
+
+    # hetez_multi is true if there is support
+    # for more than one allele
+    # Other genotype classes can only be true if hetez_multi
+    # is false.
+    # TODO Add global config for ploidy. Replace '2'
+    # below with the value for the ploidy (eg, haploid == 1)
+    # Modify last branch to deal with special haploid case
+    if ( $ref->{nsupport} > 2 ) {
+        $ref->{hetez_multi} = 1;
+    }
+    elsif ( $ref->{nsupport} == 2 ) {
+        $ref->{hetez_same} = 1 * ( $ref->{nsameasref} );
+        $ref->{hetez_diff} = 1 * !( $ref->{nsameasref} );
+    }
+    elsif ( $ref->{nsupport} == 1 ) {
+        $ref->{homez_same} = 1 * ( $ref->{nsameasref} );
+        $ref->{homez_diff} = 1 * !( $ref->{nsameasref} );
     }
 
-    $ref->{readsum} += $support;
+    $ref->{support_vntr}
+        = 1 * ($ref->{homez_diff}
+            || $ref->{hetez_same}
+            || $ref->{hetez_diff}
+            || $ref->{hetez_multi} );
+
+    push( @supported_refTRs, $ref );
 }
 
 my $updfromtable = $i;
-$get_supported_reftrs_sth->finish;
-$ref_dbh->disconnect;
-
-# $sth6->finish;
 
 # Insert last rows:
-push @supported_refTRs, $ref;
-while ( my $r = shift @supported_refTRs ) {
-    update_ref_table( $r, $update_ref_table_sth );
-}
-$dbh->commit;
+if (@supported_refTRs) {
+    $dbh->begin_work;
+    try {
+        while ( my $r = shift @supported_refTRs ) {
+            update_ref_table( $r, $update_ref_table_sth );
+        }
+        $dbh->commit;
+    }
+    catch {
+        warn "Update failed! Reason given by DBI: $_\n";
 
+        # Rollback
+        eval { $dbh->rollback; };
+        if ($@) {
+            die "Database rollback failed.\n";
+        }
+        die
+            "Error when inserting entries into our supported reference TRs table.\n";
+    }
+}
 if ( $updfromtable != $supported_vntr_count ) {
     die
         "Updated number of entries($updfromtable) not equal to the number of references, aborting!";
@@ -2255,6 +2237,7 @@ $dbh->commit;
 # set old db settings
 $dbh->do("PRAGMA foreign_keys = ON");
 $dbh->do("PRAGMA synchronous = ON");
+
 # Optimize queries
 $dbh->do("PRAGMA main.optimize");
 $dbh->disconnect;
