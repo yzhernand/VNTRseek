@@ -650,8 +650,16 @@ sub make_refseq_db {
     UNIQUE (`rid`,`comment`))};
     my $fasta_ref_reps_index_q = q{CREATE INDEX IF NOT EXISTS
         "idx_fasta_ref_reps_head" ON "fasta_ref_reps" (`head`)};
+    my $fasta_ref_reps_patsize_q = q{CREATE INDEX IF NOT EXISTS
+        "idx_fasta_ref_reps_patsize" ON
+        "fasta_ref_reps" (LENGTH(pattern))};
+    my $fasta_ref_reps_arraysize_q = q{CREATE INDEX IF NOT EXISTS
+        "idx_fasta_ref_reps_arraysize" ON
+        "fasta_ref_reps"(lastindex - firstindex + 1)};
     $dbh->do($create_fasta_ref_reps_q);
     $dbh->do($fasta_ref_reps_index_q);
+    $dbh->do($fasta_ref_reps_patsize_q);
+    $dbh->do($fasta_ref_reps_arraysize_q);
 
     # If the table does not exist, or we are forcing a redo, load
     # the profiles into the db.
@@ -666,6 +674,8 @@ sub make_refseq_db {
         $dbh->do(q{DROP TABLE IF EXISTS fasta_ref_reps});
         $dbh->do($create_fasta_ref_reps_q);
         $dbh->do($fasta_ref_reps_index_q);
+        $dbh->do($fasta_ref_reps_patsize_q);
+        $dbh->do($fasta_ref_reps_arraysize_q);
 
         # Read in ref file and create a virtual table out of it
         $dbh->sqlite_create_module(

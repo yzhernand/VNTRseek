@@ -217,6 +217,7 @@ CREATE TABLE IF NOT EXISTS `vntr_support` (
 CREATE INDEX IF NOT EXISTS "idx_map_read_index" ON "map" (`readid`);
 CREATE INDEX IF NOT EXISTS "idx_replnk_sid" ON "replnk" (`sid`);
 CREATE INDEX IF NOT EXISTS "idx_vntr_support_read_index" ON "vntr_support" (`representative`);
+CREATE INDEX IF NOT EXISTS "idx_vntr_support_copies_support" ON "vntr_support" (`copies`,`support`);
 --CREATE INDEX IF NOT EXISTS "idx_fasta_ref_reps_head" ON "fasta_ref_reps" (`head`);
 CREATE INDEX IF NOT EXISTS "idx_flank_connection_paramsetid" ON "flank_connection" (`paramsetid`);
 DELETE FROM stats;

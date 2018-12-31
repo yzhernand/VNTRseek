@@ -436,6 +436,7 @@ while ( $files_processed < $files_to_process ) {
                     }
                     else {
                         # Don't know what else might go wrong
+                        $dbh->rollback;
                         die "An error occurred when inserting read sequences: $_";
                     }
                     $dbh->rollback;
