@@ -106,7 +106,7 @@ elsif ( $run_conf{BACKEND} eq "sqlite" ) {
 
 # print ref leb files
 my %LHASH = ();
-open( my $input_fh, "<$inputfile" )
+open( my $input_fh, "<$inputfile" . ".leb36" )
     or die "\nCannot open file '$inputfile'!\n";    # open for input
 while (<$input_fh>) {                               # read file into list
     if (/^(\d+)/) {

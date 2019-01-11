@@ -1,7 +1,3 @@
-# COPY THIS FILE TO A DIFFERENT LOCATION AND SET ALL VARIABLES. 
-# DO NOT FORGET TO CHMOD THIS FILE TO PREVENT OTHER PEOPLE ON 
-# THE SYSTEM FROM LEARNING YOUR MYSQL CREDENTIALS.
-
 # Database backend
 BACKEND=sqlite
 
@@ -27,10 +23,10 @@ MAX_FLANK_CONSIDERED=50
 MIN_SUPPORT_REQUIRED=2
 
 # Whether or not to keep reads detected as PCR duplicates. A nonzero (true) value
-# means that detected PCR duplicates will not be removed. Default is 0.
+# means that detected PCR duplicates will not be removed. Default is 1.
 KEEPPCRDUPS=1
 
-# server name, used for html generating links
+# server name, used for generating html links
 # eg, orca.bu.edu
 SERVER=localhost
 
@@ -44,14 +40,13 @@ STRIP_454_KEYTAGS=0
 # eg, 1 - yes
 IS_PAIRED_READS=1
 
+# Sample ploidy. Default is 2. For haploid, set to 1.
+PLOIDY=2
+
 # Force reinitialization of the reference set database
 # eg, 0 = no 
 # eg, 1 - yes
 REDO_REFDB=0
-
-# html directory (must be writable and executable!)
-# eg, /var/www/html/vntrview
-HTML_DIR=
 
 # input data directory 
 # (plain or gzipped fasta/fastq files)
@@ -64,22 +59,16 @@ OUTPUT_ROOT=
 
 # temp (scratch) directory (must be executable!)
 # eg, /tmp
-TMPDIR=
+TMPDIR=/tmp
 
 # names for the reference files 
 
 # (leb36 file, sequence plus flank data file, indistinguishable references file) 
 # files must be in install directory
 
-# eg, reference.leb36
-REFERENCE_FILE=t26__.leb36 
-
-# eg, reference.seq
-REFERENCE_SEQ=t26__.seq 
-
-# this file can be generated bu setting reference_indist_produce to 1
-# eg, reference.indist 
-REFERENCE_INDIST=t26__.indist
+# eg, hg19. This is the base name for files describing
+# reference TR loci (.db, .seq, .leb36, and .indist)
+REFERENCE=hg19
 
 # generate a file of indistinguishable references, 
 # necessary only if a file is not already available for the reference set

@@ -68,9 +68,9 @@ system("cp $clusterfile $rotatedfolder/allwithdups.clusters");
 # read clusters to see what values we will store (so we don't have to store all)
 print STDERR
     "\n\nreading clusterfile allwithdups.clusters to hash clustered ids (with added rotated repeats)...";
-open FILE, "<$rotatedfolder/allwithdups.clusters" or die $!;
+open my $cluster_fh, "<", "$rotatedfolder/allwithdups.clusters" or die $!;
 $negcount = 0;
-while (<FILE>) {
+while (<$cluster_fh>) {
 
     #print STDERR $_;
 
@@ -95,7 +95,7 @@ while (<FILE>) {
 
     #exit(1);
 }
-close(FILE);
+close($cluster_fh);
 
 print STDERR
     keys(%RHASH)

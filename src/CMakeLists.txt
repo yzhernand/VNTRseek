@@ -13,4 +13,20 @@ ADD_SUBDIRECTORY(join_clusters)
 ADD_SUBDIRECTORY(trf2proclu-ngs)
 ADD_SUBDIRECTORY(psearch1.91)
 ADD_SUBDIRECTORY(newrefflankalign)
-ADD_SUBDIRECTORY(seqtk-1.2)
+
+# seqtk
+# update the hash in GIT_TAG with each new release
+include(ExternalProject)
+ExternalProject_Add(seqtk
+  GIT_REPOSITORY    https://github.com/lh3/seqtk.git
+  GIT_TAG           fe1cc9e8d926d40a88f6ff368c07466d33c3665d
+  BUILD_IN_SOURCE   1
+  CONFIGURE_COMMAND ""
+  INSTALL_DIR		    "${CMAKE_INSTALL_PREFIX}/${InstallSuffix}"
+  INSTALL_COMMAND   ""
+)
+ExternalProject_Get_Property(seqtk source_dir)
+install(PROGRAMS ${source_dir}/seqtk
+	COMPONENT RUNTIME
+	DESTINATION ${InstallSuffix}
+)

@@ -55,7 +55,7 @@ my $run_dir = getcwd();
 use lib "$FindBin::RealBin/lib";
 
 use vutil
-    qw(get_config set_config set_statistics get_statistics write_mysql write_sqlite get_dbh get_ref_dbh set_datetime print_config create_blank_file run_redund trim);
+    qw(get_config set_config set_statistics get_statistics write_sqlite get_dbh get_ref_dbh set_datetime print_config create_blank_file run_redund trim);
 
 my $DOALLSTEPS = 0
     ; # set to 0 to do one step at a time (recommended for test run), 1 to run though all steps (THIS IS OTIONAL AS SPECIFYING END STEP IS POSSIBLE)
@@ -79,26 +79,26 @@ if ( !chdir("$install_dir") ) {
 }
 
 my $HELPSTRING
-    = "\nUsage: $0 <start step> <end step> To tell the master script what step to execute. The first step is 0, last step is 19. \n\nOPTIONS:\n\n"
+    = "\nUsage: $0 --DBSUFFIX <run_name> <start step> <end step> To tell the master script what step to execute. The first step is 0, last step is 19. \n\nOPTIONS:\n\n"
     . "\t--HELP                        prints this help message\n"
+    . "\t--DBSUFFIX                    suffix for database name\n"
     . "\t--NPROCESSES                  number of processors on your system\n"
     . "\t--MIN_FLANK_REQUIRED          minimum required flank on both sides for a read TR to be considered (default 10)\n"
     . "\t--MAX_FLANK_CONSIDERED        maximum flank length used in flank alignments, set to big number to use full flank (default 50)\n"
     . "\t--MIN_SUPPORT_REQUIRED        minimum number of mapped reads which agree on copy number to call an allele (default 2)\n"
-    . "\t--KEEPPCRDUPS                      if this flag is given, PCR duplicates will not be looked for or removed. (default: PCR duplicates are removed)"
-    . "\t--DBSUFFIX                    suffix for database name\n"
+    . "\t--KEEPPCRDUPS                 if set to 0, PCR duplicates will be looked for and removed. (default: PCR duplicates are not removed)\n"
     . "\t--SERVER                      server name, used for html generating links\n"
     . "\t--STRIP_454_KEYTAGS           for 454 platform, strip leading 'TCAG', 0/1 (default 0)\n"
     . "\t--IS_PAIRED_READS             data is paired reads, 0/1 (default 1)\n"
+    . "\t--PLOIDY                      sample's ploidy (default 2)\n"
     . "\t--REDO_REFDB                  force reinitialization of the reference set database, 0/1 (default 0)\n"
-    . "\t--HTML_DIR                    html directory (must be writable and executable!)\n"
+    . "\t--CLEAN                       force reinitialization of the run database. Command line option only.\n"
+    . "\t--HTML_DIR                    html directory (optional, must be writable and executable!)\n"
     . "\t--INPUT_DIR                   input data directory (BAM or plain or gzipped fasta/fastq files)\n"
     . "\t--FASTA_DIR                   same as INPUT_DIR, kept for backwards compatibility\n"
     . "\t--OUTPUT_ROOT                 output directory (must be writable and executable!)\n"
     . "\t--TMPDIR                      temp (scratch) directory (must be writable!)\n"
-    . "\t--REFERENCE_FILE              reference profile file (default set in global config file)\n"
-    . "\t--REFERENCE_SEQ               reference sequence file (default set in global config file)\n"
-    . "\t--REFERENCE_INDIST            reference indistinguishables file (default set in global config file)\n"
+    . "\t--REFERENCE                   base name of reference files (default set in global config file)\n"
     . "\t--REFERENCE_INDIST_PRODUCE    generate a file of indistinguishable references, 0/1 (default 0)\n"
     . "\t\n\nADDITIONAL USAGE:\n\n"
     . "\t$0 100                       clear error\n"
@@ -106,23 +106,21 @@ my $HELPSTRING
     . "\n\n";
 
 # get dbsuffix from command line
-my %opts;
+my %opts = ();
 
 # print Dumper(@ARGV);
 # modify config variables based on command line
 GetOptions(
     \%opts,                   "HELP",
-    "LOGIN=s",                "PASS=s",
-    "HOST=s",                 "NPROCESSES=i",
-    "MIN_FLANK_REQUIRED=i",   "MAX_FLANK_CONSIDERED=i",
-    "MIN_SUPPORT_REQUIRED=i", "KEEPPCRDUPS",
-    "BACKEND=s",              "DBSUFFIX=s",
+    "NPROCESSES=i",           "MIN_FLANK_REQUIRED=i",
+    "MAX_FLANK_CONSIDERED=i", "MIN_SUPPORT_REQUIRED=i",
+    "KEEPPCRDUPS=i",          "DBSUFFIX|RUN=s",
     "SERVER=s",               "STRIP_454_KEYTAGS=i",
-    "IS_PAIRED_READS=i",      "REDO_REFDB=i",
-    "HTML_DIR=s",             "INPUT_DIR|FASTA_DIR=s",
+    "IS_PAIRED_READS=i",      "PLOIDY",
+    "REDO_REFDB=i",           "INPUT_DIR|FASTA_DIR=s",
     "OUTPUT_ROOT=s",          "TMPDIR=s",
-    "REFERENCE_FILE=s",       "REFERENCE_SEQ=s",
-    "REFERENCE_INDIST=s",     "REFERENCE_INDIST_PRODUCE=i"
+    "REFERENCE=s",            "REFERENCE_INDIST_PRODUCE=i",
+    "CLEAN"
 );
 
 # print help if asked
@@ -154,12 +152,6 @@ my %conf_vars = get_config( $opts{'DBSUFFIX'}, $run_dir );
 for my $k ( keys %conf_vars ) {
     $opts{$k} = $conf_vars{$k}
         if ( !exists $opts{$k} );
-}
-
-if ( ( $conf_vars{NEW_RUN} == 1 ) && ( $STEP != 100 && $STEP != 0 ) ) {
-    die
-        "Error: run configuration file not found at $config_file and this is not a new run.
-Please make sure that the DB suffix you supplied is correct.\n";
 }
 
 ( $ENV{DEBUG} ) && warn Dumper( \%opts );
@@ -315,8 +307,7 @@ sub ClearError {
         set_statistics( \%clear_stats );
 
         # Fill in the previous step with some dummy date/time if needed
-        if (get_statistics($stats[ $set_step - 1 ]) eq "")
-        {
+        if ( get_statistics( $stats[ $set_step - 1 ] ) eq "" ) {
             set_datetime( $stats[ $set_step - 1 ] );
         }
     }
@@ -416,7 +407,7 @@ if ( $STEP == 0 ) {
 
     $timestart = time();
 
-    print STDERR "Executing step #$STEP (creating MySQL database)...\n";
+    print STDERR "Executing step #$STEP (creating database)...\n";
 
     # This function checks if the output directory exists,
     # and creates it if it doesn't exist.
@@ -503,8 +494,8 @@ if ( $STEP == 2 ) {
     }
 
     set_statistics(
-        {   FILE_REFERENCE_LEB => $opts{REFERENCE_FILE},
-            FILE_REFERENCE_SEQ => $opts{REFERENCE_SEQ},
+        {   FILE_REFERENCE_LEB => $opts{REFERENCE} . ".leb36",
+            FILE_REFERENCE_SEQ => $opts{REFERENCE} . ".seq",
             TIME_RENUMB        => time() - $timestart,
         }
     );
@@ -646,8 +637,7 @@ if ( $STEP == 4 ) {
 # psearch output can still be files but this step will then collect them and
 # insert into the db. (Maybe merge in next step's `join_clusters.exe`)
 # For now, extract the file we need using the database
-    my $dbh = get_ref_dbh(
-        @opts{qw(REFERENCE_SEQ REFERENCE_FILE REFERENCE_INDIST REDO_REFDB)} );
+    my $dbh = get_ref_dbh( $opts{REFERENCE}, {redo => $opts{REDO_REFDB}} );
 
     # Must negate rids for refset
     my $get_ref_leb36 = q{SELECT -rid, length(pattern) AS patsize,
@@ -797,8 +787,7 @@ if ( $STEP == 7 ) {
 
     $timestart = time();
     my $exstring;
-    warn
-        "Executing step #$STEP (this step is EMPTY!)...";
+    warn "Executing step #$STEP (this step is EMPTY!)...";
 
     set_statistics( { TIME_DB_INSERT_REFS => time() - $timestart } );
     set_datetime("DATE_DB_INSERT_REFS");
@@ -816,9 +805,7 @@ if ( $STEP == 8 ) {
         "\n\nExecuting step #$STEP (inserting READS flanks into database)...";
     my $extra_param = ( $opts{STRIP_454_KEYTAGS} ) ? '1' : '0';
 
-    # TODO Use get_ref_dbh here
-    my $dbh = get_ref_dbh(
-        @opts{qw(REFERENCE_SEQ REFERENCE_FILE REFERENCE_INDIST REDO_REFDB)} );
+    my $dbh              = get_ref_dbh( $opts{REFERENCE}, {redo => $opts{REDO_REFDB}} );
     my $reference_folder = File::Temp->newdir();
 
     # Get rotindex saved in db
@@ -1124,10 +1111,10 @@ if ( $STEP == 13 ) {
     print STDERR "\n\nExecuting step #$STEP (calculating edges)...";
     my $exstring = "./run_edges.pl";
     my @exargs   = (
-        "$opts{REFERENCE_FILE}", "$edges_folder",
-        "$opts{DBSUFFIX}",       "$run_dir",
-        "$MINPROFSCORE",         "$opts{NPROCESSES}",
-        "$PROCLU_EXECUTABLE",    "$opts{TMPDIR}"
+        "$opts{REFERENCE}",   "$edges_folder",
+        "$opts{DBSUFFIX}",    "$run_dir",
+        "$MINPROFSCORE",      "$opts{NPROCESSES}",
+        "$PROCLU_EXECUTABLE", "$opts{TMPDIR}"
     );
     system( $exstring, @exargs );
     if ( $? == -1 ) {
@@ -1159,22 +1146,27 @@ if ( $STEP == 14 ) {
     print STDERR
         "\n\nExecuting step #$STEP (generating .index files for pcr_dup)...";
 
-    my $exstring = "./extra_index.pl";
-    my @exargs   = (
-        "$read_profiles_folder_clean/best", "$opts{DBSUFFIX}",
-        "$run_dir",                         "$opts{TMPDIR}"
-    );
-    system( $exstring, @exargs );
-    if ( $? == -1 ) {
-        SetError( $STEP, "command failed: $!", -1 );
-        die "command failed: $!\n";
+    if ( $opts{KEEPPCRDUPS} ) {
+        warn "\nWarning: Not removing detected PCR duplicates\n";
     }
     else {
-        my $rc = ( $? >> 8 );
-        if ( 0 != $rc ) {
-            SetError( $STEP, "generating .index files for pcr_dup failed",
-                $rc );
-            die "command exited with value $rc";
+        my $exstring = "./extra_index.pl";
+        my @exargs   = (
+            "$read_profiles_folder_clean/best", "$opts{DBSUFFIX}",
+            "$run_dir",                         "$opts{TMPDIR}"
+        );
+        system( $exstring, @exargs );
+        if ( $? == -1 ) {
+            SetError( $STEP, "command failed: $!", -1 );
+            die "command failed: $!\n";
+        }
+        else {
+            my $rc = ( $? >> 8 );
+            if ( 0 != $rc ) {
+                SetError( $STEP, "generating .index files for pcr_dup failed",
+                    $rc );
+                die "command exited with value $rc";
+            }
         }
     }
 
@@ -1360,7 +1352,9 @@ if ( $STEP == 19 ) {
     symlink(
         "${read_profiles_folder_clean}/result",
         "$opts{HTML_DIR}/$opts{DBSUFFIX}"
-    ) unless ( -e "$opts{HTML_DIR}/$opts{DBSUFFIX}/result" );
+        )
+        if ( exists $opts{HTML_DIR}
+        && !(-e "$opts{HTML_DIR}/$opts{DBSUFFIX}/result") );
 
     # cleanup
     print STDERR "Cleanup...\n";

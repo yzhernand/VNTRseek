@@ -14,7 +14,7 @@ use Data::Dumper;
 use lib "$FindBin::RealBin/lib";
 
 use vutil
-    qw(get_config get_dbh get_ref_dbh get_trunc_query set_statistics get_statistics);
+    qw(get_config get_dbh get_trunc_query set_statistics get_statistics);
 
 #use GD::Graph::linespoints;
 
@@ -1474,6 +1474,7 @@ sub print_latex {
     unless ( $readTRsMapped
         == $readTRsMappedToIndistinguishable + $readTRsMappedToSingleton )
     {
+        print Dumper([$readTRsMapped, $readTRsMappedToIndistinguishable, $readTRsMappedToSingleton]) . "\n";
         die
             "Error: mismatch of sum of mapped read TRs by distinguishablility and total read TRs mapped. "
             . "(Expected $readTRsMapped, got "

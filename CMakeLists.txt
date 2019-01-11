@@ -1,11 +1,12 @@
 SET(PACKAGE VNTRseek)
 SET(PACKAGE_NAME VNTRseek)
 
-CMAKE_MINIMUM_REQUIRED(VERSION 2.8)
-PROJECT(VNTRseek)
-
+cmake_minimum_required(VERSION 3.0)
 # Set current VNTRseek version. Not user configurable
 SET(VNTRVer "1.10.0-rc.3")
+project(VNTRseek VERSION 1.10.0.3 LANGUAGES C)
+# project(VNTRseek VERSION ${VNTRVer} LANGUAGES C)
+
 SET(InstallSuffix "vntrseek${VNTRVer}")
 
 # Set current TRF version. Not user configurable
@@ -40,37 +41,37 @@ ELSEIF (ARCH STREQUAL "i386")
 ENDIF()
 
 ## Check for required installed programs and versions
-SET(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules" ${CMAKE_MODULE_PATH})
 SET(TRFDLName "trf${TRFVer}.${ARCH}")
 SET(GLIB2_LEGACY_VERSION "2.14")
 INCLUDE("FindDeps.cmake")
 GCC_REQ_VER(4.1.2)
 GLIBC_REQ_VER(2.14)
-MYSQL_REQ_VER(5.0.95)
 PERL_REQ_VER(5.8.8)
+SAMTOOLS_REQ_VER(1.8)
+BEDTOOLS_REQ_VER(2.26.0)
 
-MESSAGE(STATUS "Your processor is ${CMAKE_SYSTEM_PROCESSOR} and you are running ${CMAKE_SYSTEM_NAME}. This means we'll download ${TRFDLName}")
+message(STATUS "Your processor is ${CMAKE_SYSTEM_PROCESSOR} and you are running ${CMAKE_SYSTEM_NAME}. This means we'll download ${TRFDLName}")
 # May need to change if other platforms are supported
 #SET(TRFBin "${TRFDLName}.exe")
 SET(TRFBin "trf${TRFVer}-ngs.linux.exe")
 
 ## Check for required Perl modules
-FIND_PACKAGE(PerlModules COMPONENTS DBI DBD::SQLite Try::Tiny)
+find_package(PerlModules COMPONENTS DBI DBD::SQLite Try::Tiny)
 IF(NOT PERLMODULES_FOUND)
-    MESSAGE(FATAL_ERROR "Not all required perl modules were found on your system")
+    message(FATAL_ERROR "Not all required perl modules were found on your system")
 ENDIF(NOT PERLMODULES_FOUND)
 
 # Build files in src
-ADD_SUBDIRECTORY(src)
-ADD_SUBDIRECTORY(perl)
-ADD_SUBDIRECTORY(scripts)
+add_subdirectory(src)
+add_subdirectory(perl)
+add_subdirectory(scripts)
 #ADD_SUBDIRECTORY(etc)
 
 # Post install message
-ADD_SUBDIRECTORY(postinst)
+add_subdirectory(postinst)
 
 # Install config and other files
-INSTALL(CODE "
+install(CODE "
     if (EXISTS \"${CMAKE_INSTALL_PREFIX}/${InstallSuffix}/vs.cnf\")
         MESSAGE(STATUS \"vs.cnf file exists. Will install new version as 'vs.cnf.new'\")
         file(INSTALL \"${CMAKE_SOURCE_DIR}/vs.cnf\"
@@ -91,19 +92,19 @@ SET(MISC_FILES
     README.md RUNNING
     sqlite_schema.sql
     )
-INSTALL(FILES ${MISC_FILES}
+install(FILES ${MISC_FILES}
     DESTINATION ${InstallSuffix}
     )
 
 # Download and install trf
-FILE(DOWNLOAD http://tandem.bu.edu/trf/downloads/${TRFDLName}
+file(DOWNLOAD http://tandem.bu.edu/trf/downloads/${TRFDLName}
     "${CMAKE_CURRENT_BINARY_DIR}/${TRFBin}"
     TIMEOUT 30
     STATUS TRFdlStat
     SHOW_PROGRESS)
-LIST(GET TRFdlStat 0 TRFdlErrNo)
+list(GET TRFdlStat 0 TRFdlErrNo)
 IF (TRFdlErrNo)
-    MESSAGE(WARNING "Error encountered downloading TRF. Download it manually from: http://tandem.bu.edu/trf/trf.download.html")
+    message(WARNING "Error encountered downloading TRF. Download it manually from: http://tandem.bu.edu/trf/trf.download.html")
 ELSE (TRFdlErrNo)
-    INSTALL(PROGRAMS "${CMAKE_CURRENT_BINARY_DIR}/${TRFBin}" DESTINATION ${InstallSuffix})
+    install(PROGRAMS "${CMAKE_CURRENT_BINARY_DIR}/${TRFBin}" DESTINATION ${InstallSuffix})
 ENDIF (TRFdlErrNo)

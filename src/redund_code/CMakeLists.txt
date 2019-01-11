@@ -1,10 +1,10 @@
 # source files for redund.exe
-SET(REDUND_SRCS
-    redund.c
-    )
-ADD_EXECUTABLE(redund.exe ${REDUND_SRCS})
-TARGET_LINK_LIBRARIES(redund.exe easylife sqlite3 m)
+add_executable(redund.exe)
+target_link_libraries(redund.exe easylife sqlite3 m)
+target_sources(redund.exe
+    PRIVATE redund.c
+)
 
-INSTALL(TARGETS redund.exe
+install(TARGETS redund.exe
     RUNTIME DESTINATION ${InstallSuffix}
-    )
+)

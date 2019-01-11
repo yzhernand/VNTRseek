@@ -1,10 +1,12 @@
-SET(PCRDUP_SRCS
-    main.c   LinkedList.c
-    "bitwise LCS single word.c" "bitwise LCS multiple word.c"
-    )
-ADD_EXECUTABLE(pcr_dup.exe ${PCRDUP_SRCS})
-TARGET_LINK_LIBRARIES(pcr_dup.exe m)
+add_executable(pcr_dup.exe)
+target_link_libraries(pcr_dup.exe m)
+target_sources(pcr_dup.exe
+    PRIVATE main.c
+    PRIVATE LinkedList.c
+    PRIVATE "bitwise LCS single word.c"
+    PRIVATE "bitwise LCS multiple word.c"
+)
 
-INSTALL(TARGETS pcr_dup.exe
+install(TARGETS pcr_dup.exe
     RUNTIME DESTINATION ${InstallSuffix}
-    )
+)

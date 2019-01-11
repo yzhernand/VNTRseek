@@ -1,10 +1,10 @@
-SET(FLANKALIGN_SRCS
-    flankalign.c
-    "bitwise edit distance alignment multiple word no end penalty.c"
-    )
-ADD_EXECUTABLE(flankalign.exe ${FLANKALIGN_SRCS})
-TARGET_LINK_LIBRARIES(flankalign.exe easylife m)
+add_executable(flankalign.exe)
+target_sources(flankalign.exe
+    PRIVATE flankalign.c
+    PRIVATE "bitwise edit distance alignment multiple word no end penalty.c"
+)
+target_link_libraries(flankalign.exe easylife m)
 
-INSTALL(TARGETS flankalign.exe
+install(TARGETS flankalign.exe
     RUNTIME DESTINATION ${InstallSuffix}
-    )
+)

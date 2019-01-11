@@ -924,7 +924,7 @@ int main(int argc, char **argv)
 
     if (fpi2rot) fclose(fpi2rot);
 
-    if (MAPFILE) close(MAPFILE);
+    if (MAPFILE) fclose(MAPFILE);
 
     // print clusters to output file
     fpo = fopen(outputfile, "w");

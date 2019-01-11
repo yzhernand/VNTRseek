@@ -49,34 +49,30 @@ FUNCTION(GLIBC_REQ_VER VER)
     ENDIF()
 ENDFUNCTION(GLIBC_REQ_VER)
 
-# Check mysql binary is found, and is of correct version
-FUNCTION(MYSQL_REQ_VER VER)
-    MESSAGE(STATUS "Checking MySQL client version...")
-    FIND_PROGRAM(MYSQL_LOC "mysql")
-    FIND_PROGRAM(MYSQL_CONF_LOC "mysql_config")
-
-    IF(MYSQL_CONF_LOC STREQUAL "MYSQL_CONF_LOC-NOTFOUND")
-        MESSAGE(FATAL_ERROR "Error: Unable to detect your version of mysql. Please ensure that mysql_config is in your PATH.")
-    ELSEIF(MYSQL_LOC STREQUAL "MYSQL_LOC-NOTFOUND")
-        MESSAGE(FATAL_ERROR "The MySQL client is a requirement for using the TRF pipeline. You can install it for free at https://www.mysql.com/ or through your OS's distribution channel.")
-    ELSE()
-        EXECUTE_PROCESS(COMMAND ${MYSQL_CONF_LOC} --version
-            OUTPUT_VARIABLE MYSQL_VERSION)
-        STRING(REGEX REPLACE "(\r?\n)+$" "" MYSQL_VERSION "${MYSQL_VERSION}")
-
-        IF(MYSQL_VERSION VERSION_GREATER ${VER} OR MYSQL_VERSION VERSION_EQUAL ${VER})
-            MESSAGE(STATUS "MySQL client version >= ${VER} (${MYSQL_VERSION})")
-        ELSE()
-            MESSAGE(FATAL_ERROR "Error: MySQL version must be >= ${VER}. You have ${MYSQL_VERSION}")
-        ENDIF()
-    ENDIF()
-ENDFUNCTION(MYSQL_REQ_VER)
-
-# Check for seqtk
-
-
 # Check for samtools
+FUNCTION(SAMTOOLS_REQ_VER VER)
+    MESSAGE(STATUS "Checking samtools version...")
+    EXECUTE_PROCESS(COMMAND samtools --version | head -1
+        OUTPUT_VARIABLE SAMTOOLS_VERSION)
+    STRING(REGEX MATCH "[0-9]\\.[0-9][0-9]?" SAMTOOLS_VERSION "${SAMTOOLS_VERSION}")
 
+    IF(SAMTOOLS_VERSION VERSION_GREATER ${VER} OR SAMTOOLS_VERSION VERSION_EQUAL ${VER})
+        MESSAGE(STATUS "samtools version >= ${VER} (${SAMTOOLS_VERSION})")
+    ELSE()
+        MESSAGE(FATAL_ERROR "Error: samtools version must be >= ${VER}. You have ${SAMTOOLS_VERSION}")
+    ENDIF()
+ENDFUNCTION(SAMTOOLS_REQ_VER)
 
 # Check for bedtools
+FUNCTION(BEDTOOLS_REQ_VER VER)
+    MESSAGE(STATUS "Checking bedtools version...")
+    EXECUTE_PROCESS(COMMAND bedtools --version | head -1
+        OUTPUT_VARIABLE BEDTOOLS_VERSION)
+    STRING(REGEX MATCH "[0-9]\\.[0-9][0-9]?\\.[0-9]" BEDTOOLS_VERSION "${BEDTOOLS_VERSION}")
 
+    IF(BEDTOOLS_VERSION VERSION_GREATER ${VER} OR BEDTOOLS_VERSION VERSION_EQUAL ${VER})
+        MESSAGE(STATUS "bedtools version >= ${VER} (${BEDTOOLS_VERSION})")
+    ELSE()
+        MESSAGE(FATAL_ERROR "Error: bedtools version must be >= ${VER}. You have ${BEDTOOLS_VERSION}")
+    ENDIF()
+ENDFUNCTION(BEDTOOLS_REQ_VER)

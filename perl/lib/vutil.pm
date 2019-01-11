@@ -14,7 +14,7 @@ if ( $ENV{DEBUG} ) {
 
 use base 'Exporter';
 our @EXPORT_OK
-    = qw(read_config_file get_config set_config set_credentials get_dbh get_ref_dbh write_mysql make_refseq_db load_refprofiles_db run_redund write_sqlite set_statistics get_statistics set_datetime print_config trim create_blank_file get_trunc_query sqlite_install_RC_function);
+    = qw(read_config_file get_config set_config set_credentials get_dbh get_ref_dbh make_refseq_db load_refprofiles_db run_redund write_sqlite set_statistics get_statistics set_datetime print_config trim create_blank_file get_trunc_query sqlite_install_RC_function);
 
 # vutil.pm
 # author: Yevgeniy Gelfand
@@ -50,31 +50,44 @@ sub read_config_file {
     ( $ENV{DEBUG} ) && warn "Reading configuration file: $file_loc\n";
 
     # read global config
-    if ( open( my $cnf, "<", "$file_loc" ) ) {
-
-        while (<$cnf>) {
-            chomp;
-
-            # skip start comments
-            if (/^\#/) { next; }
-
-            if (/(.+)=(.*)/) {
-                my $key = trim($1);
-                my $val = trim($2);
-                $val =~ s/\s*\#.*//;    # strip end comments
-                $VSCNF_FILE{ uc($key) } = $val;
-
-                #print $key."=".$val."\n";
-            }
+    my $cnf;
+    try {
+        open( $cnf, "<", "$file_loc" )
+            or die "$!";
+    }
+    catch {
+        ( $ENV{DEBUG} ) && warn "$_\n";
+        if (/No such file or directory/) {
+            $VSCNF_FILE{ERR} = "NO_FILE";
+        }
+        elsif (/Permission denied/) {
+            $VSCNF_FILE{ERR} = "PERM";
+        }
+        else {
+            $VSCNF_FILE{ERR} = $_;
         }
 
-        close($cnf);
-        return 1;
-
-    }
-    else {
         return 0;
+    };
+
+    while (<$cnf>) {
+        chomp;
+
+        # skip start comments
+        if (/^\#/) { next; }
+
+        if (/(.+)=(.*)/) {
+            my $key = trim($1);
+            my $val = trim($2);
+            $val =~ s/\s*\#.*//;    # strip end comments
+            $VSCNF_FILE{ uc($key) } = $val;
+
+            #print $key."=".$val."\n";
+        }
     }
+
+    close($cnf);
+    return 1;
 
 }
 
@@ -86,25 +99,51 @@ sub get_config {
     my ( $dbsuffix, $config_loc ) = @_;
     my $installdir  = "$FindBin::RealBin";
     my $config_file = "$config_loc/$dbsuffix.vs.cnf";
+    $VSCNF_FILE{ERR} = "";
+
+    # $VSCNF_FILE{NEW_RUN} = 0;
     unless ($VSREAD) {
+        $VSCNF_FILE{ERR} = "";
 
         # Must read global file first. Sets up the defaults.
-        die
-            "Could not read global config. Perhaps you don't have read permissions?\n"
-            unless read_config_file("$installdir/vs.cnf");
-        $VSCNF_FILE{NEW_RUN} = 0;
-        unless ( read_config_file($config_file) ) {
-            warn
-                "Could not read run config (harmless if this is a new run)\n";
-            $VSCNF_FILE{NEW_RUN} = 1;
+        read_config_file("$installdir/vs.cnf");
+        if ( $VSCNF_FILE{ERR} eq "PERM" ) {
+            die "Could not read global config. Please make sure "
+                . "your user or group has read permissions.\n";
         }
+        elsif ( $VSCNF_FILE{ERR} eq "NO_FILE" ) {
+            die "Global config does not exist! Either reinstall "
+                . "VNTRseek or copy the default configuration from "
+                . "source distribution and modify as needed.\n";
+        }
+        elsif ( $VSCNF_FILE{ERR} ) {
+            die "Unexpected error reading global configuration file: "
+                . $VSCNF_FILE{ERR} . "\n";
+        }
+
+        $VSCNF_FILE{ERR} = "";
+        read_config_file($config_file);
+        if ( $VSCNF_FILE{ERR} eq "NO_FILE" ) {
+            warn "Run config does not exist. "
+                . "A new one will be created, but make sure your"
+                . "dbsuffix is correct!\n";
+
+            # $VSCNF_FILE{NEW_RUN} = 1;
+        }
+        elsif ( $VSCNF_FILE{ERR} eq "PERM" ) {
+            die "Could not read run config. Please make sure "
+                . "your user or group has read AND write permissions.\n";
+        }
+        elsif ( $VSCNF_FILE{ERR} ) {
+            die "Unexpected error reading run configuration file: "
+                . $VSCNF_FILE{ERR} . "\n";
+        }
+        delete $VSCNF_FILE{ERR};
 
         # Set VSREAD;
         $VSREAD               = 1;
         $VSCNF_FILE{DBSUFFIX} = $dbsuffix;
         $VSCNF_FILE{CONF_DIR} = $config_loc;
-        ( $VSCNF_FILE{REFERENCE_DB} = $VSCNF_FILE{REFERENCE_SEQ} )
-            =~ s/.seq$/.db/;
     }
 
     return %VSCNF_FILE;
@@ -122,9 +161,11 @@ sub set_config {
     }
 
     if ( $in_hash{NPROCESSES} <= 0 ) {
-        croak(
-            "Please set number of processes to be used by the pipeline (NPROCESSES) variable on the command line or in the configuration file.\n "
-        );
+        warn(     "NPROCESSES not set. Using default of 2. "
+                . "Please set number of processes to be used by the pipeline "
+                . "(NPROCESSES) variable on the command line or in the "
+                . "configuration file.\n " );
+        $in_hash{NPROCESSES} = 2;
     }
 
     if ( $in_hash{MIN_FLANK_REQUIRED} <= 0 ) {
@@ -164,11 +205,12 @@ sub set_config {
     }
 
     if ( "" eq $in_hash{HTML_DIR} ) {
-        croak(
-            "Please set html directory (html_dir) variable on the command line or in the configuration file. ($in_hash{HTML_DIR})\n"
-        );
+        warn
+            "Warning: 'html_dir' option is unset. VNTRseek won't create symbolic links to results for VNTRview. Call vntrseek with --html_dir <html_dir> to change this.\n";
+        warn
+            "Note: This is OK, especially if you don't plan on using VNTRview, which is not yet compatible with VNTRseek 1.10+ anyway.\n";
     }
-    if ( !( -e $in_hash{HTML_DIR} ) && !mkdir("$in_hash{HTML_DIR}") ) {
+    elsif ( !( -e $in_hash{HTML_DIR} ) && !mkdir("$in_hash{HTML_DIR}") ) {
         croak("Could not create html_dir directory ($in_hash{HTML_DIR}).\n");
     }
 
@@ -179,7 +221,7 @@ sub set_config {
 
     unless ( exists $in_hash{INPUT_DIR} && $in_hash{INPUT_DIR} ) {
         croak(
-            "Please set fasta directory (input_dir) variable on the command line or in the configuration file.\n"
+            "Please set input directory (input_dir) variable on the command line or in the configuration file.\n"
         );
     }
 
@@ -189,43 +231,42 @@ sub set_config {
         );
     }
 
-    if ( "" eq $in_hash{REFERENCE_FILE} ) {
+    if ( "" eq $in_hash{REFERENCE} ) {
         croak(
-            "Please set reference .leb36 file (reference_file) variable on the command line or in the configuration file.\n"
-        );
-    }
-
-    if ( "" eq $in_hash{REFERENCE_SEQ} ) {
-        croak(
-            "Please set reference .seq file (reference_seq) variable on the command line or in the configuration file.\n"
-        );
-    }
-
-    if ( "" eq $in_hash{REFERENCE_INDIST} ) {
-        croak(
-            "Please set reference .indist file (reference_indist) variable on the command line or in the configuration file.\n"
+            "Please set reference file base name (reference) variable on the command line or in the configuration file.\n"
         );
     }
 
     if ( "" eq $in_hash{TMPDIR} ) {
-        croak(
-            "Please set temporary directory (TMPDIR) variable on the command line or in the configuration file.\n"
-        );
+        warn
+            "'tmpdir' is not set. Using '/tmp'. Call vntrseek with --tmpdir <directory> to change this.\n";
     }
 
-    unless ( -e $in_hash{REFERENCE_FILE} ) {
-        die("File '$in_hash{REFERENCE_FILE}' not found!");
+    if ( !( -e $in_hash{REFERENCE_DB} ) || $in_hash{REDO_REFDB} ) {
+        my $err;
+        $in_hash{REFERENCE_DB}     = $in_hash{REFERENCE} . ".db";
+        $in_hash{REFERENCE_SEQ}    = $in_hash{REFERENCE} . ".seq";
+        $in_hash{REFERENCE_FILE}   = $in_hash{REFERENCE} . ".leb36";
+        $in_hash{REFERENCE_INDIST} = $in_hash{REFERENCE} . ".indist";
+        unless ( -e $in_hash{REFERENCE_FILE} ) {
+            $err = "File '$in_hash{REFERENCE_FILE}' not found!";
+        }
+        unless ( -e $in_hash{REFERENCE_SEQ} ) {
+            $err = "File '$in_hash{REFERENCE_SEQ}' not found!";
+        }
+        if (   !( -e $in_hash{REFERENCE_INDIST} )
+            && !$in_hash{REFERENCE_INDIST_PRODUCE} )
+        {
+            $err = "File '$in_hash{REFERENCE_INDIST}' not found!";
+        }
+
+        die "Error: $err File necessary to build reference set database "
+            . "(see VNTRseek documentation).\n"
+            if ($err);
     }
-    unless ( -e $in_hash{REFERENCE_SEQ} ) {
-        die("File '$in_hash{REFERENCE_SEQ}' not found!");
-    }
-    if (   !( -e $in_hash{REFERENCE_INDIST} )
-        && !$in_hash{REFERENCE_INDIST_PRODUCE} )
-    {
-        die("File '$in_hash{REFERENCE_INDIST}' not found!");
-    }
+
     unless ( -e $in_hash{INPUT_DIR} ) {
-        die("Directory '$in_hash{INPUT_DIR}' not found!");
+        die("Error: input directory '$in_hash{INPUT_DIR}' not found!");
     }
     if ( !-e $in_hash{OUTPUT_ROOT} && !mkdir( $in_hash{OUTPUT_ROOT} ) ) {
         die("Error creating output root ($in_hash{OUTPUT_ROOT}). Please check the path or manually create this directory and try again."
@@ -237,7 +278,7 @@ sub set_config {
     unless ( -e $in_hash{TMPDIR} ) {
         die("Temporary directory '$in_hash{TMPDIR}' not found!");
     }
-    unless ( -x $in_hash{HTML_DIR} ) {
+    if ( $in_hash{HTML_DIR} && !( -x $in_hash{HTML_DIR} ) ) {
         die("Directory '$in_hash{HTML_DIR}' not executable!");
     }
     unless ( -x $in_hash{OUTPUT_ROOT} ) {
@@ -247,7 +288,7 @@ sub set_config {
         die("Directory '$in_hash{TMPDIR}' not executable!");
     }
 
-    unless ( -w $in_hash{HTML_DIR} ) {
+    if ( $in_hash{HTML_DIR} && !( -w $in_hash{HTML_DIR} ) ) {
         die("Directory '$in_hash{HTML_DIR}' not writable!");
     }
     unless ( -w $in_hash{OUTPUT_ROOT} ) {
@@ -262,19 +303,6 @@ sub set_config {
     $in_hash{BACKEND} = "sqlite";
     %VSCNF_FILE       = %in_hash;
     $VSREAD           = 1;
-}
-
-################################################################
-sub set_credentials {
-
-    my $argc = @_;
-    if ( $argc < 3 ) {
-        die "set_credentials: expects 3 parameters, passed $argc !\n";
-    }
-
-    $VSCNF_FILE{"LOGIN"} = $_[0];
-    $VSCNF_FILE{"PASS"}  = $_[1];
-    $VSCNF_FILE{"HOST"}  = $_[2];
 }
 
 ####################################
@@ -351,8 +379,11 @@ sub get_statistics {
 
 ################################################################
 sub _init_ref_dbh {
-    my ( $refseq, $refleb36, $refindist, $redo ) = @_;
-    ( my $refdbfile = $refseq ) =~ s/.seq$/.db/;
+    my ( $refbase, $opts ) = @_;
+    my $refdbfile = $refbase . ".db";
+    my $refseq    = $refbase . ".seq";
+    my $refleb36  = $refbase . ".leb36";
+    my $refindist = $refbase . ".indist";
 
     # TODO Maybe first connect to a temp location, backup database
     # to that location then return handle to that location. This
@@ -375,32 +406,17 @@ sub _init_ref_dbh {
 
     # $dbh->do(q{PRAGMA journal_mode = WAL});
 
-    make_refseq_db( $dbh, $refseq, $redo );
-    load_refprofiles_db( $dbh, $refleb36, $redo );
-    set_indist( $dbh, $refindist, $redo );
-    if ( $redo && $VSREAD ) {
+    unless ( exists $opts->{skip_refseq} ) {
+        make_refseq_db( $dbh, $refseq, $opts->{redo} );
+    }
 
-# # TODO This was grafted in here. Need to make sure caller tries to catch this to set error.
-#         print STDERR "\n\n(updating database with dist/indist info)...";
-#         my $installdir = "$FindBin::RealBin";
-#         my $exstring   = "$installdir/update_indist.pl";
-#         my @exargs     = (
-#             qw(-r -k5 -t50 -d),
-#             $VSCNF_FILE{DBSUFFIX}, "-u",
-#             $ENV{HOME} . "/" . $VSCNF_FILE{DBSUFFIX} . "."
-#         );
-#         system( $exstring, @exargs );
-#         if ( $? == -1 ) {
-#             die "Error adding indistinguishable information: $!\n";
-#         }
-#         else {
-#             my $rc = ( $? >> 8 );
-#             if ( 0 != $rc ) {
-#                 die
-#                     "Error: updating database with dist/undist info failed with exit status $rc";
-#             }
-#         }
-# Always set redo flag back to 0 when done redoing
+    load_refprofiles_db( $dbh, $refleb36, $opts->{redo} );
+
+    if ( -e $refindist ) {
+        set_indist( $dbh, $refindist, $opts->{redo} );
+    }
+
+    if ( $opts->{redo} && $VSREAD ) {
         $VSCNF_FILE{REDO_REFDB} = 0;
         print_config( $VSCNF_FILE{CONF_DIR} );
     }
@@ -412,12 +428,12 @@ sub _init_ref_dbh {
 }
 ################################################################
 sub get_ref_dbh {
-    unless ( @_ == 4 ) {
-        croak "Error: expecting 4 arguments, got " . @_ * 1 . "\n";
+    unless ( @_ >= 1 ) {
+        croak "Error: expecting at least 1 argument, got none.\n";
     }
-    my ( $refseq, $refleb36, $refindist, $redo ) = @_;
+    my ( $refbase, $opts ) = @_;
     ( $ENV{DEBUG} ) && warn "get_ref_dbh arguments: " . Dumper( \@_ ) . "\n";
-    my $dbh = _init_ref_dbh( $refseq, $refleb36, $refindist, $redo );
+    my $dbh = _init_ref_dbh( $refbase, $opts );
 
     return $dbh;
 }
@@ -600,15 +616,12 @@ sub get_dbh {
 
     # Attach reference set database
     if ( exists $opts->{userefdb} && $opts->{userefdb} ) {
-        my $refdbfile = $VSCNF_FILE{REFERENCE_DB};
+        my $refdbfile = $VSCNF_FILE{REFERENCE} . ".db";
 
         # First initialize the reference DB, if needed
         # Don't save the returned dbh
-        _init_ref_dbh(
-            @VSCNF_FILE{
-                qw(REFERENCE_SEQ REFERENCE_FILE REFERENCE_INDIST REDO_REFDB)
-            }
-        );
+        _init_ref_dbh( $VSCNF_FILE{REFERENCE},
+            { redo => $VSCNF_FILE{REDO_REFDB} } );
         ( $ENV{DEBUG} )
             && warn "Connecting to refseq db at $refdbfile\n";
         $dbh->do(qq{ATTACH DATABASE "$refdbfile" AS refdb})
@@ -656,20 +669,25 @@ sub make_refseq_db {
     my $fasta_ref_reps_arraysize_q = q{CREATE INDEX IF NOT EXISTS
         "idx_fasta_ref_reps_arraysize" ON
         "fasta_ref_reps"(lastindex - firstindex + 1)};
-    $dbh->do($create_fasta_ref_reps_q);
-    $dbh->do($fasta_ref_reps_index_q);
-    $dbh->do($fasta_ref_reps_patsize_q);
-    $dbh->do($fasta_ref_reps_arraysize_q);
+
+    # $dbh->do($create_fasta_ref_reps_q);
+    # $dbh->do($fasta_ref_reps_index_q);
+    # $dbh->do($fasta_ref_reps_patsize_q);
+    # $dbh->do($fasta_ref_reps_arraysize_q);
 
     # If the table does not exist, or we are forcing a redo, load
     # the profiles into the db.
-    my ($num_rows)
-        = $dbh->selectrow_array(q{SELECT COUNT(*) FROM fasta_ref_reps});
+    my $tab_exists_sth
+        = $dbh->table_info( undef, "main", "fasta^_ref^_reps", "TABLE",
+        { Escape => '^' } );
+
+    my $tab_exists
+        = scalar @{ $tab_exists_sth->fetchall_arrayref( undef, 1 ) };
 
     ( $ENV{DEBUG} )
-        && warn "Rows in fasta_ref_reps == $num_rows, redo set to $redo\n";
+        && warn "Does ref table exist?: $tab_exists. Redo set to: $redo\n";
 
-    if ( $num_rows == 0 || $redo ) {
+    if ( $tab_exists == 0 || $redo ) {
         warn "Creating reference sequence database...\n";
         $dbh->do(q{DROP TABLE IF EXISTS fasta_ref_reps});
         $dbh->do($create_fasta_ref_reps_q);
@@ -689,8 +707,6 @@ sub make_refseq_db {
             . $refseq
             . ": $!.\nStopped at";
 
-        $dbh->begin_work;
-
         # Skip header
         <$refset>;
 
@@ -709,6 +725,7 @@ sub make_refseq_db {
         close $refset;
 
         # Create a virtual tables for the inputs
+        $dbh->begin_work;
         $dbh->do(
             q{CREATE VIRTUAL TABLE temp.seqtab
             USING perl(rid integer,
@@ -723,6 +740,7 @@ sub make_refseq_db {
                 conserved float,
             arrayrefs="vutil::seq_rows")}
         );
+        $dbh->commit;
 
         my $cols = join(
             ",", qw(rid
@@ -737,6 +755,7 @@ sub make_refseq_db {
                 conserved)
         );
 
+        $dbh->begin_work;
         my $num_rows = $dbh->do(
             qq{INSERT INTO fasta_ref_reps ($cols)
             SELECT * FROM temp.seqtab}
@@ -802,9 +821,10 @@ sub load_refprofiles_db {
     my ($num_rows)
         = $dbh->selectrow_array(q{SELECT COUNT(*) FROM ref_profiles});
     if ( $num_rows == 0 || $redo ) {
-        $dbh->begin_work();
+        $dbh->begin_work;
         $dbh->do(q{DROP TABLE IF EXISTS `ref_profiles`});
         $dbh->do($create_ref_profiles_q);
+        $dbh->commit;
 
         # Read in ref leb36 file and create a virtual table out of it
         try {
@@ -839,6 +859,7 @@ sub load_refprofiles_db {
 
         close $refleb36_fh;
 
+        $dbh->begin_work;
         $dbh->do(
             q{CREATE VIRTUAL TABLE temp.leb36tab
             USING perl(rid integer,
@@ -852,6 +873,7 @@ sub load_refprofiles_db {
                 nT integer,
             arrayrefs="vutil::leb36_rows")}
         );
+        $dbh->commit;
 
         my $cols = join(
             ",", qw(rid
@@ -866,6 +888,7 @@ sub load_refprofiles_db {
         );
 
         # Insert all ref TRs from refleb36 file
+        $dbh->begin_work;
         my $num_rows = $dbh->do(
             qq{INSERT INTO ref_profiles ($cols)
             SELECT * FROM temp.leb36tab}
@@ -1096,8 +1119,17 @@ sub write_sqlite {
 
     my $installdir = "$FindBin::RealBin";
     ( $ENV{DEBUG} ) && warn "Creating SQLite database...\n";
-    my $exestring
-        = "sqlite3 $VSCNF_FILE{OUTPUT_ROOT}/vntr_$VSCNF_FILE{DBSUFFIX}/$VSCNF_FILE{DBSUFFIX}.db < $installdir/sqlite_schema.sql";
+
+    my $dbfile
+        = "$VSCNF_FILE{OUTPUT_ROOT}/vntr_$VSCNF_FILE{DBSUFFIX}/$VSCNF_FILE{DBSUFFIX}.db";
+
+# if ( -e $dbfile && !( exists $VSCNF_FILE{CLEAN} ) ) {
+#     die
+#         "Error: run database exists. Running step 0 is potentially destructive! "
+#         . "Exiting...\n(To override use option '--clean')\n";
+# }
+# ( exists $VSCNF_FILE{CLEAN} ) && unlink $dbfile;
+    my $exestring = "sqlite3 $dbfile < $installdir/sqlite_schema.sql";
     warn "Executing: $exestring\n";
     system($exestring);
 }
@@ -1118,323 +1150,6 @@ sub sqlite_install_RC_function {
             return $seq;
         }
     );
-}
-
-################################################################
-
-sub write_mysql {
-    unless ($VSREAD) {
-        carp
-            "Error: must call `get_config(dbsuffix, config_loc)` before this function.\n";
-    }
-
-    open my $sql_file, ">",
-        "$VSCNF_FILE{TMPDIR}/VNTRPIPE_$VSCNF_FILE{DBNAME}.sql"
-        or die $!;
-
-    print $sql_file
-        "CREATE database IF NOT EXISTS VNTRPIPE_$VSCNF_FILE{DBNAME};\n\n";
-    print $sql_file "USE VNTRPIPE_$VSCNF_FILE{DBNAME};\n\n";
-
-    print $sql_file <<TEST;
-
-drop table IF EXISTS vntr_support;
-CREATE TABLE
-vntr_support (
-`refid` INT(11) NOT NULL,
-`copies` INT(11) NOT NULL,
-`sameasref` INT(11) NOT NULL,
-`support` INT(11) NOT NULL DEFAULT 0,
-`copiesfloat` FLOAT(11) NOT NULL,
-`representative` INT(11) NULL,
- PRIMARY KEY (refid,copies)
-) ENGINE=INNODB;
-CREATE INDEX read_index ON vntr_support (representative);
-
-drop table IF EXISTS fasta_ref_reps;
-CREATE TABLE
-fasta_ref_reps (
-`rid` INT(11) NOT NULL PRIMARY KEY, 
-
-`firstindex` INT(11) NOT NULL, 
-`lastindex` INT(11) NOT NULL, 
-`copynum` FLOAT(11) NOT NULL, 
-`head` VARCHAR(100) NULL,
-
-`flankleft` TEXT(8000) NULL,
-`pattern` TEXT(5000) NOT NULL,
-`sequence` TEXT NOT NULL,
-`flankright` TEXT(8000) NULL,
-`conserved` FLOAT(11) NULL,
-`comment` VARCHAR(500) NULL,
-`flank_disting` INT(11) NULL,
-`entropy` FLOAT(11) NOT NULL, 
-`has_support` INT(11) NULL,
-`span1` INT(11) NULL,
-`spanN` INT(11) NULL,
-`is_singleton` INT(11) NOT NULL DEFAULT 0,
-`is_dist` INT(11) NOT NULL DEFAULT 0,
-`is_indist` INT(11) NOT NULL DEFAULT 0,
-`homez_same` INT(11) NULL,
-`homez_diff` INT(11) NULL,
-`hetez_same` INT(11) NULL,
-`hetez_diff` INT(11) NULL,
-`hetez_multi` INT(11) NULL,
-`support_vntr` INT(11) NULL,
-`support_vntr_span1` INT(11) NULL,
-`alleles_sup` INT(11) NULL,
-`allele_sup_same_as_ref` INT(11) NULL,
-INDEX(`head`)
-) ENGINE=INNODB;
-CREATE UNIQUE INDEX comment_index on fasta_ref_reps(rid,comment(100));
-
-
-drop table IF EXISTS fasta_reads;
-CREATE TABLE 
-fasta_reads (
-`sid` BIGINT(11) UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, 
-`head` CHAR(100) NOT NULL,
-`dna` VARCHAR(8000) NULL,
-`qual` VARCHAR(8000) NULL,
- UNIQUE (`head`)
-) ENGINE=INNODB;
-
-
-drop table IF EXISTS replnk;
-CREATE TABLE 
-replnk (
-`rid` INT(11) NOT NULL PRIMARY KEY, 
-`sid` BIGINT(11) UNSIGNED NOT NULL,
-`first` INT(11) NOT NULL,
-`last` INT(11) NOT NULL,
-`patsize` INT(11) NOT NULL,
-`copynum`  FLOAT(11) NOT NULL,
-`pattern` TEXT(5000) NOT NULL,
-`profile` TEXT(8000) NULL,
-`profilerc` TEXT(8000) NULL,
-`profsize` INT(11) NULL,
- INDEX(`sid`)
-) ENGINE=INNODB;
-
-drop table IF EXISTS clusters;
-CREATE TABLE
-clusters (
-`cid` INT(11) NOT NULL PRIMARY KEY,
-`minpat` INT(11) NOT NULL,
-`maxpat` INT(11) NOT NULL,
-
-`refs_flank_undist` INT(11) NULL,
-`refs_flank_dist` INT(11) NULL,
-`refs_flank_undist_l` INT(11) NULL,
-`refs_flank_undist_r` INT(11) NULL,
-`refs_flank_undist_lr` INT(11) NULL,
-
-`repeatcount` INT(11) NOT NULL,
-`refcount` INT(11) NOT NULL,
-`variability` INT(11) NOT NULL DEFAULT 0,
-`assemblyreq` INT(11) NULL,
-`profdensity` FLOAT(11) NULL,
-`flankdensity` FLOAT(11) NULL,
-`mcpattern` VARCHAR(5000) NULL,
-`aveentropy` FLOAT(11) NULL
-) ENGINE=INNODB;
-
-
-drop table IF EXISTS clusterlnk;
-CREATE TABLE
-clusterlnk (
-`clusterid` INT(11) NOT NULL,
-`repeatid` INT(11) NOT NULL,
-`direction` CHAR(1) NOT NULL,
-`reserved` INT(11) NOT NULL,
-`reserved2` INT(11) NOT NULL,
- PRIMARY KEY (clusterid,repeatid)
-) ENGINE=INNODB;
-CREATE UNIQUE INDEX repeat_index on clusterlnk(repeatid);
-
-
-drop table IF EXISTS map;
-CREATE TABLE
-map (
-`refid` INT(11) NOT NULL,
-`readid` INT(11) NOT NULL,
-`reserved` INT(11) NOT NULL,
-`reserved2` INT(11) NOT NULL,
-`bbb` tinyint(3) NOT NULL DEFAULT 0,
- PRIMARY KEY (refid,readid)
-) ENGINE=INNODB;
-CREATE INDEX read_index ON map (readid);
-
-drop table IF EXISTS rank;
-CREATE TABLE
-rank (
-`refid` INT(11) NOT NULL,
-`readid` INT(11) NOT NULL,
-`score` FLOAT(11) NULL,
-`ties` smallint(11) NOT NULL DEFAULT 0,
-`refdir` CHAR(1) NOT NULL,
- PRIMARY KEY (refid,readid)
-) ENGINE=INNODB;
-
-drop table IF EXISTS rankflank;
-CREATE TABLE
-rankflank (
-`refid` INT(11) NOT NULL,
-`readid` INT(11) NOT NULL,
-`score` FLOAT(11) NULL,
-`ties` smallint(11) NOT NULL DEFAULT 0,
- PRIMARY KEY (refid,readid)
-) ENGINE=INNODB;
-
-
-drop table IF EXISTS flank_connection;
-CREATE TABLE `flank_connection` (
-  `refid` int(11) NOT NULL,
-  `clusterid` int(11) NOT NULL,
-  `fcomponentsize` int(11) NOT NULL,
-  `fcomponentid` int(11) NOT NULL,
-  `paramsetid` int(11) NOT NULL,
-  PRIMARY KEY  (`refid`,`paramsetid`),
-  INDEX `paramsetid` (`paramsetid`)
-) ENGINE=InnoDB;
-
-
-drop table IF EXISTS flank_params;
-CREATE TABLE `flank_params` (
-  `paramsetid` int(11) NOT NULL auto_increment,
-  `flength` int(11) NOT NULL,
-  `ferrors` int(11) NOT NULL,
-  PRIMARY KEY  (`paramsetid`)
-) ENGINE=InnoDB;
-
-drop table IF EXISTS stats;
-CREATE TABLE
-stats (
-`id` INT(11) NOT NULL PRIMARY KEY,
-
-`MAP_ROOT` VARCHAR(500) NULL,
-
-`PARAM_TRF` VARCHAR(500) NULL,
-`PARAM_PROCLU` VARCHAR(500) NULL,
-
-`FOLDER_FASTA` VARCHAR(500) NULL,
-`FOLDER_PROFILES` VARCHAR(500) NULL,
-`FOLDER_PROFILES_CLEAN` VARCHAR(500) NULL,
-`FOLDER_REFERENCE` VARCHAR(500) NULL,
-
-`FILE_REFERENCE_LEB` VARCHAR(500) NULL,
-`FILE_REFERENCE_SEQ` VARCHAR(500) NULL,
-
-`NUMBER_READS` BIGINT NULL,
-`NUMBER_TRS_IN_READS` BIGINT NULL,
-
-`NUMBER_TRS_IN_READS_GE7` BIGINT NULL,
-`NUMBER_READS_WITHTRS` BIGINT NULL,
-`NUMBER_READS_WITHTRS_GE7` BIGINT NULL,
-`NUMBER_READS_WITHTRS_GE7_AFTER_REDUND` BIGINT NULL,
-
-`NUMBER_TRS_IN_READS_AFTER_REDUND` BIGINT NULL,
-`NUMBER_REF_TRS` BIGINT NULL,
-`NUMBER_REFS_TRS_AFTER_REDUND` BIGINT NULL,
-
-`CLUST_NUMBER_OF_PROCLU_CLUSTERS` BIGINT NULL,
-`CLUST_NUMBER_OF_PROCLU_CLUSTERS_BEFORE_REJOIN` BIGINT NULL,
-`CLUST_NUMBER_OF_EXACTPAT_CLUSTERS` BIGINT NULL,
-`CLUST_NUMBER_OF_REF_REPS_IN_CLUSTERS` BIGINT NULL,
-`CLUST_NUMBER_OF_READ_REPS_IN_CLUSTERS` BIGINT NULL,
-
-
-`CLUST_LARGEST_NUMBER_OF_TRS_IN_PROCLU_CLUSTER` BIGINT NULL,
-`CLUST_LARGEST_NUMBER_OF_REFS_IN_PROCLU_CLUSTER` BIGINT NULL,
-`CLUST_LARGEST_PATRANGE_IN_PROCLU_CLUSTER` BIGINT NULL,
-`CLUST_LARGEST_NUMBER_OF_TRS_IN_EXACTPAT_CLUSTER` BIGINT NULL,
-`CLUST_LARGEST_NUMBER_OF_REFS_IN_EXACTPAT_CLUSTER` BIGINT NULL,
-
-`CLUST_NUMBER_OF_REFS_WITH_PREDICTED_VNTR` BIGINT NULL,
-`CLUST_NUMBER_OF_CLUSTERS_WITH_PREDICTED_VNTR` BIGINT NULL,
-`NUMBER_REFS_VNTR_SPAN_N` BIGINT NULL,
-
-`NUMBER_REFS_SINGLE_REF_CLUSTER` BIGINT NULL,
-`NUMBER_REFS_SINGLE_REF_CLUSTER_WITH_READS_MAPPED` BIGINT NULL,
-`NUMBER_REFS_SINGLE_REF_CLUSTER_WITH_NO_READS_MAPPED` BIGINT NULL,
-
-`NUMBER_MAPPED` BIGINT NULL,
-`NUMBER_RANK` BIGINT NULL,
-`NUMBER_RANKFLANK` BIGINT NULL,
-`INTERSECT_RANK_AND_RANKFLANK` BIGINT NULL,
-`INTERSECT_RANK_AND_RANKFLANK_BEFORE_PCR` BIGINT NULL,
-
-`BBB_WITH_MAP_DUPS` BIGINT NULL,
-`BBB` BIGINT NULL,
-
-`RANK_EDGES_OVERCUTOFF` BIGINT NULL,
-`RANK_REMOVED_SAMEREF` BIGINT NULL,
-`RANK_REMOVED_SAMESEQ` BIGINT NULL,
-`RANK_REMOVED_PCRDUP` BIGINT NULL,
-
-`RANKFLANK_EDGES_INSERTED` BIGINT NULL,
-`RANKFLANK_REMOVED_SAMEREF` BIGINT NULL,
-`RANKFLANK_REMOVED_SAMESEQ` BIGINT NULL,
-`RANKFLANK_REMOVED_PCRDUP` BIGINT NULL,
-
-
-`TIME_MYSQLCREATE` INT(11) NULL,
-`TIME_TRF` INT(11) NULL,
-`TIME_RENUMB` INT(11) NULL,
-`TIME_REDUND` INT(11) NULL,
-`TIME_PROCLU` INT(11) NULL,
-`TIME_JOINCLUST` INT(11) NULL,
-`TIME_DB_INSERT_REFS` INT(11) NULL,
-`TIME_DB_INSERT_READS` INT(11) NULL,
-`TIME_WRITE_FLANKS` INT(11) NULL,
-`TIME_MAP_FLANKS` INT(11) NULL,
-`TIME_MAP_REFFLANKS` INT(11) NULL,
-`TIME_MAP_INSERT` INT(11) NULL,
-`TIME_EDGES` INT(11) NULL,
-`TIME_INDEX_PCR` INT(11) NULL,
-`TIME_PCR_DUP` INT(11) NULL,
-`TIME_MAP_DUP` INT(11) NULL,
-`TIME_VNTR_PREDICT` INT(11) NULL,
-`TIME_ASSEMBLYREQ` INT(11) NULL,
-`TIME_REPORTS` INT(11) NULL,
-
-`DATE_MYSQLCREATE` DATETIME NULL,
-`DATE_TRF` DATETIME NULL,
-`DATE_RENUMB` DATETIME NULL,
-`DATE_REDUND` DATETIME NULL,
-`DATE_PROCLU` DATETIME NULL,
-`DATE_JOINCLUST` DATETIME NULL,
-`DATE_DB_INSERT_REFS` DATETIME NULL,
-`DATE_DB_INSERT_READS` DATETIME NULL,
-`DATE_WRITE_FLANKS` DATETIME NULL,
-`DATE_MAP_FLANKS` DATETIME NULL,
-`DATE_MAP_REFFLANKS` DATETIME NULL,
-`DATE_MAP_INSERT` DATETIME NULL,
-`DATE_EDGES` DATETIME NULL,
-`DATE_INDEX_PCR` DATETIME NULL,
-`DATE_PCR_DUP` DATETIME NULL,
-`DATE_MAP_DUP` DATETIME NULL,
-`DATE_VNTR_PREDICT` DATETIME NULL,
-`DATE_ASSEMBLYREQ` DATETIME NULL,
-`DATE_REPORTS` DATETIME NULL,
-
-`ERROR_STEP` INT(11) NOT NULL DEFAULT 0,
-`ERROR_DESC` VARCHAR(500) NOT NULL DEFAULT '',
-`ERROR_CODE` INT(11) NOT NULL DEFAULT 0,
-
-`N_MIN_SUPPORT` INT(11) NOT NULL DEFAULT 0,
-`MIN_FLANK_REQUIRED` INT(11) NOT NULL DEFAULT 0,
-`MAX_FLANK_CONSIDERED` INT(11) NOT NULL DEFAULT 0
-);
-
-INSERT INTO stats (id) VALUES(1);
-
-
-TEST
-
-    close($sql_file);
-
-    return 0;
 }
 
 ################################################################
@@ -1494,10 +1209,6 @@ sub print_config {
     if ( open( my $config_fh, ">", $config_file ) ) {
 
         print $config_fh <<CNF;
-# COPY THIS FILE TO A DIFFERENT LOCATION AND SET ALL VARIABLES. 
-# DO NOT FORGET TO CHMOD THIS FILE TO PREVENT OTHER PEOPLE ON 
-# THE SYSTEM FROM LEARNING YOUR MYSQL CREDENTIALS.
-
 # Database backend
 BACKEND=$VSCNF_FILE{"BACKEND"}
 
@@ -1540,14 +1251,13 @@ STRIP_454_KEYTAGS=$VSCNF_FILE{"STRIP_454_KEYTAGS"}
 # eg, 1 - yes
 IS_PAIRED_READS=$VSCNF_FILE{"IS_PAIRED_READS"}
 
+# Sample ploidy. Default is 2. For haploid, set to 1.
+PLOIDY=$VSCNF_FILE{"PLOIDY"}
+
 # Rebuild reference database
 # eg, 0 = no 
 # eg, 1 - yes
 REDO_REFDB=$VSCNF_FILE{"REDO_REFDB"}
-
-# html directory (must be writable and executable!)
-# eg, /var/www/html/vntrview
-HTML_DIR=$VSCNF_FILE{"HTML_DIR"}
 
 # input data directory 
 # (plain or gzipped fasta/fastq files)
@@ -1567,15 +1277,9 @@ TMPDIR=$VSCNF_FILE{"TMPDIR"}
 # (leb36 file, sequence plus flank data file, indistinguishable references file) 
 # files must be in install directory
 
-# eg, reference.leb36
-REFERENCE_FILE=$VSCNF_FILE{"REFERENCE_FILE"} 
-
-# eg, reference.seq
-REFERENCE_SEQ=$VSCNF_FILE{"REFERENCE_SEQ"} 
-
-# this file can be generated bu setting reference_indist_produce to 1
-# eg, reference.indist 
-REFERENCE_INDIST=$VSCNF_FILE{"REFERENCE_INDIST"}
+# eg, hg19. This is the base name for files describing
+# reference TR loci (.db, .seq, .leb36, and .indist)
+REFERENCE=$VSCNF_FILE{"REFERENCE"}
 
 # generate a file of indistinguishable references, 
 # necessary only if a file is not already available for the reference set
