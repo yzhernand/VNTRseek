@@ -10,12 +10,12 @@ use FindBin;
 use File::Basename;
 use Try::Tiny;
 use lib "$FindBin::RealBin/lib";
-require "vutil.pm";
 use ProcInputReads
     qw(get_reader init_bam formats_regexs compressed_formats_regexs set_install_dir);
 set_install_dir("$FindBin::RealBin");
 
-use vutil qw(get_config get_dbh set_statistics get_trunc_query);
+use vutil
+    qw(get_config get_dbh set_statistics get_trunc_query gen_exec_array_cb);
 
 my $RECORDS_PER_INFILE_INSERT = 100000;
 
@@ -47,7 +47,6 @@ my $IS_PAIRED_READS = $ARGV[9];
 
 # set these mysql credentials in vs.cnf (in installation directory)
 my %run_conf = get_config( $DBSUFFIX, $run_dir );
-my ( $LOGIN, $PASS, $HOST ) = @run_conf{qw(LOGIN PASS HOST)};
 
 my $totalReads = 0;
 
@@ -106,50 +105,23 @@ print STDERR
 # clear  tables
 print STDERR "\ntruncating database tables\n\n";
 my ( $trunc_query, $sth );
+$dbh->begin_work;
 $trunc_query = get_trunc_query( $run_conf{BACKEND}, "replnk" );
-$sth = $dbh->do($trunc_query)
-    or die "Couldn't do statement: " . $dbh->errstr;
+$dbh->commit;
+$sth = $dbh->do($trunc_query);
+$dbh->begin_work;
 $trunc_query = get_trunc_query( $run_conf{BACKEND}, "fasta_reads" );
-$sth = $dbh->do($trunc_query)
-    or die "Couldn't do statement: " . $dbh->errstr;
+$sth = $dbh->do($trunc_query);
+$dbh->commit;
 
-if ( $run_conf{BACKEND} eq "mysql" ) {
-    $sth = $dbh->do('ALTER TABLE replnk DISABLE KEYS;')
-        or die "Couldn't do statement: " . $dbh->errstr;
+$dbh->do("PRAGMA foreign_keys = OFF");
 
-    $sth = $dbh->do('ALTER TABLE fasta_reads DISABLE KEYS;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-
-    $sth = $dbh->do('SET AUTOCOMMIT = 0;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-
-    $sth = $dbh->do('SET FOREIGN_KEY_CHECKS = 0;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-
-    $sth = $dbh->do('SET UNIQUE_CHECKS = 0;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-
-    # now only insert the sequences that we saw in clusters
-    #my $sth0 = $dbh->prepare('INSERT INTO fasta_reads (head) VALUES (?)')
-    #                or die "Couldn't prepare statement: " . $dbh->errstr;
-
-#$sth = $dbh->prepare('INSERT INTO replnk(rid,sid,first,last,copynum,patsize,pattern,profile,profilerc,profsize) VALUES (?,?,?,?,?,?,?,?,?,?)')
-#                or die "Couldn't prepare statement: " . $dbh->errstr;
-    $sth
-        = $dbh->prepare(
-        "LOAD DATA LOCAL INFILE '$TEMPDIR/replnk_$DBSUFFIX.txt' INTO TABLE replnk FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';"
-        ) or die "Couldn't prepare statement: " . $dbh->errstr;
-}
-elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-    $dbh->do("PRAGMA foreign_keys = OFF");
-    $dbh->{AutoCommit} = 0;
-
-    # Insert all ref TRs from replnk file
-    $sth
-        = $dbh->prepare(
-        qq{INSERT INTO replnk(rid,sid,first,last,patsize,copynum,pattern,profile,profilerc,profsize) VALUES (?,?,?,?,?,?,?,?,?,?)}
-        );
-}
+# Insert all ref TRs from replnk file
+$sth = $dbh->prepare(
+    qq{INSERT INTO
+    replnk(rid,sid,first,last,patsize,copynum,pattern,profile,profilerc,profsize)
+    VALUES (?,?,?,?,?,?,?,?,?,?)}
+);
 
 $timestart = time();
 print STDERR
@@ -235,35 +207,43 @@ foreach my $ifile (@indexfiles) {
 
 #$sth->execute($id,$HEADHASH{"$head"},$first,$last,$copy,$pat,$pattern,$profile,$profilerc,$proflen) or die "Cannot execute: " . $sth->errstr();
 
-                if ( $run_conf{BACKEND} eq "mysql" ) {
-                    push @replnk_rows,
-                        join( ",",
-                        $id,      $HEADHASH{"$head"}, $first,
-                        $last,    $pat,               $copy,
-                        $pattern, $profile,           $profilerc,
-                        $proflen );
+                push @replnk_rows,
+                    [
+                    $id,      $HEADHASH{"$head"}, $first,
+                    $last,    $pat,               $copy,
+                    $pattern, $profile,           $profilerc,
+                    $proflen
+                    ];
 
-                    if ( $processed % $RECORDS_PER_INFILE_INSERT == 0 ) {
-                        open( my $TEMPFILE, ">",
-                            "$TEMPDIR/replnk_$DBSUFFIX.txt" )
-                            or die $!;
-                        for my $row (@replnk_rows) {
-                            say $TEMPFILE $row;
+                if ( $processed % $RECORDS_PER_INFILE_INSERT == 0 ) {
+                    $dbh->begin_work;
+                    my $cb     = gen_exec_array_cb( \@replnk_rows );
+                    my $tuples = $sth->execute_array(
+                        {   ArrayTupleFetch  => $cb,
+                            ArrayTupleStatus => \my @tuple_status
                         }
-                        close($TEMPFILE);
-                        $count = $sth->execute();
-                        $inserted += $count;
-                        @replnk_rows = ();
-                    }
-                }
-                elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-                    $sth->execute(
-                        $id,      $HEADHASH{"$head"}, $first,
-                        $last,    $pat,               $copy,
-                        $pattern, $profile,           $profilerc,
-                        $proflen
                     );
-                    $inserted++;
+                    if ($tuples) {
+                        @replnk_rows = ();
+                        $inserted += $tuples;
+                        $dbh->commit;
+                    }
+                    else {
+                        for my $tuple ( 0 .. @replnk_rows - 1 ) {
+                            my $status = $tuple_status[$tuple];
+                            $status = [ 0, "Skipped" ]
+                                unless defined $status;
+                            next unless ref $status;
+                            printf "Failed to insert row %s. Status %s\n",
+                                join( ",", $replnk_rows[$tuple] ),
+                                $status->[1];
+                        }
+                        eval { $dbh->rollback; };
+                        if ($@) {
+                            die "Database rollback failed.\n";
+                        }
+                        die "Error inserting read TRs.\n";
+                    }
                 }
 
             }
@@ -283,20 +263,36 @@ foreach my $ifile (@indexfiles) {
 }
 
 # Remaining rows
-if ( ( $run_conf{BACKEND} eq "mysql" ) && @replnk_rows ) {
-    open( my $TEMPFILE, ">", "$TEMPDIR/replnk_$DBSUFFIX.txt" ) or die $!;
-    for my $row (@replnk_rows) {
-        say $TEMPFILE $row;
+if (@replnk_rows) {
+    my $cb = gen_exec_array_cb( \@replnk_rows );
+    $dbh->begin_work;
+    my $tuples = $sth->execute_array(
+        {   ArrayTupleFetch  => $cb,
+            ArrayTupleStatus => \my @tuple_status
+        }
+    );
+    if ($tuples) {
+        @replnk_rows = ();
+        $inserted += $tuples;
+        $dbh->commit;
     }
-    close($TEMPFILE);
-    $count = $sth->execute();
-    $inserted += $count;
-    @replnk_rows = ();
+    else {
+        for my $tuple ( 0 .. @replnk_rows - 1 ) {
+            my $status = $tuple_status[$tuple];
+            $status = [ 0, "Skipped" ]
+                unless defined $status;
+            next unless ref $status;
+            printf "Failed to insert row %s. Status %s\n",
+                join( ",", $replnk_rows[$tuple] ),
+                $status->[1];
+        }
+        eval { $dbh->rollback; };
+        if ($@) {
+            die "Database rollback failed.\n";
+        }
+        die "Error inserting read TRs.\n";
+    }
 }
-
-# $sth->finish;
-$dbh->commit;
-unlink("$TEMPDIR/replnk_$DBSUFFIX.txt");
 
 if ( $inserted == keys(%RHASH) ) {
     print STDERR "\n\n..."
@@ -365,18 +361,10 @@ if ( $input_format eq "bam" ) {
 
 my $files_to_process = @filenames;
 
-if ( $run_conf{BACKEND} eq "mysql" ) {
-    $sth
-        = $dbh->prepare(
-        "LOAD DATA LOCAL INFILE '$TEMPDIR/fastareads_$DBSUFFIX.txt' INTO TABLE fasta_reads FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\n';"
-        ) or die "Couldn't prepare statement: " . $dbh->errstr;
-}
-elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-    $sth
-        = $dbh->prepare(
-        qq{INSERT INTO fasta_reads (sid, head, dna) VALUES(?, ?, ?)})
-        or die "Couldn't prepare statement: " . $dbh->errstr;
-}
+$sth
+    = $dbh->prepare(
+    qq{INSERT INTO fasta_reads (sid, head, dna) VALUES(?, ?, ?)})
+    or die "Couldn't prepare statement: " . $dbh->errstr;
 
 my $headstr       = "";
 my $dnastr        = "";
@@ -406,43 +394,52 @@ while ( $files_processed < $files_to_process ) {
                     . $headstr . ")\n";
             }
 
-            if ( $run_conf{BACKEND} eq "mysql" ) {
-                push @fasta_reads_rows,
-                    join( "\t", $HEADHASH{"$headstr"}, "$headstr",
-                    "$dnastr" );
+            push @fasta_reads_rows,
+                [ $HEADHASH{"$headstr"}, "$headstr", "$dnastr" ];
 
-                if ( $processed % $RECORDS_PER_INFILE_INSERT == 0 ) {
-                    open( my $TEMPFILE, ">",
-                        "$TEMPDIR/fastareads_$DBSUFFIX.txt" )
-                        or die $!;
-                    for my $row (@fasta_reads_rows) {
-                        say $TEMPFILE $row;
+            if ( $processed % $RECORDS_PER_INFILE_INSERT == 0 ) {
+                my $cb = gen_exec_array_cb( \@fasta_reads_rows );
+                $dbh->begin_work;
+                my $tuples = $sth->execute_array(
+                    {   ArrayTupleFetch  => $cb,
+                        ArrayTupleStatus => \my @tuple_status
                     }
-                    close($TEMPFILE);
-                    $count = $sth->execute();
-                    $inserted += $count;
+                );
+                if ($tuples) {
                     @fasta_reads_rows = ();
+                    $inserted += $tuples;
+                    $dbh->commit;
                 }
-            }
-            elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-                try {
-                    $sth->execute( $HEADHASH{"$headstr"}, "$headstr", "$dnastr" );
-                    $inserted++;
-                }
-                catch {
-                    if (/UNIQUE constraint failed/) {
-                        warn "A read header was encountered more than once. Problem in input data?\n";
-                        warn "Duplicated header: $headstr\n";
+                else {
+                    for my $tuple ( 0 .. @fasta_reads_rows - 1 ) {
+                        my $status = $tuple_status[$tuple];
+                        $status = [ 0, "Skipped" ]
+                            unless defined $status;
+                        next unless ref $status;
+                        printf "Failed to insert row %s. Status %s\n",
+                            join( ",", $fasta_reads_rows[$tuple] ),
+                            $status->[1];
                     }
-                    else {
-                        # Don't know what else might go wrong
-                        $dbh->rollback;
-                        die "An error occurred when inserting read sequences: $_";
+                    eval { $dbh->rollback; };
+                    if ($@) {
+                        die "Database rollback failed.\n";
                     }
-                    $dbh->rollback;
-                }
-            }
+                    die "Error inserting reads.\n";
 
+# if (/UNIQUE constraint failed/) {
+#     warn
+#         "A read header was encountered more than once. Problem in input data?\n";
+#     warn "Duplicated header: $headstr\n";
+# }
+# else {
+#     # Don't know what else might go wrong
+#     $dbh->rollback;
+#     die
+#         "An error occurred when inserting read sequences: $_";
+# }
+# $dbh->rollback;
+                }
+            }
         }
     }
     $files_processed++;
@@ -450,42 +447,39 @@ while ( $files_processed < $files_to_process ) {
 }
 
 # cleanup
-if ( ( $run_conf{BACKEND} eq "mysql" ) && @fasta_reads_rows ) {
-    open( my $TEMPFILE, ">", "$TEMPDIR/fastareads_$DBSUFFIX.txt" ) or die $!;
-    for my $row (@fasta_reads_rows) {
-        say $TEMPFILE $row;
+if (@fasta_reads_rows) {
+    my $cb = gen_exec_array_cb( \@fasta_reads_rows );
+    $dbh->begin_work;
+    my $tuples = $sth->execute_array(
+        {   ArrayTupleFetch  => $cb,
+            ArrayTupleStatus => \my @tuple_status
+        }
+    );
+    if ($tuples) {
+        @fasta_reads_rows = ();
+        $inserted += $tuples;
+        $dbh->commit;
     }
-    close($TEMPFILE);
-    $count = $sth->execute();
-    $inserted += $count;
-    @fasta_reads_rows = ();
+    else {
+        for my $tuple ( 0 .. @fasta_reads_rows - 1 ) {
+            my $status = $tuple_status[$tuple];
+            $status = [ 0, "Skipped" ]
+                unless defined $status;
+            next unless ref $status;
+            printf "Failed to insert row %s. Status %s\n",
+                join( ",", $fasta_reads_rows[$tuple] ),
+                $status->[1];
+        }
+        eval { $dbh->rollback; };
+        if ($@) {
+            die "Database rollback failed.\n";
+        }
+        die "Error inserting reads.\n";
+    }
 }
-
-# $sth->finish;
-$dbh->commit;
-unlink("$TEMPDIR/fastareads_$DBSUFFIX.txt");
 
 # reenable indices
-if ( $run_conf{BACKEND} eq "mysql" ) {
-    $sth = $dbh->do('SET AUTOCOMMIT = 1;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-
-    $sth = $dbh->do('SET FOREIGN_KEY_CHECKS = 1;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-
-    $sth = $dbh->do('SET UNIQUE_CHECKS = 1;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-
-    $sth = $dbh->do('ALTER TABLE fasta_reads ENABLE KEYS;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-
-    $sth = $dbh->do('ALTER TABLE replnk ENABLE KEYS;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-}
-elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-    $dbh->{AutoCommit} = 1;
-    $dbh->do("PRAGMA foreign_keys = ON");
-}
+$dbh->do("PRAGMA foreign_keys = ON");
 
 # disconnect
 $dbh->disconnect();
@@ -503,12 +497,12 @@ if ( $inserted == keys(%HEADHASH) ) {
 elsif ( $inserted != $processed ) {
     die "\n\nERROR: inserted into database "
         . $inserted
-        . " entries, while gzipped fasta files have $processed matching entries. Aborting!\n\n";
+        . " entries, while input read files have $processed matching entries. Aborting!\n\n";
 }
 else {
     die "\n\nERROR: hash contains " .
         keys(%HEADHASH)
-        . " entries, while gzipped fasta files only have $inserted matching entries. Aborting!\n\n";
+        . " entries, while input read files only have $inserted matching entries. Aborting!\n\n";
 }
 
 say STDERR "\n\nProcessing complete (insert_reads.pl).";

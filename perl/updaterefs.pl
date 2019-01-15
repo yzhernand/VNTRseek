@@ -14,7 +14,9 @@ use Data::Dumper;
 use lib "$FindBin::RealBin/lib";
 
 use vutil
-    qw(get_config get_dbh get_trunc_query set_statistics get_statistics);
+    qw(get_config get_dbh get_trunc_query set_statistics get_statistics gen_exec_array_cb);
+
+my $RECORDS_PER_INFILE_INSERT = 100000;
 
 #use GD::Graph::linespoints;
 
@@ -86,16 +88,13 @@ sub write_vcf_rec {
 
     my $qual = ".";
 
-    my $filter = ( $supported_tr->{singleton} == 1 ) ? "PASS" : "SC";
+    my $filter = ( $supported_tr->{is_singleton} == 1 ) ? "PASS" : "SC";
 
     my $info = sprintf(
         "RC=%.2lf;RPL=%d;RAL=%d;RCP=%s;ALGNURL=http://%s/index.php?db=VNTRPIPE_%s&ref=-%d&isref=1&istab=1&ispng=1&rank=3",
-        $supported_tr->{copiesfloat},
-        length( $supported_tr->{consenuspat} ),
-        $supported_tr->{arlen},
-        $supported_tr->{consenuspat},
-        $HTTPSERVER,
-        $DBSUFFIX,
+        $supported_tr->{copynum}, length( $supported_tr->{consenuspat} ),
+        $supported_tr->{arlen},   $supported_tr->{consenuspat},
+        $HTTPSERVER,              $DBSUFFIX,
         $supported_tr->{rid}
     );
     my $format = "GT:SP:CGL";
@@ -103,39 +102,19 @@ sub write_vcf_rec {
     my $vcf_rec = join(
         "\t",
         $supported_tr->{head},
-        ( $supported_tr->{pos1} - 1 ),
+        ( $supported_tr->{firstindex} - 1 ),
         "td" . $supported_tr->{rid},
-        $supported_tr->{seq},
+        $supported_tr->{sequence},
         $supported_tr->{alt},
         $qual, $filter, $info, $format,
         join( ":",
-            $supported_tr->{gt_string}, $supported_tr->{read_support},
-            $supported_tr->{copy_diff} )
+            $supported_tr->{gt_string}, $supported_tr->{support},
+            $supported_tr->{cgl} )
     ) . "\n";
 
-    $supported_tr->{is_called_vntr} && print $spanN_vcffile $vcf_rec;
+    ( $supported_tr->{num_alleles} > 1 || !$supported_tr->{refdetected} )
+        && print $spanN_vcffile $vcf_rec;
     print $allwithsupport_vcffile $vcf_rec;
-}
-
-####################################
-sub update_ref_table {
-    croak "update_ref_table requires two arguments"
-        unless @_ == 2;
-    my ( $ref, $update_sth ) = @_;
-    return
-        unless exists $ref->{refid};
-
-    warn "Updating fasta_ref_reps table with: ", Dumper($ref), "\n"
-        if ( $ENV{DEBUG} );
-    $update_sth->execute(
-        $ref->{refid},        $ref->{nsupport},
-        $ref->{nsameasref},   $ref->{entr},
-        $ref->{has_support},  $ref->{span1},
-        $ref->{spanN},        $ref->{homez_same},
-        $ref->{homez_diff},   $ref->{hetez_same},
-        $ref->{hetez_diff},   $ref->{hetez_multi},
-        $ref->{support_vntr}, $ref->{support_vntr_span1}
-    );
 }
 
 #open (VCFFILE2, ">", "${latex}.span2.vcf") or die "Can't open for reading ${latex}.vcf.";
@@ -248,21 +227,22 @@ sub print_vcf {
     print $spanN_vcffile $vcf_header;
     print $allwithsupport_vcffile $vcf_header;
 
-# Get information on all VNTRs
-# "SELECT rid,alleles_sup,allele_sup_same_as_ref,is_singleton,is_dist,is_indist,firstindex,lastindex,copynum,pattern,clusterid,reserved,reserved2,head,sequence,flankleft,direction FROM fasta_ref_reps INNER JOIN clusterlnk ON fasta_ref_reps.rid=-clusterlnk.repeatid INNER JOIN clusters ON clusters.cid=clusterlnk.clusterid WHERE support_vntr>0 ORDER BY head, firstindex;"
-# $dbh->sqlite_create_function(
-#     'mkflank',
-#     2,
-#     sub {
-#         my ( $lflank, $rflank ) = @_;
-#         return substr( $lflank, -60 ) . "|" . substr( $rflank, 0, 60 );
-#     }
-# );
+    # Note: This query simply fetches all representative read TRs
+    # for all supported alleles of all supported ref TRs, including
+    # the reference allele (if supported).
+    # This means ORDER is important. If changes to the query need
+    # to be made, pay attention that the reference supporting read
+    # is be the FIRST one for each TR. Then the reads for the
+    # remaining alleles, in increasing copy number.
+    # Because the ordering of items in GROUP_CONCAT in SQLite is
+    # not predictable, I use a subquery here instead to ensure
+    # the ordering I want.
     my $get_supported_reftrs_query
-        = qq{SELECT rid, is_singleton, firstindex, arlen, copynum, pattern,
-    head, sequence, refdir, GROUP_CONCAT(copies), (MAX(sameasref) == 1) AS refdetected,
-    GROUP_CONCAT(support), GROUP_CONCAT(readarray), GROUP_CONCAT(readdir),
-    COUNT(*) AS num_alleles
+        = qq{SELECT rid, is_singleton, firstindex, arlen, copynum,
+    pattern AS consenuspat, head, sequence, refdir,
+    GROUP_CONCAT(copies) AS cgl, (MAX(sameasref) == 1) AS refdetected,
+    GROUP_CONCAT(support) AS support, GROUP_CONCAT(readarray) AS alt_seqs,
+    GROUP_CONCAT(readdir) AS readdir, COUNT(*) AS num_alleles
     FROM (SELECT reftab.rid, is_singleton, firstindex,
         (lastindex - firstindex) + 1 AS arlen, reftab.copynum, reftab.pattern,
         reftab.head, UPPER(sequence) AS sequence, c1.direction AS refdir,
@@ -282,22 +262,10 @@ sub print_vcf {
     $get_supported_reftrs_sth->execute()
         or die "Cannot execute: " . $get_supported_reftrs_sth->errstr();
 
-# rid, is_singleton, firstindex, arlen, copynum, pattern,
-# head, sequence, refdir, GROUP_CONCAT(copies), (MAX(sameasref) == 1) AS refdetected,
-# GROUP_CONCAT(support), GROUP_CONCAT(readarray), GROUP_CONCAT(readdir),
-# COUNT(*) AS num_alleles
-    my ($rid,         $singleton,   $pos1,        $arlen,
-        $copiesfloat, $consenuspat, $head,        $seq,
-        $refdir,      $copies,      $refdetected, $support,
-        $alt_seqs,    $readdir,     $num_alleles
-    );
+    # Bind columns from SELECT to hash
+    my %row;
     $get_supported_reftrs_sth->bind_columns(
-        \(  $rid,         $singleton,   $pos1,        $arlen,
-            $copiesfloat, $consenuspat, $head,        $seq,
-            $refdir,      $copies,      $refdetected, $support,
-            $alt_seqs,    $readdir,     $num_alleles
-        )
-    );
+        \( @row{ @{ $get_supported_reftrs_sth->{NAME_lc} } } ) );
 
     # Loop over all supported ref TRs
 
@@ -310,28 +278,29 @@ sub print_vcf {
         # Else, join a sequence from either 0 or 1 until the number
         # of alleles detected.
         my @gt
-            = ( $num_alleles == 1 )
-            ? ( 1 * !$refdetected ) x 2
-            : ( 1 * !$refdetected .. ( $num_alleles - 1 ) );
+            = ( $row{num_alleles} == 1 )
+            ? ( 1 * !$row{refdetected} ) x 2
+            : ( 1 * !$row{refdetected} .. ( $row{num_alleles} - 1 ) );
 
         # Split fields, and modify as needed
-        my @alt_seqs     = split /,/, nowhitespace($alt_seqs);
-        my @read_dirs    = split /,/, $readdir;
-        my @cgl          = split /,/, $copies;
-        my @read_support = split /,/, $support;
+        my @alt_seqs     = split /,/, nowhitespace( $row{alt_seqs} );
+        my @read_dirs    = split /,/, $row{readdir};
+        my @cgl          = split /,/, $row{cgl};
+        my @read_support = split /,/, $row{support};
 
         # If there is no DNA string for an allele, exit with error
         my @err_alleles = map { ( $alt_seqs[$_] eq "" ) ? ( $cgl[$_] ) : () }
             0 .. @cgl - 1;
         if (@err_alleles) {
             die
-                "Error: sequence not found in database for ref ($rid) alternate allele(s): ",
+                "Error: sequence not found in database for ref ($row{rid}) alternate allele(s): ",
                 join( ", ", @err_alleles ), "! Stopped at";
         }
 
-        if ($refdetected) {
+        if ( $row{refdetected} ) {
 
             # Shift off ref sequence if reference was detected
+            # (From note above, query result order matters)
             shift @alt_seqs;
             shift @read_dirs;
         }
@@ -350,38 +319,21 @@ sub print_vcf {
         # to list containing just ".".
         my @rev_seqs = (".");
         @rev_seqs = map {
-                  ( $read_dirs[$_] ne $refdir )
+                  ( $read_dirs[$_] ne $row{refdir} )
                 ? ( RC( $alt_seqs[$_] ) )
                 : ( $alt_seqs[$_] )
             } 0 .. @read_dirs - 1
             if (@alt_seqs);
 
-        my $supported_tr = {
+        $row{sequence}
+            = ( $row{sequence} ) ? nowhitespace( $row{sequence} ) : ".";
+        $row{support}   = join( ",", @read_support );
+        $row{cgl}       = join( ",", @cgl );
+        $row{alt}       = join( ",", @rev_seqs );
+        $row{gt_string} = join( "/", @gt );
 
-            # Start at 0 if the ref allele was supported, else start at 1
-            rid         => $rid,
-            first       => $copies,
-            arlen       => $arlen,
-            pos1        => $pos1,
-            copiesfloat => $copiesfloat,
-            singleton   => $singleton,
-            head        => $head,
-            seq         => ($seq) ? nowhitespace($seq) : ".",
-            consenuspat => $consenuspat,
-            refdetected => $refdetected,
-            is_called_vntr => ( $num_alleles > 1 || !$refdetected ),
-            alleles_supported => $num_alleles,
-            gt_string         => join( "/", @gt ),
-            read_support      => join( ",", @read_support ),
-            copy_diff         => join( ",", @cgl ),
-            alt               => join( ",", @rev_seqs ),
-        };
-
-        write_vcf_rec( $spanN_vcffile, $allwithsupport_vcffile,
-            $supported_tr );
+        write_vcf_rec( $spanN_vcffile, $allwithsupport_vcffile, \%row );
     }
-
-    # $get_supported_reftrs_sth->finish;
 
     close $spanN_vcffile;
     close $allwithsupport_vcffile;
@@ -679,7 +631,6 @@ sub print_distr {
         $i++;
     }
 
-
     # print
     $maxval = 10;
     @arX0   = ();
@@ -810,18 +761,21 @@ sub print_distr {
     my %AllelesSing   = ();
     my %AllelesIndist = ();
     my %AllelesBBB    = ();
+
     # my %AllelesDist   = ();
 
     # Allele support, TRs called VNTRs (not alternate alleles only)
     my %VNTRAllelesSing   = ();
     my %VNTRAllelesIndist = ();
     my %VNTRAllelesBBB    = ();
+
     # my %VNTRAllelesDist   = ();
-    
+
     # Ref TR support
     my %SpanningSing   = ();
     my %SpanningIndist = ();
     my %SpanningBBB    = ();
+
     # my %SpanningDist   = ();
 
     #     q{SELECT refid, SUM(support), is_singleton
@@ -840,30 +794,31 @@ sub print_distr {
     $sth->execute();
     while ( my @data = $sth->fetchrow_array() ) {
         my $tr_support_total = 0;
+
         # my @copies = split ",", $data[3];
         my @support = split ",", $data[4];
-        for my $s (0..$#support) {
-            $tr_support_total += $support[$s];
-            $AllelesSing{ $support[$s] } += $data[1];
+        for my $s ( 0 .. $#support ) {
+            $tr_support_total              += $support[$s];
+            $AllelesSing{ $support[$s] }   += $data[1];
             $AllelesIndist{ $support[$s] } += !$data[1];
             $AllelesBBB{ $support[$s] }++;
-            $VNTRAllelesSing{ $support[$s] } += ($data[1] && $data[2]);
-            $VNTRAllelesIndist{ $support[$s] } += (!$data[1] && $data[2]);
-            $VNTRAllelesBBB{ $support[$s] } += $data[2];
+            $VNTRAllelesSing{ $support[$s] }   += ( $data[1]  && $data[2] );
+            $VNTRAllelesIndist{ $support[$s] } += ( !$data[1] && $data[2] );
+            $VNTRAllelesBBB{ $support[$s] }    += $data[2];
         }
-        $SpanningSing{ $tr_support_total } += $data[1];
-        $SpanningIndist{ $tr_support_total } += !$data[1];
-        $SpanningBBB{ $tr_support_total }++;
+        $SpanningSing{$tr_support_total}   += $data[1];
+        $SpanningIndist{$tr_support_total} += !$data[1];
+        $SpanningBBB{$tr_support_total}++;
     }
 
-    # $sth = $dbh->prepare(
-    #     q{SELECT refid,sum(support)
-    #     FROM vntr_support INNER JOIN main.fasta_ref_reps mainreftab ON reftab.rid = -vntr_support.refid
-    #         INNER JOIN refdb.fasta_ref_reps reftab USING (rid)
-    #     WHERE is_dist=1 GROUP BY refid}
-    # ) or die "Couldn't prepare statement: " . $dbh->errstr;
-    # $sth->execute() or die "Cannot execute: " . $sth->errstr();
-    # my %SpanninDist;
+# $sth = $dbh->prepare(
+#     q{SELECT refid,sum(support)
+#     FROM vntr_support INNER JOIN main.fasta_ref_reps mainreftab ON reftab.rid = -vntr_support.refid
+#         INNER JOIN refdb.fasta_ref_reps reftab USING (rid)
+#     WHERE is_dist=1 GROUP BY refid}
+# ) or die "Couldn't prepare statement: " . $dbh->errstr;
+# $sth->execute() or die "Cannot execute: " . $sth->errstr();
+# my %SpanninDist;
 
     # while ( my @data = $sth->fetchrow_array() ) {
     #     $SpanninDist{ $data[1] }++;
@@ -871,30 +826,30 @@ sub print_distr {
     # }
     # $sth->finish;
 
-    # $sth = $dbh->prepare(
-    #     q{SELECT refid,sum(support)
-    #     FROM vntr_support INNER JOIN main.fasta_ref_reps mainreftab ON reftab.rid = -vntr_support.refid
-    #         INNER JOIN refdb.fasta_ref_reps reftab USING (rid)
-    #     WHERE is_indist=1 GROUP BY refid}
-    # ) or die "Couldn't prepare statement: " . $dbh->errstr;
-    # $sth->execute() or die "Cannot execute: " . $sth->errstr();
-    # while ( my @data = $sth->fetchrow_array() ) {
-    #     $SpanningIndist{ $data[1] }++;
-    #     $i++;
-    # }
-    # $sth->finish;
+# $sth = $dbh->prepare(
+#     q{SELECT refid,sum(support)
+#     FROM vntr_support INNER JOIN main.fasta_ref_reps mainreftab ON reftab.rid = -vntr_support.refid
+#         INNER JOIN refdb.fasta_ref_reps reftab USING (rid)
+#     WHERE is_indist=1 GROUP BY refid}
+# ) or die "Couldn't prepare statement: " . $dbh->errstr;
+# $sth->execute() or die "Cannot execute: " . $sth->errstr();
+# while ( my @data = $sth->fetchrow_array() ) {
+#     $SpanningIndist{ $data[1] }++;
+#     $i++;
+# }
+# $sth->finish;
 
-    # $sth = $dbh->prepare(
-    #     q{SELECT refid,sum(support)
-    #     FROM vntr_support INNER JOIN refdb.fasta_ref_reps reftab ON reftab.rid = -vntr_support.refid
-    #     GROUP BY refid}
-    # ) or die "Couldn't prepare statement: " . $dbh->errstr;
-    # $sth->execute() or die "Cannot execute: " . $sth->errstr();
-    # while ( my @data = $sth->fetchrow_array() ) {
-    #     $SpanningBBB{ $data[1] }++;
-    #     $i++;
-    # }
-    # $sth->finish;
+# $sth = $dbh->prepare(
+#     q{SELECT refid,sum(support)
+#     FROM vntr_support INNER JOIN refdb.fasta_ref_reps reftab ON reftab.rid = -vntr_support.refid
+#     GROUP BY refid}
+# ) or die "Couldn't prepare statement: " . $dbh->errstr;
+# $sth->execute() or die "Cannot execute: " . $sth->errstr();
+# while ( my @data = $sth->fetchrow_array() ) {
+#     $SpanningBBB{ $data[1] }++;
+#     $i++;
+# }
+# $sth->finish;
 
     # SPANNING
     print $distrfh "\n\nSpanning reads per locus\n\nRefClass     ";
@@ -950,55 +905,55 @@ sub print_distr {
 
     # # alleles spanning reads
 
-    # $sth = $dbh->prepare(
-    #     q{SELECT refid,copies,support
-    #     FROM vntr_support INNER JOIN main.fasta_ref_reps mainreftab ON reftab.rid = -vntr_support.refid
-    #         INNER JOIN refdb.fasta_ref_reps reftab USING (rid)
-    #     WHERE is_singleton=1}
-    # ) or die "Couldn't prepare statement: " . $dbh->errstr;
-    # $sth->execute() or die "Cannot execute: " . $sth->errstr();
-    # while ( my @data = $sth->fetchrow_array() ) {
-    #     $AllelesSing{ $data[2] }++;
-    #     $i++;
-    # }
-    # $sth->finish;
+# $sth = $dbh->prepare(
+#     q{SELECT refid,copies,support
+#     FROM vntr_support INNER JOIN main.fasta_ref_reps mainreftab ON reftab.rid = -vntr_support.refid
+#         INNER JOIN refdb.fasta_ref_reps reftab USING (rid)
+#     WHERE is_singleton=1}
+# ) or die "Couldn't prepare statement: " . $dbh->errstr;
+# $sth->execute() or die "Cannot execute: " . $sth->errstr();
+# while ( my @data = $sth->fetchrow_array() ) {
+#     $AllelesSing{ $data[2] }++;
+#     $i++;
+# }
+# $sth->finish;
 
-    # # $sth = $dbh->prepare(
-    # #     q{SELECT refid,copies,support
-    # #     FROM vntr_support INNER JOIN main.fasta_ref_reps mainreftab ON reftab.rid = -vntr_support.refid
-    # #         INNER JOIN refdb.fasta_ref_reps reftab USING (rid)
-    # #     WHERE is_dist=1}
-    # # ) or die "Couldn't prepare statement: " . $dbh->errstr;
-    # # $sth->execute() or die "Cannot execute: " . $sth->errstr();
-    # # while ( my @data = $sth->fetchrow_array() ) {
-    # #     $AllelesDist{ $data[2] }++;
-    # #     $i++;
-    # # }
-    # # $sth->finish;
+# # $sth = $dbh->prepare(
+# #     q{SELECT refid,copies,support
+# #     FROM vntr_support INNER JOIN main.fasta_ref_reps mainreftab ON reftab.rid = -vntr_support.refid
+# #         INNER JOIN refdb.fasta_ref_reps reftab USING (rid)
+# #     WHERE is_dist=1}
+# # ) or die "Couldn't prepare statement: " . $dbh->errstr;
+# # $sth->execute() or die "Cannot execute: " . $sth->errstr();
+# # while ( my @data = $sth->fetchrow_array() ) {
+# #     $AllelesDist{ $data[2] }++;
+# #     $i++;
+# # }
+# # $sth->finish;
 
-    # $sth = $dbh->prepare(
-    #     q{SELECT refid,copies,support
-    #     FROM vntr_support INNER JOIN main.fasta_ref_reps mainreftab ON reftab.rid = -vntr_support.refid
-    #         INNER JOIN refdb.fasta_ref_reps reftab USING (rid)
-    #     WHERE is_indist=1}
-    # ) or die "Couldn't prepare statement: " . $dbh->errstr;
-    # $sth->execute() or die "Cannot execute: " . $sth->errstr();
-    # while ( my @data = $sth->fetchrow_array() ) {
-    #     $AllelesIndist{ $data[2] }++;
-    #     $i++;
-    # }
-    # $sth->finish;
+# $sth = $dbh->prepare(
+#     q{SELECT refid,copies,support
+#     FROM vntr_support INNER JOIN main.fasta_ref_reps mainreftab ON reftab.rid = -vntr_support.refid
+#         INNER JOIN refdb.fasta_ref_reps reftab USING (rid)
+#     WHERE is_indist=1}
+# ) or die "Couldn't prepare statement: " . $dbh->errstr;
+# $sth->execute() or die "Cannot execute: " . $sth->errstr();
+# while ( my @data = $sth->fetchrow_array() ) {
+#     $AllelesIndist{ $data[2] }++;
+#     $i++;
+# }
+# $sth->finish;
 
-    # $sth = $dbh->prepare(
-    #     q{SELECT refid,copies,support
-    #     FROM vntr_support INNER JOIN main.fasta_ref_reps mainreftab ON mainreftab.rid = -vntr_support.refid}
-    # ) or die "Couldn't prepare statement: " . $dbh->errstr;
-    # $sth->execute() or die "Cannot execute: " . $sth->errstr();
-    # while ( my @data = $sth->fetchrow_array() ) {
-    #     $AllelesBBB{ $data[2] }++;
-    #     $i++;
-    # }
-    # $sth->finish;
+# $sth = $dbh->prepare(
+#     q{SELECT refid,copies,support
+#     FROM vntr_support INNER JOIN main.fasta_ref_reps mainreftab ON mainreftab.rid = -vntr_support.refid}
+# ) or die "Couldn't prepare statement: " . $dbh->errstr;
+# $sth->execute() or die "Cannot execute: " . $sth->errstr();
+# while ( my @data = $sth->fetchrow_array() ) {
+#     $AllelesBBB{ $data[2] }++;
+#     $i++;
+# }
+# $sth->finish;
 
     # ALLELES
     print $distrfh "\n\nSpanning reads per allele\n\nRefClass     ";
@@ -1059,56 +1014,56 @@ sub print_distr {
     # %AllelesIndist = ();
     # %AllelesBBB    = ();
 
-    # $sth = $dbh->prepare(
-    #     q{SELECT refid,copies,support
-    #     FROM vntr_support INNER JOIN main.fasta_ref_reps mainreftab ON mainreftab.rid = -vntr_support.refid
-    #         INNER JOIN refdb.fasta_ref_reps reftab USING(rid)
-    #     WHERE  support_vntr>0 AND is_singleton=1}
-    # ) or die "Couldn't prepare statement: " . $dbh->errstr;
-    # $sth->execute() or die "Cannot execute: " . $sth->errstr();
-    # while ( my @data = $sth->fetchrow_array() ) {
-    #     $AllelesSing{ $data[2] }++;
-    #     $i++;
-    # }
-    # $sth->finish;
+# $sth = $dbh->prepare(
+#     q{SELECT refid,copies,support
+#     FROM vntr_support INNER JOIN main.fasta_ref_reps mainreftab ON mainreftab.rid = -vntr_support.refid
+#         INNER JOIN refdb.fasta_ref_reps reftab USING(rid)
+#     WHERE  support_vntr>0 AND is_singleton=1}
+# ) or die "Couldn't prepare statement: " . $dbh->errstr;
+# $sth->execute() or die "Cannot execute: " . $sth->errstr();
+# while ( my @data = $sth->fetchrow_array() ) {
+#     $AllelesSing{ $data[2] }++;
+#     $i++;
+# }
+# $sth->finish;
 
-    # # $sth = $dbh->prepare(
-    # #     q{SELECT refid,copies,support
-    # #     FROM vntr_support INNER JOIN main.fasta_ref_reps mainreftab ON mainreftab.rid = -vntr_support.refid
-    # #         INNER JOIN refdb.fasta_ref_reps reftab USING(rid)
-    # #     WHERE support_vntr>0 AND is_dist=1}
-    # # ) or die "Couldn't prepare statement: " . $dbh->errstr;
-    # # $sth->execute() or die "Cannot execute: " . $sth->errstr();
-    # # while ( my @data = $sth->fetchrow_array() ) {
-    # #     $AllelesDist{ $data[2] }++;
-    # #     $i++;
-    # # }
-    # # $sth->finish;
+# # $sth = $dbh->prepare(
+# #     q{SELECT refid,copies,support
+# #     FROM vntr_support INNER JOIN main.fasta_ref_reps mainreftab ON mainreftab.rid = -vntr_support.refid
+# #         INNER JOIN refdb.fasta_ref_reps reftab USING(rid)
+# #     WHERE support_vntr>0 AND is_dist=1}
+# # ) or die "Couldn't prepare statement: " . $dbh->errstr;
+# # $sth->execute() or die "Cannot execute: " . $sth->errstr();
+# # while ( my @data = $sth->fetchrow_array() ) {
+# #     $AllelesDist{ $data[2] }++;
+# #     $i++;
+# # }
+# # $sth->finish;
 
-    # $sth = $dbh->prepare(
-    #     q{SELECT refid,copies,support
-    #     FROM vntr_support INNER JOIN main.fasta_ref_reps mainreftab ON mainreftab.rid = -vntr_support.refid
-    #         INNER JOIN refdb.fasta_ref_reps reftab USING(rid)
-    #     WHERE support_vntr>0 AND is_indist=1}
-    # ) or die "Couldn't prepare statement: " . $dbh->errstr;
-    # $sth->execute() or die "Cannot execute: " . $sth->errstr();
-    # while ( my @data = $sth->fetchrow_array() ) {
-    #     $AllelesIndist{ $data[2] }++;
-    #     $i++;
-    # }
-    # $sth->finish;
+# $sth = $dbh->prepare(
+#     q{SELECT refid,copies,support
+#     FROM vntr_support INNER JOIN main.fasta_ref_reps mainreftab ON mainreftab.rid = -vntr_support.refid
+#         INNER JOIN refdb.fasta_ref_reps reftab USING(rid)
+#     WHERE support_vntr>0 AND is_indist=1}
+# ) or die "Couldn't prepare statement: " . $dbh->errstr;
+# $sth->execute() or die "Cannot execute: " . $sth->errstr();
+# while ( my @data = $sth->fetchrow_array() ) {
+#     $AllelesIndist{ $data[2] }++;
+#     $i++;
+# }
+# $sth->finish;
 
-    # $sth = $dbh->prepare(
-    #     q{SELECT refid,copies,support
-    #     FROM vntr_support INNER JOIN main.fasta_ref_reps mainreftab ON mainreftab.rid = -vntr_support.refid
-    #     WHERE support_vntr>0}
-    # ) or die "Couldn't prepare statement: " . $dbh->errstr;
-    # $sth->execute() or die "Cannot execute: " . $sth->errstr();
-    # while ( my @data = $sth->fetchrow_array() ) {
-    #     $AllelesBBB{ $data[2] }++;
-    #     $i++;
-    # }
-    # $sth->finish;
+# $sth = $dbh->prepare(
+#     q{SELECT refid,copies,support
+#     FROM vntr_support INNER JOIN main.fasta_ref_reps mainreftab ON mainreftab.rid = -vntr_support.refid
+#     WHERE support_vntr>0}
+# ) or die "Couldn't prepare statement: " . $dbh->errstr;
+# $sth->execute() or die "Cannot execute: " . $sth->errstr();
+# while ( my @data = $sth->fetchrow_array() ) {
+#     $AllelesBBB{ $data[2] }++;
+#     $i++;
+# }
+# $sth->finish;
 
     # ALLELES for VNTRs
     print $distrfh "\n\nSpanning reads per allele for VNTRs\n\nRefClass     ";
@@ -1126,27 +1081,31 @@ sub print_distr {
     print $distrfh "\nSINGLETON";
     for ( my $key = 0; $key <= $maxkey; $key++ ) {
         my $val1 = 0;
-        if ( exists $VNTRAllelesSing{$key} ) { $val1 = $VNTRAllelesSing{$key}; }
+        if ( exists $VNTRAllelesSing{$key} ) {
+            $val1 = $VNTRAllelesSing{$key};
+        }
         print $distrfh "\t$val1";
         $total += $val1;
     }
     print $distrfh "\t$total";
 
-    # $total = 0;
-    # print $distrfh "\nDISTING   ";
-    # for ( my $key = 0; $key <= $maxkey; $key++ ) {
-    #     my $val1 = 0;
-    #     if ( exists $VNTRAllelesDist{$key} ) { $val1 = $VNTRAllelesDist{$key}; }
-    #     print $distrfh "\t$val1";
-    #     $total += $val1;
-    # }
-    # print $distrfh "\t$total";
+# $total = 0;
+# print $distrfh "\nDISTING   ";
+# for ( my $key = 0; $key <= $maxkey; $key++ ) {
+#     my $val1 = 0;
+#     if ( exists $VNTRAllelesDist{$key} ) { $val1 = $VNTRAllelesDist{$key}; }
+#     print $distrfh "\t$val1";
+#     $total += $val1;
+# }
+# print $distrfh "\t$total";
 
     $total = 0;
     print $distrfh "\nINDIST      ";
     for ( my $key = 0; $key <= $maxkey; $key++ ) {
         my $val1 = 0;
-        if ( exists $VNTRAllelesIndist{$key} ) { $val1 = $VNTRAllelesIndist{$key}; }
+        if ( exists $VNTRAllelesIndist{$key} ) {
+            $val1 = $VNTRAllelesIndist{$key};
+        }
         print $distrfh "\t$val1";
         $total += $val1;
     }
@@ -1474,7 +1433,12 @@ sub print_latex {
     unless ( $readTRsMapped
         == $readTRsMappedToIndistinguishable + $readTRsMappedToSingleton )
     {
-        print Dumper([$readTRsMapped, $readTRsMappedToIndistinguishable, $readTRsMappedToSingleton]) . "\n";
+        print Dumper(
+            [   $readTRsMapped,
+                $readTRsMappedToIndistinguishable,
+                $readTRsMappedToSingleton
+            ]
+        ) . "\n";
         die
             "Error: mismatch of sum of mapped read TRs by distinguishablility and total read TRs mapped. "
             . "(Expected $readTRsMapped, got "
@@ -2001,7 +1965,6 @@ my $get_supported_reftrs_sth = $dbh->prepare(
     FROM refdb.fasta_ref_reps INNER JOIN temp.vntr_support USING (rid)}
 ) or die "Couldn't prepare statement: " . $dbh->errstr;
 
-
 warn "\nUpdating fasta_ref_reps table...\n";
 
 my $query = qq{INSERT INTO main.fasta_ref_reps
@@ -2022,28 +1985,9 @@ my @supported_refTRs;
 $get_supported_reftrs_sth->execute()
     or die "Cannot execute: " . $get_supported_reftrs_sth->errstr();
 $i = 0;
-my $ref = { refid => -1 };
+my $ref = {};
 while ( my @data = $get_supported_reftrs_sth->fetchrow_array() ) {
-    if ( $i > 0 && ( @supported_refTRs % 1e4 == 0 ) ) {
-        $dbh->begin_work;
-        try {
-            while ( my $r = shift @supported_refTRs ) {
-                update_ref_table( $r, $update_ref_table_sth );
-            }
-            $dbh->commit;
-        }
-        catch {
-            warn "Update failed! Reason given by DBI: $_\n";
-
-            # Rollback
-            eval { $dbh->rollback; };
-            if ($@) {
-                die "Database rollback failed.\n";
-            }
-            die
-                "Error when inserting entries into our supported reference TRs table.\n";
-        }
-    }
+    $i++;
 
     # Note: refid is positive
     $ref = {
@@ -2063,8 +2007,6 @@ while ( my @data = $get_supported_reftrs_sth->fetchrow_array() ) {
         readsum            => 0,
         support_vntr_span1 => 0
     };
-
-    $i++;
 
     warn "TR $i; ", join( "; ", @data ), "\n"
         if ( $ENV{DEBUG} );
@@ -2123,7 +2065,49 @@ while ( my @data = $get_supported_reftrs_sth->fetchrow_array() ) {
             || $ref->{hetez_diff}
             || $ref->{hetez_multi} );
 
-    push( @supported_refTRs, $ref );
+    ( $ENV{DEBUG} ) && warn "Saving ref entry: " . Dumper($ref) . "\n";
+    push(
+        @supported_refTRs,
+        [   $ref->{refid},        $ref->{nsupport},
+            $ref->{nsameasref},   $ref->{entr},
+            $ref->{has_support},  $ref->{span1},
+            $ref->{spanN},        $ref->{homez_same},
+            $ref->{homez_diff},   $ref->{hetez_same},
+            $ref->{hetez_diff},   $ref->{hetez_multi},
+            $ref->{support_vntr}, $ref->{support_vntr_span1}
+        ]
+    );
+
+    if ( @supported_refTRs % $RECORDS_PER_INFILE_INSERT == 0 ) {
+        $dbh->begin_work;
+        my $cb     = gen_exec_array_cb( \@supported_refTRs );
+        my $tuples = $update_ref_table_sth->execute_array(
+            {   ArrayTupleFetch  => $cb,
+                ArrayTupleStatus => \my @tuple_status
+            }
+        );
+        if ($tuples) {
+            @supported_refTRs = ();
+            $dbh->commit;
+        }
+        else {
+            for my $tuple ( 0 .. @supported_refTRs - 1 ) {
+                my $status = $tuple_status[$tuple];
+                $status = [ 0, "Skipped" ]
+                    unless defined $status;
+                next unless ref $status;
+                printf "Failed to insert row %s. Status %s\n",
+                    join( ",", $supported_refTRs[$tuple] ),
+                    $status->[1];
+            }
+            eval { $dbh->rollback; };
+            if ($@) {
+                die "Database rollback failed.\n";
+            }
+            die
+                "Error when inserting entries into our supported reference TRs table.\n";
+        }
+    }
 }
 
 my $updfromtable = $i;
@@ -2131,16 +2115,26 @@ my $updfromtable = $i;
 # Insert last rows:
 if (@supported_refTRs) {
     $dbh->begin_work;
-    try {
-        while ( my $r = shift @supported_refTRs ) {
-            update_ref_table( $r, $update_ref_table_sth );
+    my $cb     = gen_exec_array_cb( \@supported_refTRs );
+    my $tuples = $update_ref_table_sth->execute_array(
+        {   ArrayTupleFetch  => $cb,
+            ArrayTupleStatus => \my @tuple_status
         }
+    );
+    if ($tuples) {
+        @supported_refTRs = ();
         $dbh->commit;
     }
-    catch {
-        warn "Update failed! Reason given by DBI: $_\n";
-
-        # Rollback
+    else {
+        for my $tuple ( 0 .. @supported_refTRs - 1 ) {
+            my $status = $tuple_status[$tuple];
+            $status = [ 0, "Skipped" ]
+                unless defined $status;
+            next unless ref $status;
+            printf "Failed to insert row %s. Status %s\n",
+                join( ",", $supported_refTRs[$tuple] ),
+                $status->[1];
+        }
         eval { $dbh->rollback; };
         if ($@) {
             die "Database rollback failed.\n";
@@ -2251,7 +2245,6 @@ $dbh->do(
         NUMBER_REFS_VNTR_SPAN_N = $num_spanN}
 ) or die "Couldn't do statement: " . $dbh->errstr;
 $dbh->commit;
-
 
 # set old db settings
 $dbh->do("PRAGMA foreign_keys = ON");

@@ -637,7 +637,7 @@ if ( $STEP == 4 ) {
 # psearch output can still be files but this step will then collect them and
 # insert into the db. (Maybe merge in next step's `join_clusters.exe`)
 # For now, extract the file we need using the database
-    my $dbh = get_ref_dbh( $opts{REFERENCE}, {redo => $opts{REDO_REFDB}} );
+    my $dbh = get_ref_dbh( $opts{REFERENCE}, { redo => $opts{REDO_REFDB} } );
 
     # Must negate rids for refset
     my $get_ref_leb36 = q{SELECT -rid, length(pattern) AS patsize,
@@ -800,28 +800,28 @@ if ( $STEP == 7 ) {
 
 if ( $STEP == 8 ) {
 
-    $timestart = time();
     print STDERR
         "\n\nExecuting step #$STEP (inserting READS flanks into database)...";
+
+    $timestart = time();
     my $extra_param = ( $opts{STRIP_454_KEYTAGS} ) ? '1' : '0';
 
-    my $dbh              = get_ref_dbh( $opts{REFERENCE}, {redo => $opts{REDO_REFDB}} );
-    my $reference_folder = File::Temp->newdir();
-
     # Get rotindex saved in db
-    my $get_rotindex = q{SELECT rotindex
-        FROM files};
+    my $dbh = get_ref_dbh( $opts{REFERENCE}, { redo => $opts{REDO_REFDB} } );
+    my $get_rotindex = q{SELECT rotindex FROM files};
     my ($rotindex_str) = $dbh->selectrow_array($get_rotindex);
+    $dbh->disconnect();
     die
-        "Error getting rotindex file from filtered set. Try rerunning with --redo_refdb option\n"
+        "Error getting rotindex file. Try rerunning with --redo_refdb option.\n"
         unless ($rotindex_str);
+
+    my $reference_folder = File::Temp->newdir();
     open my $tmp_rotindex, ">", "$reference_folder/reference.leb36.rotindex";
 
     # Need to negate all indices
     $rotindex_str =~ s/(\d+)/-$1/g;
     print $tmp_rotindex $rotindex_str;
     close $tmp_rotindex;
-    $dbh->disconnect();
 
     my $exstring
         = "./insert_reads.pl $read_profiles_folder_clean/all.clusters $read_profiles_folder  $opts{INPUT_DIR} $read_profiles_folder_clean $reference_folder/reference.leb36.rotindex $extra_param $opts{DBSUFFIX} $run_dir $opts{TMPDIR} $opts{IS_PAIRED_READS}";
@@ -1348,13 +1348,13 @@ if ( $STEP == 19 ) {
         }
     }
 
-    # create sim link to html dir so can be browsed from internet
+    # create symlink to html dir so can be browsed from internet
     symlink(
         "${read_profiles_folder_clean}/result",
         "$opts{HTML_DIR}/$opts{DBSUFFIX}"
         )
         if ( exists $opts{HTML_DIR}
-        && !(-e "$opts{HTML_DIR}/$opts{DBSUFFIX}/result") );
+        && !( -e "$opts{HTML_DIR}/$opts{DBSUFFIX}/result" ) );
 
     # cleanup
     print STDERR "Cleanup...\n";

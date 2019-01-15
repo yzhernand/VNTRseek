@@ -14,13 +14,14 @@ if ( $ENV{DEBUG} ) {
 
 use base 'Exporter';
 our @EXPORT_OK
-    = qw(read_config_file get_config set_config set_credentials get_dbh get_ref_dbh make_refseq_db load_refprofiles_db run_redund write_sqlite set_statistics get_statistics set_datetime print_config trim create_blank_file get_trunc_query sqlite_install_RC_function);
+    = qw(read_config_file get_config set_config set_credentials get_dbh get_ref_dbh make_refseq_db load_refprofiles_db run_redund write_sqlite set_statistics get_statistics set_datetime print_config trim create_blank_file get_trunc_query sqlite_install_RC_function gen_exec_array_cb);
 
 # vutil.pm
-# author: Yevgeniy Gelfand
+# author: Yevgeniy Gelfand, Yozen Hernandez
 # create date: Oct 30, 2010
-# function: create mysql database for vntr pipleline,
-# provide functions for database management
+# function: common functions for vntr pipleline scripts.
+# Provide functions for database management, configuration
+# reading/writing, and miscellaneous common utilities.
 
 my %VSCNF_FILE = ();
 my $VSREAD     = 0;
@@ -204,11 +205,16 @@ sub set_config {
         );
     }
 
+    unless ( $in_hash{PLOIDY} ) {
+        $in_hash{PLOIDY} = 2;
+        warn(
+            "Option 'ploidy' is not set. Setting default: $in_hash{PLOIDY}.\n"
+        );
+    }
+
     if ( "" eq $in_hash{HTML_DIR} ) {
         warn
-            "Warning: 'html_dir' option is unset. VNTRseek won't create symbolic links to results for VNTRview. Call vntrseek with --html_dir <html_dir> to change this.\n";
-        warn
-            "Note: This is OK, especially if you don't plan on using VNTRview, which is not yet compatible with VNTRseek 1.10+ anyway.\n";
+            "Warning: 'html_dir' option is unset.\n";
     }
     elsif ( !( -e $in_hash{HTML_DIR} ) && !mkdir("$in_hash{HTML_DIR}") ) {
         croak("Could not create html_dir directory ($in_hash{HTML_DIR}).\n");
@@ -242,7 +248,7 @@ sub set_config {
             "'tmpdir' is not set. Using '/tmp'. Call vntrseek with --tmpdir <directory> to change this.\n";
     }
 
-    if ( !( -e $in_hash{REFERENCE_DB} ) || $in_hash{REDO_REFDB} ) {
+    if ( !( -e $in_hash{REFERENCE} . ".db" ) || $in_hash{REDO_REFDB} ) {
         my $err;
         $in_hash{REFERENCE_DB}     = $in_hash{REFERENCE} . ".db";
         $in_hash{REFERENCE_SEQ}    = $in_hash{REFERENCE} . ".seq";
@@ -350,6 +356,12 @@ sub set_datetime {
 }
 
 ####################################
+
+##
+## @brief      Gets the statistics.
+##
+## @return     The statistics.
+##
 sub get_statistics {
 
   # my $argc = @_;
@@ -1150,6 +1162,18 @@ sub sqlite_install_RC_function {
             return $seq;
         }
     );
+}
+
+################################################################
+sub gen_exec_array_cb {
+    my $arr_ref = shift
+        or croak "Error: Must specify an array reference. "
+        . "(Developer made a mistake here)";
+
+    my $arr_idx = 0;
+    return sub {
+        return ( $arr_idx < @$arr_ref ) ? $arr_ref->[ $arr_idx++ ] : undef;
+        }
 }
 
 ################################################################
