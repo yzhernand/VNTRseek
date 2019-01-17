@@ -70,21 +70,17 @@ sub RC {
     return $seq;
 }
 
-=head2 write_vcf_rec( spanN_vcf_filename,
-allwithsupport_vcf_filename, $tr_hash )
+=head2 make_vcf_rec( $tr_hash )
 
-Takes the file paths of both VCF files, and a hash
-representing a supported TR record, and writes out
-TR to each VCF file. VNTRs are only written to the
-spanN file, all supported (VN)TRs are written to
-the allwithsupport file.
+Takes a hash representing a supported TR record, and
+returns a VCF record as a string.
 
 =cut
 
-sub write_vcf_rec {
-    croak "write_vcf_rec requires three arguments"
-        unless @_ == 3;
-    my ( $spanN_vcffile, $allwithsupport_vcffile, $supported_tr ) = @_;
+sub make_vcf_rec {
+    croak "make_vcf_rec requires one argument"
+        unless @_ == 1;
+    my $supported_tr = shift;
 
     my $qual = ".";
 
@@ -112,9 +108,7 @@ sub write_vcf_rec {
             $supported_tr->{cgl} )
     ) . "\n";
 
-    ( $supported_tr->{num_alleles} > 1 || !$supported_tr->{refdetected} )
-        && print $spanN_vcffile $vcf_rec;
-    print $allwithsupport_vcffile $vcf_rec;
+    return $vcf_rec;
 }
 
 #open (VCFFILE2, ">", "${latex}.span2.vcf") or die "Can't open for reading ${latex}.vcf.";
@@ -203,6 +197,7 @@ sub print_vcf {
 ##TRFParameters=$stat_hash->{PARAM_TRF}
 ##referenceseq=$stat_hash->{FILE_REFERENCE_SEQ}
 ##referenceprofile=$stat_hash->{FILE_REFERENCE_LEB}
+##ploidy=$run_conf{PLOIDY}
 ##numrefTRs=$stat_hash->{NUMBER_REF_TRS}
 ##readseqfolder=$stat_hash->{FOLDER_FASTA}
 ##readprofilefolder=$stat_hash->{FOLDER_PROFILES}
@@ -239,17 +234,17 @@ sub print_vcf {
     # the ordering I want.
     my $get_supported_reftrs_query
         = qq{SELECT rid, is_singleton, firstindex, arlen, copynum,
-    pattern AS consenuspat, head, sequence, refdir,
-    GROUP_CONCAT(copies) AS cgl, (MAX(sameasref) == 1) AS refdetected,
+    pattern AS consenuspat, head, REPLACE(UPPER(sequence), " ", "") AS sequence,
+    refdir, GROUP_CONCAT(copies) AS cgl, (MAX(sameasref) == 1) AS refdetected,
     GROUP_CONCAT(support) AS support, GROUP_CONCAT(readarray) AS alt_seqs,
     GROUP_CONCAT(readdir) AS readdir, COUNT(*) AS num_alleles
     FROM (SELECT reftab.rid, is_singleton, firstindex,
         (lastindex - firstindex) + 1 AS arlen, reftab.copynum, reftab.pattern,
-        reftab.head, UPPER(sequence) AS sequence, c1.direction AS refdir,
-        copies, sameasref, support,
-        UPPER(SUBSTR(dna, first, (last-first)+1)) AS readarray,
+        reftab.head, sequence, c1.direction AS refdir, copies, sameasref, support,
+        REPLACE(UPPER(SUBSTR(dna, first, (last-first)+1)), " ", "") AS readarray,
         c2.direction AS readdir
-        FROM main.fasta_ref_reps mainreftab INNER JOIN vntr_support ON mainreftab.rid=-vntr_support.refid
+        FROM main.fasta_ref_reps mainreftab
+        INNER JOIN vntr_support ON mainreftab.rid=-vntr_support.refid
         INNER JOIN refdb.fasta_ref_reps reftab ON reftab.rid=-vntr_support.refid
         INNER JOIN clusterlnk c1 ON vntr_support.refid=c1.repeatid
         INNER JOIN replnk ON vntr_support.representative=replnk.rid
@@ -257,7 +252,7 @@ sub print_vcf {
         INNER JOIN fasta_reads ON replnk.sid=fasta_reads.sid
         WHERE support >= ${MIN_SUPPORT_REQUIRED}
         ORDER BY reftab.head ASC, reftab.firstindex ASC, sameasref DESC, copies ASC
-    ) GROUP BY rid;};
+    ) GROUP BY rid};
     my $get_supported_reftrs_sth = $dbh->prepare($get_supported_reftrs_query);
     $get_supported_reftrs_sth->execute()
         or die "Cannot execute: " . $get_supported_reftrs_sth->errstr();
@@ -283,7 +278,7 @@ sub print_vcf {
             : ( 1 * !$row{refdetected} .. ( $row{num_alleles} - 1 ) );
 
         # Split fields, and modify as needed
-        my @alt_seqs     = split /,/, nowhitespace( $row{alt_seqs} );
+        my @alt_seqs     = split /,/, $row{alt_seqs};
         my @read_dirs    = split /,/, $row{readdir};
         my @cgl          = split /,/, $row{cgl};
         my @read_support = split /,/, $row{support};
@@ -326,13 +321,18 @@ sub print_vcf {
             if (@alt_seqs);
 
         $row{sequence}
-            = ( $row{sequence} ) ? nowhitespace( $row{sequence} ) : ".";
+            = ( $row{sequence} ) ? $row{sequence} : ".";
         $row{support}   = join( ",", @read_support );
         $row{cgl}       = join( ",", @cgl );
         $row{alt}       = join( ",", @rev_seqs );
         $row{gt_string} = join( "/", @gt );
 
-        write_vcf_rec( $spanN_vcffile, $allwithsupport_vcffile, \%row );
+        my $vcf_rec = make_vcf_rec( \%row );
+
+        # Only print record to spanN file if VNTR
+        ( $row{num_alleles} > 1 || !$row{refdetected} )
+            && print $spanN_vcffile $vcf_rec;
+        print $allwithsupport_vcffile $vcf_rec;
     }
 
     close $spanN_vcffile;
@@ -2044,17 +2044,16 @@ while ( my @data = $get_supported_reftrs_sth->fetchrow_array() ) {
     # for more than one allele
     # Other genotype classes can only be true if hetez_multi
     # is false.
-    # TODO Add global config for ploidy. Replace '2'
-    # below with the value for the ploidy (eg, haploid == 1)
+    # If supported alleles exceeds ploidy, call is multi.
     # Modify last branch to deal with special haploid case
-    if ( $ref->{nsupport} > 2 ) {
+    if ( $ref->{nsupport} > $run_conf{PLOIDY} ) {
         $ref->{hetez_multi} = 1;
     }
-    elsif ( $ref->{nsupport} == 2 ) {
+    elsif ( $ref->{nsupport} == $run_conf{PLOIDY} ) {
         $ref->{hetez_same} = 1 * ( $ref->{nsameasref} );
         $ref->{hetez_diff} = 1 * !( $ref->{nsameasref} );
     }
-    elsif ( $ref->{nsupport} == 1 ) {
+    else {
         $ref->{homez_same} = 1 * ( $ref->{nsameasref} );
         $ref->{homez_diff} = 1 * !( $ref->{nsameasref} );
     }
@@ -2148,18 +2147,15 @@ if ( $updfromtable != $supported_vntr_count ) {
         "Updated number of entries($updfromtable) not equal to the number of references, aborting!";
 }
 
-# cleanup temp file
-unlink("$TEMPDIR/updaterefs_$DBSUFFIX.txt");
-
 # updating stats table
 print STDERR "Updating stats table...\n";
 my $update_stats_sth = $dbh->prepare(
     q{UPDATE stats SET NUMBER_REFS_SINGLE_REF_CLUSTER_WITH_READS_MAPPED=(
-    select count(*)
+    SELECT COUNT(*)
         FROM (
-            select count(*) as thecount
-            from clusterlnk
-            where repeatid<0 group by clusterid having thecount=1
+            SELECT COUNT(*) AS thecount
+            FROM clusterlnk
+            WHERE repeatid<0 GROUP BY clusterid HAVING thecount=1
         ) f
     )}
 ) or die "Couldn't prepare statement: " . $dbh->errstr;
@@ -2169,18 +2165,18 @@ $update_stats_sth->execute()
 $dbh->commit;
 
 $dbh->begin_work;
-$dbh->do('CREATE TABLE t1 (c1 INT PRIMARY KEY NOT NULL);')
+$dbh->do('CREATE TEMPORARY TABLE t1 (c1 INT PRIMARY KEY NOT NULL);')
     or die "Couldn't do statement: " . $dbh->errstr;
 $dbh->commit;
 
 my $sth = $dbh->prepare(
-    q{insert into t1 select urefid
-    from (
-        select count(*) as thecount,max(repeatid) as urefid
-        from clusterlnk
-        where repeatid<0
-        group by clusterid
-        having thecount=1
+    q{INSERT INTO t1 SELECT urefid
+    FROM (
+        SELECT COUNT(*) AS thecount,MAX(repeatid) AS urefid
+        FROM clusterlnk
+        WHERE repeatid<0
+        GROUP BY clusterid
+        HAVING thecount=1
     ) f}
 ) or die "Couldn't prepare statement: " . $dbh->errstr;
 $dbh->begin_work;
@@ -2189,8 +2185,19 @@ $dbh->commit;
 
 $sth = $dbh->prepare(
     q{UPDATE stats SET NUMBER_REFS_SINGLE_REF_CLUSTER = (
-        select count(distinct repeatid)
+        SELECT COUNT(DISTINCT repeatid)
         FROM clusterlnk 
+        WHERE repeatid IN (SELECT c1 FROM t1)
+    )}
+) or die "Couldn't prepare statement: " . $dbh->errstr;
+$dbh->begin_work;
+$sth->execute() or die "Cannot execute: " . $sth->errstr();
+$dbh->commit;
+
+$sth = $dbh->prepare(
+    q{UPDATE stats SET NUMBER_REFS_SINGLE_REF_CLUSTER_WITH_READS_MAPPED = (
+        SELECT COUNT(distinct map.refid)
+        FROM clusterlnk INNER JOIN map ON map.refid=-clusterlnk.repeatid
         WHERE repeatid IN (select c1 from t1)
     )}
 ) or die "Couldn't prepare statement: " . $dbh->errstr;
@@ -2198,22 +2205,11 @@ $dbh->begin_work;
 $sth->execute() or die "Cannot execute: " . $sth->errstr();
 $dbh->commit;
 
-$sth
-    = $dbh->prepare(
-    'UPDATE stats SET NUMBER_REFS_SINGLE_REF_CLUSTER_WITH_READS_MAPPED = (select count(distinct map.refid) FROM clusterlnk INNER JOIN map ON map.refid=-clusterlnk.repeatid WHERE repeatid IN (select c1 from t1));'
-    ) or die "Couldn't prepare statement: " . $dbh->errstr;
-$dbh->begin_work;
-$sth->execute() or die "Cannot execute: " . $sth->errstr();
-$dbh->commit;
-
-$sth = $dbh->prepare('drop table t1;')
-    or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth->execute() or die "Cannot execute: " . $sth->errstr();
-
-$sth
-    = $dbh->prepare(
-    "UPDATE stats SET NUMBER_REFS_SINGLE_REF_CLUSTER_WITH_NO_READS_MAPPED = NUMBER_REFS_SINGLE_REF_CLUSTER - NUMBER_REFS_SINGLE_REF_CLUSTER_WITH_READS_MAPPED;"
-    ) or die "Couldn't prepare statement: " . $dbh->errstr;
+$sth = $dbh->prepare(
+    q{UPDATE stats SET NUMBER_REFS_SINGLE_REF_CLUSTER_WITH_NO_READS_MAPPED =
+        NUMBER_REFS_SINGLE_REF_CLUSTER -
+        NUMBER_REFS_SINGLE_REF_CLUSTER_WITH_READS_MAPPED}
+) or die "Couldn't prepare statement: " . $dbh->errstr;
 $dbh->begin_work;
 $sth->execute() or die "Cannot execute: " . $sth->errstr();
 $dbh->commit;
@@ -2221,18 +2217,18 @@ $dbh->commit;
 # Update last few stats:
 my ( $mapped, $rank, $rankflank, $num_spanN );
 
-($mapped) = $dbh->selectrow_array(q{SELECT count(*) FROM map})
+($mapped) = $dbh->selectrow_array(q{SELECT COUNT(*) FROM map})
     or die "Couldn't select map count: " . $dbh->errstr;
 
-($rank) = $dbh->selectrow_array(q{SELECT count(*) FROM rank})
+($rank) = $dbh->selectrow_array(q{SELECT COUNT(*) FROM rank})
     or die "Couldn't select rank count: " . $dbh->errstr;
 
-($rankflank) = $dbh->selectrow_array(q{SELECT count(*) FROM rankflank})
+($rankflank) = $dbh->selectrow_array(q{SELECT COUNT(*) FROM rankflank})
     or die "Couldn't select rankflank count: " . $dbh->errstr;
 
 # update spanN number on stats
 ($num_spanN) = $dbh->selectrow_array(
-    q{SELECT count(*) FROM fasta_ref_reps 
+    q{SELECT COUNT(*) FROM fasta_ref_reps 
     WHERE support_vntr > 0}
 ) or die "Couldn't select span N count: " . $dbh->errstr;
 
