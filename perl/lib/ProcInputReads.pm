@@ -35,7 +35,7 @@ my $install_dir;
 # For new formats, simply add the name of the format here and require
 # that input file names have it as a prefix (eg, fasta files should
 # have prefix "fasta_")
-my @supported_format_names = qw(fasta fastq bam);
+my @supported_format_names = qw(fasta fastq bam cram);
 my %supported_formats;
 @supported_formats{@supported_format_names} = @supported_format_names;
 
@@ -46,7 +46,7 @@ my %supported_formats;
 # place in the values list.
 my %reader_table;
 @reader_table{@supported_format_names}
-    = ( \&read_fastaq, \&read_fastaq, \&read_bam );
+    = ( \&read_fastaq, \&read_fastaq, \&read_bam, \&read_bam );
 
 # TODO Simplify: we'll only support whatever seqtk supports and jusr
 # let seqtk handle decompression for us.
@@ -631,18 +631,8 @@ sub init_bam {
     my $unmapped_template = "*";
 
     for my $file (@$filelist) {
-        next if ( $file =~ /\.bai$/ );
+        next if ( $file =~ /\.(?:b|cr)ai$/ );
         my $bamfile = "$input_dir/" . $file;
-
-        # warn "$bamfile\n";
-        # my $baifile = $bamfile . ".bai";
-
-        # warn "$baifile\n";
-
-# Check if .bai file exists and then run MakeBedFiles.jar
-# die
-#     "Error reading bam file: corresponding bai file required for processing bam files."
-#     unless ( -e -r $baifile );
 
         # Requires samtools to be installed/available
         # Get all regions in the bam file

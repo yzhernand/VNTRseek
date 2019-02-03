@@ -120,7 +120,7 @@ if ( $max_processes == 0 ) {
 }
 
 # If BAM, init files list
-if ($input_format eq "bam") {
+if ($input_format eq "bam" || $input_format eq "cram") {
     @filenames = init_bam($input_dir, $IS_PAIRED_READS, \@filenames);
     $files_to_process = @filenames;
 }
