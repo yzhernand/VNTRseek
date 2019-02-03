@@ -636,9 +636,8 @@ sub init_bam {
 
         # Requires samtools to be installed/available
         # Get all regions in the bam file
-        my @regions = qx(
-                samtools idxstats "$bamfile"
-            );
+        # Don't save sequence with 0 reads
+        my @regions = grep ( !/0\s+0$/, qx( samtools idxstats "$bamfile" ) );
         if ( $? == -1 ) {
             croak "failed to execute: $!\n";
         }
@@ -662,8 +661,7 @@ sub init_bam {
             my ( $chr, $end, $num_aln, $num_unaln ) = split /\s+/, $r;
             my $unmapped = ( $chr eq $unmapped_template );
 
-            # Don't save sequence with 0 reads
-            next if ( ( $num_aln + $num_unaln ) == 0 );
+            # next if ( ( $num_aln + $num_unaln ) == 0 );
 
             my $samviewflags = ($unmapped) ? $unmappedflag : $badmapflag;
             my $region       = ($unmapped) ? ""            : "$chr:1-$end";
