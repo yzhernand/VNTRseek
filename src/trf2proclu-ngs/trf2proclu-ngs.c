@@ -580,8 +580,8 @@ int main( int argc, char **argv ) {
           "written out.\n",
           logfile );
 
-    setbuf(
-      logfp, NULL ); // Flush log file output immediately by disabling buffer
+    // Flush log file output immediately by disabling buffer
+    setbuf( logfp, NULL );
 
     // if (optind < argc) {
     //	fprintf (stderr, "non-option ARGV-elements: ");
@@ -941,7 +941,7 @@ int main( int argc, char **argv ) {
 
             theid++;
 
-            if ( ( thecount % 100 ) == 0 )
+            if ( ( thecount % 10000 ) == 0 )
                 fprintf( logfp, "TRF output lines processed: %d\n", thecount );
         }
     }
