@@ -275,7 +275,7 @@ sub print_vcf {
         my @gt
             = ( $row{num_alleles} == 1 )
             ? ( 1 * !$row{refdetected} ) x 2
-            : ( 1 * !$row{refdetected} .. ( $row{num_alleles} - 1 ) );
+            : ( 1 * !$row{refdetected} .. ( $row{num_alleles} - $row{refdetected} ) );
 
         # Split fields, and modify as needed
         my @alt_seqs     = split /,/, $row{alt_seqs};
