@@ -2058,12 +2058,14 @@ while ( my @data = $get_supported_reftrs_sth->fetchrow_array() ) {
         $ref->{hetez_multi} = 1;
     }
     elsif ( $ref->{nsupport} == $run_conf{PLOIDY} ) {
-        $ref->{hetez_same} = 1 * ( $ref->{nsameasref} );
-        $ref->{hetez_diff} = 1 * !( $ref->{nsameasref} );
+        ( $ref->{nsameasref} == 1 )
+            ? ( $ref->{hetez_same} = 1 )
+            : ( $ref->{hetez_diff} = 1 );
     }
     else {
-        $ref->{homez_same} = 1 * ( $ref->{nsameasref} );
-        $ref->{homez_diff} = 1 * !( $ref->{nsameasref} );
+        ( $ref->{nsameasref} == 1 )
+            ? ( $ref->{homez_same} = 1 )
+            : ( $ref->{homez_diff} = 1 );
     }
 
     $ref->{support_vntr}
