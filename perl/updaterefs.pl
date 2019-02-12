@@ -338,8 +338,9 @@ sub print_vcf {
         print $allwithsupport_vcffile $vcf_rec;
     }
 
-    die "Error: Mismatch in VNTR count. Supported vntr count is $numvntrs "
-        . "but we counted $vntr_count when producing VCF files. Something went wrong."
+    warn "Error: Mismatch in VNTR count. Supported vntr count is $numvntrs "
+        . "but we counted $vntr_count when producing VCF files. VCF header "
+        . "a bad VNTR count.\n"
         unless ( $vntr_count == $numvntrs );
     close $spanN_vcffile;
     close $allwithsupport_vcffile;
@@ -1945,10 +1946,10 @@ my $dbh = get_dbh( { userefdb => 1 } )
 # warn "\nTurning off AutoCommit\n";
 $dbh->do("PRAGMA foreign_keys = OFF");
 $dbh->do("PRAGMA synchronous = OFF");
-$dbh->begin_work;
+# $dbh->begin_work;
 $dbh->do( get_trunc_query( $run_conf{BACKEND}, "main.fasta_ref_reps" ) )
     or die "Couldn't do statement: " . $dbh->errstr;
-$dbh->commit;
+# $dbh->commit;
 
 # Create a temporary table of all refids from vntr_support
 # table, with the data aggregated to make parsing easier.
