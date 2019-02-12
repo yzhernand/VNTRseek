@@ -2265,8 +2265,10 @@ $dbh->do("PRAGMA synchronous = ON");
 $dbh->do("PRAGMA main.optimize");
 $dbh->disconnect;
 
-warn "Producing output LaTeX file...\n";
-print_latex($ReadTRsSupport);
+if ( $ENV{DEBUG} ) {
+    warn "Producing output LaTeX file...\n";
+    print_latex($ReadTRsSupport);
+}
 
 warn "Producing distribution file...\n";
 print_distr();
