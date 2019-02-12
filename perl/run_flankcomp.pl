@@ -14,7 +14,8 @@ use File::Basename;
 
 use lib "$FindBin::RealBin/lib";
 
-use vutil qw(get_config get_dbh set_statistics get_trunc_query);
+use vutil
+    qw(get_config get_dbh set_statistics get_trunc_query gen_exec_array_cb);
 
 sub nowhitespace($) {
     my $string = shift;
@@ -33,7 +34,7 @@ if ( $argc < 4 ) {
 
 my $inputfile = $ARGV[0];
 my $DBSUFFIX  = $ARGV[1];
-my $run_dir     = $ARGV[2];
+my $run_dir   = $ARGV[2];
 my $TEMPDIR   = $ARGV[3];
 
 # set these mysql credentials in vs.cnf (in installation directory)
@@ -70,8 +71,7 @@ $dbh->do( get_trunc_query( $run_conf{BACKEND}, "clusterlnk" ) )
     or die "Couldn't do statement: " . $dbh->errstr;
 
 $dbh->do("PRAGMA foreign_keys = OFF");
-    $dbh->do("PRAGMA synchronous = OFF");
-    $dbh->begin_work;
+$dbh->do("PRAGMA synchronous = OFF");
 
 #############################################################################################
 #############################################################################################
@@ -86,13 +86,13 @@ open my $fh, "<$inputfile" or die $!;
 my $TEMPFILE;
 
 $sth = $dbh->prepare(q{INSERT INTO clusterlnk VALUES (?, ?, ?, 0, 0)})
-        or die "Couldn't prepare statement: " . $dbh->errstr;
+    or die "Couldn't prepare statement: " . $dbh->errstr;
 
 # insert into clusterlnk
 my $totalreps = 0;
 
 # DBI->trace("3|SQL", "dbitrace.log");
-my (@bind_cids, @bind_refids, @bind_dirs);
+my @clusters;
 while (<$fh>) {
     $clusters_processed++;
 
@@ -108,20 +108,37 @@ while (<$fh>) {
 
         my $dir = q{'};
         if ( $val =~ s/([\'\"])// ) { $dir = $1; }
-        push @bind_cids, $clusters_processed;
-        push @bind_refids, $val;
-        push @bind_dirs, $dir;
+        push @clusters, [ $clusters_processed, $val, $dir ];
 
-        if ( ( $totalreps % $RECORDS_PER_INFILE_INSERT == 0 ) )
-        {
-            $sth->execute_array( {}, \@bind_cids, \@bind_refids, \@bind_dirs );
-            # if ( $ENV{DEBUG} ) {
-            #     warn
-            #         "clusterlnk... Cluster $clusters_processed, value: $val, direction: $dir\n";
-            # }
-            @bind_cids = ();
-            @bind_refids = ();
-            @bind_dirs = ();
+        if ( ( $totalreps % $RECORDS_PER_INFILE_INSERT == 0 ) ) {
+            $dbh->begin_work();
+            my $cb     = gen_exec_array_cb( \@clusters );
+            my $tuples = $sth->execute_array(
+                {   ArrayTupleFetch  => $cb,
+                    ArrayTupleStatus => \my @tuple_status
+                }
+            );
+            if ($tuples) {
+                @clusters = ();
+                $dbh->commit;
+            }
+            else {
+                for my $tuple ( 0 .. @clusters - 1 ) {
+                    my $status = $tuple_status[$tuple];
+                    $status = [ 0, "Skipped" ]
+                        unless defined $status;
+                    next unless ref $status;
+                    printf "Failed to insert row %s. Status %s\n",
+                        join( ",", $clusters[$tuple] ),
+                        $status->[1];
+                }
+                eval { $dbh->rollback; };
+                if ($@) {
+                    die "Database rollback failed.\n";
+                }
+                die
+                    "Error when inserting entries into our clusterlnk table.\n";
+            }
         }
 
     }
@@ -129,19 +146,35 @@ while (<$fh>) {
 }    # end of while loop
 
 # Finish insert
-if ( @bind_cids )
-{
-    $sth->execute_array( {}, \@bind_cids, \@bind_refids, \@bind_dirs );
-    # if ( $ENV{DEBUG} ) {
-    #     warn
-    #         "clusterlnk... Cluster $clusters_processed, value: $val, direction: $dir\n";
-    # }
-    @bind_cids = ();
-    @bind_refids = ();
-    @bind_dirs = ();
+if (@clusters) {
+    $dbh->begin_work();
+    my $cb     = gen_exec_array_cb( \@clusters );
+    my $tuples = $sth->execute_array(
+        {   ArrayTupleFetch  => $cb,
+            ArrayTupleStatus => \my @tuple_status
+        }
+    );
+    if ($tuples) {
+        @clusters = ();
+        $dbh->commit;
+    }
+    else {
+        for my $tuple ( 0 .. @clusters - 1 ) {
+            my $status = $tuple_status[$tuple];
+            $status = [ 0, "Skipped" ]
+                unless defined $status;
+            next unless ref $status;
+            printf "Failed to insert row %s. Status %s\n",
+                join( ",", $clusters[$tuple] ),
+                $status->[1];
+        }
+        eval { $dbh->rollback; };
+        if ($@) {
+            die "Database rollback failed.\n";
+        }
+        die "Error when inserting entries into our clusterlnk table.\n";
+    }
 }
-
-$dbh->commit;
 
 #############################################################################################
 #############################################################################################
@@ -283,6 +316,7 @@ while (<$fh>) {
     $sth2->execute( $clusters_processed, $minpat, $maxpat, $repeatcount,
         $refcount )    # Execute the query
         or die "Couldn't execute statement: " . $sth2->errstr;
+
     # $dbh->commit;
 
     # stats
