@@ -266,6 +266,7 @@ sub print_vcf {
 
     # If we're now seeing a new TR, write out the record for the
     # previous one (unless the rid is -1)
+    my $vntr_count = 0;
     while ( $get_supported_reftrs_sth->fetch() ) {
 
         # If homozygous genotype called, either "0/0" or "1/1",
@@ -275,7 +276,8 @@ sub print_vcf {
         my @gt
             = ( $row{num_alleles} == 1 )
             ? ( 1 * !$row{refdetected} ) x 2
-            : ( 1 * !$row{refdetected} .. ( $row{num_alleles} - $row{refdetected} ) );
+            : ( 1 * !$row{refdetected}
+                .. ( $row{num_alleles} - $row{refdetected} ) );
 
         # Split fields, and modify as needed
         my @alt_seqs     = split /,/, $row{alt_seqs};
@@ -331,10 +333,14 @@ sub print_vcf {
 
         # Only print record to spanN file if VNTR
         ( $row{num_alleles} > 1 || !$row{refdetected} )
+            && $vntr_count++
             && print $spanN_vcffile $vcf_rec;
         print $allwithsupport_vcffile $vcf_rec;
     }
 
+    die "Error: Mismatch in VNTR count. Supported vntr count is $numvntrs "
+        . "but we counted $vntr_count when producing VCF files. Something went wrong."
+        unless ( $vntr_count == $numvntrs );
     close $spanN_vcffile;
     close $allwithsupport_vcffile;
     $dbh->disconnect;
@@ -2020,7 +2026,8 @@ while ( my @data = $get_supported_reftrs_sth->fetchrow_array() ) {
             $ref->{nsupport}++;
 
             # Flag if ref has at least MIN_SUPPORT_REQUIRED
-            $ref->{nsameasref} = ( $ref->{nsameasref} || $sameasref[$i] );
+            ( $ref->{nsameasref} || $sameasref[$i] )
+                && ( $ref->{nsameasref} = 1 );
 
             # Running sum of read TRs supporting alleles
             $ReadTRsSupport += $support[$i];
@@ -2030,15 +2037,16 @@ while ( my @data = $get_supported_reftrs_sth->fetchrow_array() ) {
         $ref->{readsum} += $support[$i];
 
         # Flag if this is a vntr with at least one read support
-        $ref->{support_vntr_span1} = ( $ref->{support_vntr_span1}
-                || ( $support[$i] > 0 && $sameasref[$i] == 0 ) );
+        ( $ref->{support_vntr_span1}
+                || ( $support[$i] > 0 && $sameasref[$i] == 0 ) )
+            && ( $ref->{support_vntr_span1} = 1 );
     }
 
     # Flag: at least one allele has at least MIN_SUPPORT_REQUIRED
-    $ref->{has_support} = ( $ref->{nsupport} > 0 );
+    ( $ref->{nsupport} > 0 ) && ( $ref->{has_support} = 1 );
 
-    $ref->{span1} = ( $ref->{readsum} >= 1 );
-    $ref->{spanN} = ( $ref->{readsum} >= $MIN_SUPPORT_REQUIRED );
+    ( $ref->{readsum} >= 1 )                     && ( $ref->{span1} = 1 );
+    ( $ref->{readsum} >= $MIN_SUPPORT_REQUIRED ) && ( $ref->{spanN} = 1 );
 
     # hetez_multi is true if there is support
     # for more than one allele
