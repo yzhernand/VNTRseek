@@ -1146,27 +1146,22 @@ if ( $STEP == 14 ) {
     print STDERR
         "\n\nExecuting step #$STEP (generating .index files for pcr_dup)...";
 
-    if ( $opts{KEEPPCRDUPS} ) {
-        warn "\nWarning: Not removing detected PCR duplicates\n";
+    my $exstring = "./extra_index.pl";
+    my @exargs   = (
+        "$read_profiles_folder_clean/best", "$opts{DBSUFFIX}",
+        "$run_dir",                         "$opts{TMPDIR}"
+    );
+    system( $exstring, @exargs );
+    if ( $? == -1 ) {
+        SetError( $STEP, "command failed: $!", -1 );
+        die "command failed: $!\n";
     }
     else {
-        my $exstring = "./extra_index.pl";
-        my @exargs   = (
-            "$read_profiles_folder_clean/best", "$opts{DBSUFFIX}",
-            "$run_dir",                         "$opts{TMPDIR}"
-        );
-        system( $exstring, @exargs );
-        if ( $? == -1 ) {
-            SetError( $STEP, "command failed: $!", -1 );
-            die "command failed: $!\n";
-        }
-        else {
-            my $rc = ( $? >> 8 );
-            if ( 0 != $rc ) {
-                SetError( $STEP, "generating .index files for pcr_dup failed",
-                    $rc );
-                die "command exited with value $rc";
-            }
+        my $rc = ( $? >> 8 );
+        if ( 0 != $rc ) {
+            SetError( $STEP, "generating .index files for pcr_dup failed",
+                $rc );
+            die "command exited with value $rc";
         }
     }
 
@@ -1186,29 +1181,24 @@ if ( $STEP == 15 ) {
     if ( $opts{KEEPPCRDUPS} ) {
         warn "\nWarning: Not removing detected PCR duplicates\n";
     }
+    my $exstring = "./pcr_dup.pl";
+    my @exargs   = (
+        "$read_profiles_folder_clean/best", "$read_profiles_folder_clean",
+        "$opts{DBSUFFIX}",                  "$run_dir",
+        "$opts{NPROCESSES}",                "$opts{TMPDIR}",
+        "$opts{KEEPPCRDUPS}"
+    );
+    warn "exargs: " . join( " ", @exargs ) . "\n";
+    system( $exstring, @exargs );
+    if ( $? == -1 ) {
+        SetError( $STEP, "command failed: $!", -1 );
+        die "command failed: $!\n";
+    }
     else {
-        my $exstring = "./pcr_dup.pl";
-        my @exargs   = (
-            "$read_profiles_folder_clean/best",
-            "$read_profiles_folder_clean",
-            "$opts{DBSUFFIX}",
-            "$run_dir",
-            "$opts{NPROCESSES}",
-            "$opts{TMPDIR}",
-            "$opts{KEEPPCRDUPS}"
-        );
-        warn "exargs: " . join( " ", @exargs ) . "\n";
-        system( $exstring, @exargs );
-        if ( $? == -1 ) {
-            SetError( $STEP, "command failed: $!", -1 );
-            die "command failed: $!\n";
-        }
-        else {
-            my $rc = ( $? >> 8 );
-            if ( 0 != $rc ) {
-                SetError( $STEP, "calculating PCR duplicates failed", $rc );
-                die "command exited with value $rc";
-            }
+        my $rc = ( $? >> 8 );
+        if ( 0 != $rc ) {
+            SetError( $STEP, "calculating PCR duplicates failed", $rc );
+            die "command exited with value $rc";
         }
     }
 
