@@ -338,9 +338,9 @@ sub print_vcf {
         print $allwithsupport_vcffile $vcf_rec;
     }
 
-    warn "Error: Mismatch in VNTR count. Supported vntr count is $numvntrs "
+    warn "Warning: Mismatch in VNTR count. Supported vntr count is $numvntrs "
         . "but we counted $vntr_count when producing VCF files. VCF header "
-        . "a bad VNTR count.\n"
+        . "will have a bad VNTR count.\n"
         unless ( $vntr_count == $numvntrs );
     close $spanN_vcffile;
     close $allwithsupport_vcffile;
