@@ -1992,12 +1992,11 @@ my @supported_refTRs;
 $get_supported_reftrs_sth->execute()
     or die "Cannot execute: " . $get_supported_reftrs_sth->errstr();
 $i = 0;
-my $ref = {};
 while ( my @data = $get_supported_reftrs_sth->fetchrow_array() ) {
     $i++;
 
     # Note: refid is positive
-    $ref = {
+    my $ref = {
         refid              => $data[0],
         entr               => calc_entropy( $data[1] ),
         homez_same         => 0,
@@ -2058,12 +2057,12 @@ while ( my @data = $get_supported_reftrs_sth->fetchrow_array() ) {
     if ( $ref->{nsupport} > $run_conf{PLOIDY} ) {
         $ref->{hetez_multi} = 1;
     }
-    elsif ( $ref->{nsupport} == $run_conf{PLOIDY} ) {
+    elsif ( $ref->{nsupport} > 1 && $ref->{nsupport} <= $run_conf{PLOIDY} ) {
         ( $ref->{nsameasref} == 1 )
             ? ( $ref->{hetez_same} = 1 )
             : ( $ref->{hetez_diff} = 1 );
     }
-    else {
+    elsif ( $ref->{nsupport} == 1) {
         ( $ref->{nsameasref} == 1 )
             ? ( $ref->{homez_same} = 1 )
             : ( $ref->{homez_diff} = 1 );
@@ -2078,6 +2077,10 @@ while ( my @data = $get_supported_reftrs_sth->fetchrow_array() ) {
     ( $ENV{DEBUG} ) && warn "Saving ref entry: " . Dumper($ref) . "\n";
     push(
         @supported_refTRs,
+        # rid, alleles_sup, allele_sup_same_as_ref, entropy,
+        #     has_support, span1, spanN, homez_same, homez_diff,
+        #     hetez_same, hetez_diff, hetez_multi, support_vntr,
+        #     support_vntr_span1
         [   $ref->{refid},        $ref->{nsupport},
             $ref->{nsameasref},   $ref->{entr},
             $ref->{has_support},  $ref->{span1},
