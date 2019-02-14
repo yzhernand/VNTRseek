@@ -1177,6 +1177,42 @@ sub gen_exec_array_cb {
 }
 
 ################################################################
+sub vs_db_insert {
+    my ($dbh, $sth, $arr_ref, $errstr) = @_;
+    my $cb = gen_exec_array_cb( $arr_ref );
+    my ($tuples, @tuple_status);
+    $dbh->begin_work;
+
+    try {
+        $tuples = $sth->execute_array(
+            {   ArrayTupleFetch  => $cb,
+                ArrayTupleStatus => \@tuple_status
+            }
+        );
+    }
+    catch {
+        warn "$_\n";
+        for my $tuple ( 0 .. @$arr_ref - 1 ) {
+            my $status = $tuple_status[$tuple];
+            $status = [ 0, "Skipped" ]
+                unless defined $status;
+            next unless ref $status;
+            printf "Failed to insert row %s. Status %s\n",
+                join( ",", $arr_ref->[$tuple] ),
+                $status->[1];
+        }
+        eval { $dbh->rollback; };
+        if ($@) {
+            croak "Database rollback failed.\n";
+        }
+        croak "$errstr\n";
+    }
+    @$arr_ref = ();
+    $dbh->commit;
+    return $tuples;
+}
+
+################################################################
 
 sub print_config {
 

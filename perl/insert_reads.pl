@@ -448,34 +448,15 @@ while ( $files_processed < $files_to_process ) {
 
 # cleanup
 if (@fasta_reads_rows) {
-    my $cb = gen_exec_array_cb( \@fasta_reads_rows );
-    $dbh->begin_work;
-    my $tuples = $sth->execute_array(
-        {   ArrayTupleFetch  => $cb,
-            ArrayTupleStatus => \my @tuple_status
-        }
-    );
-    if ($tuples) {
-        @fasta_reads_rows = ();
-        $inserted += $tuples;
-        $dbh->commit;
+    my $rows = vs_db_insert($dbh, $sth, \@fasta_reads_rows, "Error inserting reads.");
+    if ($rows) {
+        $inserted += $rows;
     }
     else {
-        for my $tuple ( 0 .. @fasta_reads_rows - 1 ) {
-            my $status = $tuple_status[$tuple];
-            $status = [ 0, "Skipped" ]
-                unless defined $status;
-            next unless ref $status;
-            printf "Failed to insert row %s. Status %s\n",
-                join( ",", $fasta_reads_rows[$tuple] ),
-                $status->[1];
-        }
-        eval { $dbh->rollback; };
-        if ($@) {
-            die "Database rollback failed.\n";
-        }
-        die "Error inserting reads.\n";
+        die "Something went wrong inserting, but somehow wasn't caught!\n";
     }
+    warn "Didn't empty rows!\n"
+        if @fasta_reads_rows > 0;
 }
 
 # reenable indices
