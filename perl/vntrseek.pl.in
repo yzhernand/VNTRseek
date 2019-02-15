@@ -386,12 +386,9 @@ if ( $STEP != 0 ) {
 
     my $err_hash = GetError();
     if ( $err_hash->{ERROR_STEP} != 0 ) {
-        die printf(
-            "Pipeline error detected at step %d (code: %d, description: '%s'). Call this program with step 100 to clear error.\n",
-            $err_hash->{ERROR_STEP},
-            $err_hash->{ERROR_CODE},
-            $err_hash->{ERROR_DESC}
-        );
+        die "\nPipeline error detected at step $err_hash->{ERROR_STEP} "
+            . "(code: $err_hash->{ERROR_CODE}, description: "
+            . "'$err_hash->{ERROR_DESC}'). Call this program with step 100 to clear error.\n";
     }
 
     # get next step
