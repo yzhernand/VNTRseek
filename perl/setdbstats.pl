@@ -61,48 +61,65 @@ my $dbh = get_dbh( { userefdb => 1, readonly => 1 } );
     = $dbh->selectrow_array(
     q{SELECT COUNT(*) FROM ref_profiles WHERE redund = 0});
 
-open( $input, "-|", "cat $readpf/*.indexhist | wc -l" );
-$rc = <$input>;
-if ( $rc =~ /(\d+)/ ) {
-    $stats{NUMBER_TRS_IN_READS} = $1;
-}
-close($input);
-
 $dbh->disconnect;
 
 open( $input, "-|", "cat $rpfc/*.rotindex | wc -l" );
 $rc = <$input>;
 if ( $rc =~ /(\d+)/ ) {
     $stats{NUMBER_TRS_IN_READS_AFTER_REDUND} = $1;
+    $stats{NUMBER_READS_WITHTRS_GE7_AFTER_REDUND} = $1;
 }
 close($input);
 
+$stats{NUMBER_TRS_IN_READS}                   = 0;
 $stats{NUMBER_TRS_IN_READS_GE7}               = 0;
 $stats{NUMBER_READS_WITHTRS_GE7}              = 0;
 $stats{NUMBER_READS_WITHTRS}                  = 0;
 $stats{NUMBER_READS_WITHTRS_GE7_AFTER_REDUND} = 0;
 
-$rc = qx(./ge7.pl $readpf/*.index 2>/dev/null);
-if ( $rc =~ /(\d+) (\d+) (\d+)/ ) {
-    $stats{NUMBER_TRS_IN_READS_GE7}  = $1;
-    $stats{NUMBER_READS_WITHTRS_GE7} = $2;
-    $stats{NUMBER_READS_WITHTRS}     = $3;
+opendir( my $dirhandle, "$readpf" );
+my @dircontents = grep( /\.indexhist$/, readdir($dirhandle));
+closedir($dirhandle);
+for my $f ( @dircontents ) {
+    open my $fh, "<", "$readpf/$f";
+    my $line = <$fh>;
+    chomp $line;
+    my @fields = split /\t/, $line;
+    $stats{NUMBER_TRS_IN_READS_GE7}  += $fields[0];
+    $stats{NUMBER_TRS_IN_READS}  += $fields[1];
+    $stats{NUMBER_READS_WITHTRS_GE7} += $fields[2];
+    $stats{NUMBER_READS_WITHTRS}     += $fields[3];
+    close $fh;
 }
-close($input);
 
-open( $input, "-|", "./ge7.pl $readpf/*.indexhist" );
-$rc = <$input>;
-if ( $rc =~ /(\d+) (\d+) (\d+)/ ) {
-    $stats{NUMBER_READS_WITHTRS} = $3;
-}
-close($input);
+# open( $input, "-|", "cat $readpf/*.indexhist | wc -l" );
+# $rc = <$input>;
+# if ( $rc =~ /(\d+)/ ) {
+#     $stats{NUMBER_TRS_IN_READS} = $1;
+# }
+# close($input);
 
-open( $input, "-|", "cat $rpfc/*.rotindex | wc -l" );
-$rc = <$input>;
-if ( $rc =~ /^(\d+)/ ) {
-    $stats{NUMBER_READS_WITHTRS_GE7_AFTER_REDUND} = $1;
-}
-close($input);
+# $rc = qx(./ge7.pl $readpf/*.index 2>/dev/null);
+# if ( $rc =~ /(\d+) (\d+) (\d+)/ ) {
+#     $stats{NUMBER_TRS_IN_READS_GE7}  = $1;
+#     $stats{NUMBER_READS_WITHTRS_GE7} = $2;
+#     $stats{NUMBER_READS_WITHTRS}     = $3;
+# }
+# close($input);
+
+# open( $input, "-|", "./ge7.pl $readpf/*.indexhist" );
+# $rc = <$input>;
+# if ( $rc =~ /(\d+) (\d+) (\d+)/ ) {
+#     $stats{NUMBER_READS_WITHTRS} = $3;
+# }
+# close($input);
+
+# open( $input, "-|", "cat $rpfc/*.rotindex | wc -l" );
+# $rc = <$input>;
+# if ( $rc =~ /^(\d+)/ ) {
+#     $stats{NUMBER_READS_WITHTRS_GE7_AFTER_REDUND} = $1;
+# }
+# close($input);
 
 # Get config for run and save stats
 set_statistics( \%stats );

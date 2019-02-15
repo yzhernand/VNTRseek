@@ -287,7 +287,8 @@ int main( int argc, char **argv ) {
       headerlen, rcyes;
     int            thecount;
     float          copynum = 0, entropy = 0;
-    FILE *         fp, *fph, *logfp;
+    FILE *         fp, *fph;
+    // FILE *         *logfp; // reenable, perhaps with some verbose mode
     char *         header, *flankleft, *flankright;
     unsigned char *sequence, *pattern;
     int            startid = -1000000, match = -1000000, mismatch = -1000000,
@@ -566,22 +567,22 @@ int main( int argc, char **argv ) {
         assert( 0 ); // should never happen
     }
 
-    // Open log file
-    char *logfile = calloc( strlen( indexfile ) + 1, sizeof( char ) );
-    strncpy( logfile, indexfile, strlen( indexfile ) - 6 );
-    // fprintf(stderr, "Log file name: %s\n", logfile);
-    strncat( logfile, ".log", 4 );
-    // fprintf(stderr, "Log file name: %s\n", logfile);
-    logfp = fopen( logfile, "w" );
+    // // Open log file
+    // char *logfile = calloc( strlen( indexfile ) + 1, sizeof( char ) );
+    // strncpy( logfile, indexfile, strlen( indexfile ) - 6 );
+    // // fprintf(stderr, "Log file name: %s\n", logfile);
+    // strncat( logfile, ".log", 5 );
+    // // fprintf(stderr, "Log file name: %s\n", logfile);
+    // logfp = fopen( logfile, "w" );
 
-    if ( logfp == NULL )
-        fprintf( stderr,
-          "Unable to open log file %s for writing. TRF progress will not be "
-          "written out.\n",
-          logfile );
+    // if ( logfp == NULL )
+    //     fprintf( stderr,
+    //       "Unable to open log file %s for writing. TRF progress will not be "
+    //       "written out.\n",
+    //       logfile );
 
-    // Flush log file output immediately by disabling buffer
-    setbuf( logfp, NULL );
+    // // Flush log file output immediately by disabling buffer
+    // setbuf( logfp, NULL );
 
     // if (optind < argc) {
     //	fprintf (stderr, "non-option ARGV-elements: ");
@@ -941,13 +942,13 @@ int main( int argc, char **argv ) {
 
             theid++;
 
-            if ( ( thecount % 10000 ) == 0 )
-                fprintf( logfp, "TRF output lines processed: %d\n", thecount );
+            // if ( ( thecount % 10000 ) == 0 )
+            //     fprintf( logfp, "TRF output lines processed: %d\n", thecount );
         }
     }
 
     fclose( fp );
-    fclose( logfp );
+    // fclose( logfp );
 
     /* sort becaue PROCLU expects a file sorted on pattern size ASC */
     /* PIPELINE: arsize_and_min_rep_sort is now used to sort so that redundancy
@@ -980,6 +981,8 @@ int main( int argc, char **argv ) {
         return ( 18 );
     }
 
+    EASY_STRING_HASH *headerHash = EasyStringHashCreate(repList->size, NULL, free);
+    size_t readCount = 0, ge7ReadCount = 0, TRCount = 0, ge7TRCount = 0;
     for ( tnode = repList->head; tnode != NULL; tnode = tnode->next ) {
         repPtr = (REP_STRUCT *) ( tnode->item );
         /*fprintf(fp,"%d %d %d %d %.1f %d %d %d %d %d %d %d %d %.2f %s
@@ -995,12 +998,34 @@ int main( int argc, char **argv ) {
               repPtr->copynum, repPtr->patsize, repPtr->pattern );
         }
 
-        fprintf( fph, "%d\t%s\t%d\t%d\t%.1f\t%d\t%s\n", repPtr->id,
-          repPtr->header, repPtr->firstindex, repPtr->lastindex,
-          repPtr->copynum, repPtr->patsize, repPtr->pattern );
+        // We've not seen this header before. Set and increment the
+        // ge7ReadCount.
+        int *hval;
+        if ((hval = EasyStringHashGet(headerHash, repPtr->header)) == NULL) {
+            readCount++;
+            ge7ReadCount += (repPtr->patsize >= 7);
+            int *flag = malloc(sizeof(int));
+            *flag = (repPtr->patsize >= 7);
+            EasyStringHashSet(headerHash, repPtr->header, flag);
+        }
+        // We've seen this header before. Only increment ge7ReadCount
+        // if value in hash was not already set to 1.
+        else {
+            ge7ReadCount += (*hval == 0 );
+            *hval = 1;
+        }
+
+        TRCount ++;
+        // Increment the ge7TRCount if TR pattern >= 7
+        ge7TRCount += (repPtr->patsize >= 7);
+
+        // fprintf( fph, "%d\t%s\t%d\t%d\t%.1f\t%d\t%s\n", repPtr->id,
+        //   repPtr->header, repPtr->firstindex, repPtr->lastindex,
+        //   repPtr->copynum, repPtr->patsize, repPtr->pattern );
     }
 
     fclose( fp );
+    fprintf(fph, "%zu\t%zu\t%zu\t%zu\n", ge7TRCount, TRCount, ge7ReadCount, readCount);
     fclose( fph );
 
     /* output leb36 to standard output */

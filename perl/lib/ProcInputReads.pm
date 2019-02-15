@@ -35,7 +35,7 @@ my $install_dir;
 # For new formats, simply add the name of the format here and require
 # that input file names have it as a prefix (eg, fasta files should
 # have prefix "fasta_")
-my @supported_format_names = qw(fasta fastq bam);
+my @supported_format_names = qw(fasta fastq \.bam$);
 my %supported_formats;
 @supported_formats{@supported_format_names} = @supported_format_names;
 
@@ -229,7 +229,9 @@ sub fork_proc {
         # my $debug_reads_processed = 0;
 
         my $reads_processed = 0;
+        my %reads;
         while ( my ( $header, $body ) = $reader->() ) {
+            $reads{$header} = { seq => $body, written => 0 };
 
             # warn "header: $header\nbody: $body\n"
             #     if ($ENV{DEBUG});
@@ -237,7 +239,7 @@ sub fork_proc {
             # say $logfile $data[0] . "\n" . $data[1];
 
             pipe_to_trf( $reverse_read, $strip_454_TCAG, $warn_454_TCAG,
-                $trf_pipe, $header, $body );
+                $trf_pipe, ">" . $header, $body );
 
             # $trf_pipe, $header, $body, $debug_reads_processed );
             # $debug_reads_processed++;
@@ -246,6 +248,24 @@ sub fork_proc {
                     check_trf_pipe_close( $!, $?, $output_prefix,
                         $current_file, $current_fragment );
                 }
+
+                # scan output file and write out reads with TRs to new file
+                open my $index_fh, "<", "$output_prefix.index";
+                open my $reads_fh, ">", "$output_prefix.reads";
+                while ( my $line = <$index_fh> ) {
+                    my @fields = split /\t/, $line;
+                    my $head = $fields[1];
+                    if ( exists $reads{$head}
+                        && ( $reads{$head}->{written} == 0 ) )
+                    {
+                        print $reads_fh $head . "\t"
+                            . $reads{$head}->{seq} . "\n";
+                        $reads{$head}->{written} = 1;
+                    }
+                }
+                close $index_fh;
+                close $reads_fh;
+
                 $output_prefix
                     = "$output_dir/${current_file}_" . ++$current_fragment;
                 open $trf_pipe,
@@ -258,6 +278,23 @@ sub fork_proc {
             check_trf_pipe_close( $!, $?, $output_prefix, $current_file,
                 $current_fragment );
         }
+
+        # scan output file and write out reads with TRs to new file
+        open my $index_fh, "<", "$output_prefix.index";
+        open my $reads_fh, ">", "$output_prefix.reads";
+        while ( my $line = <$index_fh> ) {
+            my @fields = split /\t/, $line;
+            my $head = $fields[1];
+            if ( exists $reads{$head}
+                && ( $reads{$head}->{written} == 0 ) )
+            {
+                print $reads_fh $head . "\t"
+                    . $reads{$head}->{seq} . "\n";
+                $reads{$head}->{written} = 1;
+            }
+        }
+        close $index_fh;
+        close $reads_fh;
 
         exit;
     }
@@ -577,6 +614,7 @@ sub read_fastaq {
         return () unless ($fasta_rec);
         my ( $header, $seq ) = split( /\n+/, $fasta_rec );
         chomp $header;
+        $header =~ s/\s+$//;
         chomp $seq;
 
         # Add a number (the file index) to the read
@@ -597,7 +635,7 @@ sub read_fastaq {
         # my $seq = join( "", @seqlines );
 
         # warn "seq: '$seq'";
-        return ( ">" . $header, $seq );
+        return ( $header, $seq );
     };
 }
 
@@ -740,7 +778,7 @@ sub read_bam {
         my ($header, undef, undef, undef, undef,
             undef,   undef, undef, undef, $seq
         ) = split( /\s+/, $bam_rec );
-        return ( ">" . $header . $cmdhash->{pair}, $seq );
+        return ( $header . $cmdhash->{pair}, $seq );
         }
 }
 

@@ -16,6 +16,7 @@ set_install_dir("$FindBin::RealBin");
 
 use vutil
     qw(get_config get_dbh set_statistics get_trunc_query gen_exec_array_cb vs_db_insert);
+use Data::Dumper;
 
 my $RECORDS_PER_INFILE_INSERT = 100000;
 
@@ -128,7 +129,9 @@ print STDERR
     "\nreading index file and storing relevant entries in database..."
     . "\n\n";
 opendir( DIR, $indexfolder );
-my @indexfiles = sort grep( /\.(?:index\.renumbered)$/, readdir(DIR) );
+my @filelist   = readdir(DIR);
+my @indexfiles = sort grep( /\.(?:index\.renumbered)$/, @filelist );
+my @readfiles  = sort grep( /\.(?:reads)$/, @filelist );
 closedir(DIR);
 
 my $indexcount = @indexfiles;
@@ -145,6 +148,10 @@ my $pattern;
 my $fh1;
 my $fh2;
 my @replnk_rows;
+
+die "read file count doesn't equal index file count: ($indexcount vs "
+    . 1 * @readfiles . ")\n"
+    if ( $indexcount != @readfiles );
 
 foreach my $ifile (@indexfiles) {
 
@@ -317,49 +324,6 @@ $timestart  = time();
 print STDERR
     "\nreading input read files and storing relevant entries in database..."
     . "\n\n";
-opendir( my $dirhandle, $fastafolder );
-my @dircontents = readdir($dirhandle);
-closedir($dirhandle);
-
-if ( $ENV{DEBUG} ) {
-    warn join( ",", @dircontents ) . "\n";
-}
-
-# Get all supported files. See note above on priority of input formats
-my @filenames;
-my ( $input_format, $compression );
-
-# Determine sequence format
-my %supported_formats_regexs = formats_regexs();
-while ( my ( $sf, $pat_re ) = each %supported_formats_regexs ) {
-    if (@filenames = sort
-        grep( /${pat_re}/, @dircontents )
-        )
-    {
-        $input_format = $sf;
-
-        # Determine compression format
-        my %cmp_formats_regexs = compressed_formats_regexs();
-        while ( my ( $cf, $cf_re ) = each %cmp_formats_regexs ) {
-            if ( $filenames[0] =~ /.*\.(?:${cf_re})/ ) {
-                $compression = $cf;
-                last;
-            }
-        }
-        last;
-    }
-}
-
-unless ( @filenames > 0 ) {
-    die "Error: no supported files found in $fastafolder. Exiting...\n";
-}
-
-# If BAM, init files list
-if ( $input_format eq "bam" ) {
-    @filenames = init_bam( $fastafolder, $IS_PAIRED_READS, \@filenames );
-}
-
-my $files_to_process = @filenames;
 
 $sth
     = $dbh->prepare(
@@ -372,16 +336,18 @@ my $qualstr       = "";
 my $HEADER_SUFFIX = "";
 my @fasta_reads_rows;
 
+print Dumper(\%HEADHASH) . "\n";
 # TODO Can be made more efficient for BAM files?
 my $files_processed = 0;
-while ( $files_processed < $files_to_process ) {
-    say STDERR "Reading file/file split ", ( $files_processed + 1 );
-
-    my $reader = get_reader( $fastafolder, $input_format, $compression,
-        $files_processed, \$files_to_process, \@filenames );
-    while ( my ( $headstr, $dnastr ) = $reader->() ) {
+for my $read_file ( @readfiles ) {
+    open my $r_fh, "<", "$indexfolder/$read_file";
+    while (my $line = <$r_fh>) {
+        chomp $line;
+        ($headstr, $dnastr) = split "\t", $line;
         $headstr = trim($headstr);
         $dnastr  = trimall($dnastr);
+        # warn "head: $headstr\tdna: $dnastr\n";
+
         my $dnabak = $dnastr;
         $totalReads++;
         if ( exists $HEADHASH{"$headstr"} ) {
@@ -412,6 +378,8 @@ while ( $files_processed < $files_to_process ) {
             }
         }
     }
+
+    close $r_fh;
     $files_processed++;
     say STDERR " (processed: $processed)";
 }
