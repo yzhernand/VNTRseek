@@ -1175,9 +1175,23 @@ sub gen_exec_array_cb {
         }
 }
 
-################################################################
+#-------------------------------------------------------------------------------
+## @brief      vs_db_insert
+##
+## @param      $dbh A database handle
+## @param      $sth A statement handle for the INSERT statement you
+##             wish to perform.
+## @param      $cb_or_sth Either: a callback function which returns
+##             an arrayref representing a row to insert on each call
+##             OR, a statement handle which will return rows to be
+##             inserted by $sth into the database.
+## @param      $errstr A message to print in case of error.
+##
+## @return     Upon success, the number of rows inserted into the
+##             database.
+##
 sub vs_db_insert {
-    my ( $dbh, $sth, $cb_or_sth, $arr_ref, $errstr ) = @_;
+    my ( $dbh, $sth, $cb_or_sth, $errstr ) = @_;
     my ( $tuples, @tuple_status );
 
     $dbh->begin_work;
@@ -1197,7 +1211,7 @@ sub vs_db_insert {
                 unless defined $status;
             next unless ref $status;
             printf "Failed to insert row %s. Status %s\n",
-                join( ",", $arr_ref->[$tuple] ),
+                join( ",", $tuple ),
                 $status->[1];
         }
         eval { $dbh->rollback; };

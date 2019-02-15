@@ -399,7 +399,7 @@ while ( $files_processed < $files_to_process ) {
 
             if ( $processed % $RECORDS_PER_INFILE_INSERT == 0 ) {
                 my $cb = gen_exec_array_cb( \@fasta_reads_rows );
-                my $rows = vs_db_insert( $dbh, $sth, $cb, \@fasta_reads_rows,
+                my $rows = vs_db_insert( $dbh, $sth, $cb,
                     "Error inserting reads." );
                 if ($rows) {
                     $inserted += $rows;
@@ -419,8 +419,7 @@ while ( $files_processed < $files_to_process ) {
 # cleanup
 if (@fasta_reads_rows) {
     my $cb = gen_exec_array_cb( \@fasta_reads_rows );
-    my $rows = vs_db_insert( $dbh, $sth, $cb, \@fasta_reads_rows,
-        "Error inserting reads." );
+    my $rows = vs_db_insert( $dbh, $sth, $cb, "Error inserting reads." );
     if ($rows) {
         $inserted += $rows;
         @fasta_reads_rows = ();
