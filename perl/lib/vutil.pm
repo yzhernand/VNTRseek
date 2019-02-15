@@ -1177,21 +1177,21 @@ sub gen_exec_array_cb {
 
 ################################################################
 sub vs_db_insert {
-    my ( $dbh, $sth, $arr_ref, $errstr ) = @_;
-    my $cb = gen_exec_array_cb($arr_ref);
+    my ( $dbh, $sth, $cb_or_sth, $arr_ref, $errstr ) = @_;
     my ( $tuples, @tuple_status );
-    $dbh->begin_work;
 
+    $dbh->begin_work;
     try {
         $tuples = $sth->execute_array(
-            {   ArrayTupleFetch  => $cb,
+            {   ArrayTupleFetch => $cb_or_sth,
                 ArrayTupleStatus => \@tuple_status
             }
         );
+        ( $ENV{DEBUG} ) && warn "Inserted $tuples records into database\n";
     }
     catch {
         warn "$_\n";
-        for my $tuple ( 0 .. @$arr_ref - 1 ) {
+        for my $tuple ( 0 .. @tuple_status - 1 ) {
             my $status = $tuple_status[$tuple];
             $status = [ 0, "Skipped" ]
                 unless defined $status;
@@ -1205,8 +1205,8 @@ sub vs_db_insert {
             croak "Database rollback failed.\n";
         }
         croak "$errstr\n";
-    }
-    @$arr_ref = ();
+    };
+
     $dbh->commit;
     return $tuples;
 }

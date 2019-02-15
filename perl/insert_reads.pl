@@ -398,10 +398,12 @@ while ( $files_processed < $files_to_process ) {
                 [ $HEADHASH{"$headstr"}, "$headstr", "$dnastr" ];
 
             if ( $processed % $RECORDS_PER_INFILE_INSERT == 0 ) {
-                my $rows = vs_db_insert( $dbh, $sth, \@fasta_reads_rows,
+                my $cb = gen_exec_array_cb( \@fasta_reads_rows );
+                my $rows = vs_db_insert( $dbh, $sth, $cb, \@fasta_reads_rows,
                     "Error inserting reads." );
                 if ($rows) {
                     $inserted += $rows;
+                    @fasta_reads_rows = ();
                 }
                 else {
                     die
@@ -416,16 +418,16 @@ while ( $files_processed < $files_to_process ) {
 
 # cleanup
 if (@fasta_reads_rows) {
-    my $rows = vs_db_insert( $dbh, $sth, \@fasta_reads_rows,
+    my $cb = gen_exec_array_cb( \@fasta_reads_rows );
+    my $rows = vs_db_insert( $dbh, $sth, $cb, \@fasta_reads_rows,
         "Error inserting reads." );
     if ($rows) {
         $inserted += $rows;
+        @fasta_reads_rows = ();
     }
     else {
         die "Something went wrong inserting, but somehow wasn't caught!\n";
     }
-    warn "Didn't empty rows!\n"
-        if @fasta_reads_rows > 0;
 }
 
 # reenable indices
