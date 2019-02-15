@@ -14,7 +14,7 @@ if ( $ENV{DEBUG} ) {
 
 use base 'Exporter';
 our @EXPORT_OK
-    = qw(read_config_file get_config set_config set_credentials get_dbh get_ref_dbh make_refseq_db load_refprofiles_db run_redund write_sqlite set_statistics get_statistics set_datetime print_config trim create_blank_file get_trunc_query sqlite_install_RC_function gen_exec_array_cb);
+    = qw(read_config_file get_config set_config set_credentials get_dbh get_ref_dbh make_refseq_db load_refprofiles_db run_redund write_sqlite set_statistics get_statistics set_datetime print_config trim create_blank_file get_trunc_query sqlite_install_RC_function gen_exec_array_cb vs_db_insert);
 
 # vutil.pm
 # author: Yevgeniy Gelfand, Yozen Hernandez
@@ -213,8 +213,7 @@ sub set_config {
     }
 
     if ( "" eq $in_hash{HTML_DIR} ) {
-        warn
-            "Warning: 'html_dir' option is unset.\n";
+        warn "Warning: 'html_dir' option is unset.\n";
     }
     elsif ( !( -e $in_hash{HTML_DIR} ) && !mkdir("$in_hash{HTML_DIR}") ) {
         croak("Could not create html_dir directory ($in_hash{HTML_DIR}).\n");
@@ -1178,9 +1177,9 @@ sub gen_exec_array_cb {
 
 ################################################################
 sub vs_db_insert {
-    my ($dbh, $sth, $arr_ref, $errstr) = @_;
-    my $cb = gen_exec_array_cb( $arr_ref );
-    my ($tuples, @tuple_status);
+    my ( $dbh, $sth, $arr_ref, $errstr ) = @_;
+    my $cb = gen_exec_array_cb($arr_ref);
+    my ( $tuples, @tuple_status );
     $dbh->begin_work;
 
     try {

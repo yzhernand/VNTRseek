@@ -15,7 +15,7 @@ use ProcInputReads
 set_install_dir("$FindBin::RealBin");
 
 use vutil
-    qw(get_config get_dbh set_statistics get_trunc_query gen_exec_array_cb);
+    qw(get_config get_dbh set_statistics get_trunc_query gen_exec_array_cb vs_db_insert);
 
 my $RECORDS_PER_INFILE_INSERT = 100000;
 
@@ -107,14 +107,14 @@ print STDERR "\ntruncating database tables\n\n";
 my ( $trunc_query, $sth );
 $dbh->begin_work;
 $trunc_query = get_trunc_query( $run_conf{BACKEND}, "replnk" );
-$dbh->commit;
 $sth = $dbh->do($trunc_query);
-$dbh->begin_work;
 $trunc_query = get_trunc_query( $run_conf{BACKEND}, "fasta_reads" );
 $sth = $dbh->do($trunc_query);
 $dbh->commit;
 
 $dbh->do("PRAGMA foreign_keys = OFF");
+$dbh->do("PRAGMA synchronous = OFF");
+$dbh->do("PRAGMA journal_mode = TRUNCATE");
 
 # Insert all ref TRs from replnk file
 $sth = $dbh->prepare(
@@ -461,6 +461,7 @@ if (@fasta_reads_rows) {
 
 # reenable indices
 $dbh->do("PRAGMA foreign_keys = ON");
+$dbh->do("PRAGMA synchronous = ON");
 
 # disconnect
 $dbh->disconnect();
