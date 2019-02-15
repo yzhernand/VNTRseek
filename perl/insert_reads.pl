@@ -107,9 +107,9 @@ print STDERR "\ntruncating database tables\n\n";
 my ( $trunc_query, $sth );
 $dbh->begin_work;
 $trunc_query = get_trunc_query( $run_conf{BACKEND}, "replnk" );
-$sth = $dbh->do($trunc_query);
+$sth         = $dbh->do($trunc_query);
 $trunc_query = get_trunc_query( $run_conf{BACKEND}, "fasta_reads" );
-$sth = $dbh->do($trunc_query);
+$sth         = $dbh->do($trunc_query);
 $dbh->commit;
 
 $dbh->do("PRAGMA foreign_keys = OFF");
@@ -398,46 +398,14 @@ while ( $files_processed < $files_to_process ) {
                 [ $HEADHASH{"$headstr"}, "$headstr", "$dnastr" ];
 
             if ( $processed % $RECORDS_PER_INFILE_INSERT == 0 ) {
-                my $cb = gen_exec_array_cb( \@fasta_reads_rows );
-                $dbh->begin_work;
-                my $tuples = $sth->execute_array(
-                    {   ArrayTupleFetch  => $cb,
-                        ArrayTupleStatus => \my @tuple_status
-                    }
-                );
-                if ($tuples) {
-                    @fasta_reads_rows = ();
-                    $inserted += $tuples;
-                    $dbh->commit;
+                my $rows = vs_db_insert( $dbh, $sth, \@fasta_reads_rows,
+                    "Error inserting reads." );
+                if ($rows) {
+                    $inserted += $rows;
                 }
                 else {
-                    for my $tuple ( 0 .. @fasta_reads_rows - 1 ) {
-                        my $status = $tuple_status[$tuple];
-                        $status = [ 0, "Skipped" ]
-                            unless defined $status;
-                        next unless ref $status;
-                        printf "Failed to insert row %s. Status %s\n",
-                            join( ",", $fasta_reads_rows[$tuple] ),
-                            $status->[1];
-                    }
-                    eval { $dbh->rollback; };
-                    if ($@) {
-                        die "Database rollback failed.\n";
-                    }
-                    die "Error inserting reads.\n";
-
-# if (/UNIQUE constraint failed/) {
-#     warn
-#         "A read header was encountered more than once. Problem in input data?\n";
-#     warn "Duplicated header: $headstr\n";
-# }
-# else {
-#     # Don't know what else might go wrong
-#     $dbh->rollback;
-#     die
-#         "An error occurred when inserting read sequences: $_";
-# }
-# $dbh->rollback;
+                    die
+                        "Something went wrong inserting, but somehow wasn't caught!\n";
                 }
             }
         }
@@ -448,7 +416,8 @@ while ( $files_processed < $files_to_process ) {
 
 # cleanup
 if (@fasta_reads_rows) {
-    my $rows = vs_db_insert($dbh, $sth, \@fasta_reads_rows, "Error inserting reads.");
+    my $rows = vs_db_insert( $dbh, $sth, \@fasta_reads_rows,
+        "Error inserting reads." );
     if ($rows) {
         $inserted += $rows;
     }
