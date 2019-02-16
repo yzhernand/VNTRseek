@@ -302,8 +302,7 @@ my $qualstr       = "";
 my $HEADER_SUFFIX = "";
 my @fasta_reads_rows;
 
-print Dumper(\%HEADHASH) . "\n";
-# TODO Can be made more efficient for BAM files?
+# print Dumper(\%HEADHASH) . "\n";
 my $files_processed = 0;
 for my $read_file ( @readfiles ) {
     open my $r_fh, "<", "$indexfolder/$read_file";
