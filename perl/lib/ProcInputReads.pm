@@ -35,7 +35,7 @@ my $install_dir;
 # For new formats, simply add the name of the format here and require
 # that input file names have it as a prefix (eg, fasta files should
 # have prefix "fasta_")
-my @supported_format_names = qw(fasta fastq \.bam$);
+my @supported_format_names = qw(fasta fastq bam);
 my %supported_formats;
 @supported_formats{@supported_format_names} = @supported_format_names;
 

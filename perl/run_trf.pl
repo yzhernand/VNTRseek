@@ -81,6 +81,9 @@ while ( my ( $sf, $pat_re ) = each %supported_formats_regexs ) {
     {
         $input_format = $sf;
 
+        # Remove bam.bai files
+        @filenames = grep (!/\.bai$/, @dircontents);
+
         # Determine compression format
         my %cmp_formats_regexs = compressed_formats_regexs();
         while ( my ( $cf, $cf_re ) = each %cmp_formats_regexs ) {
