@@ -223,33 +223,16 @@ foreach my $ifile (@indexfiles) {
                     ];
 
                 if ( $processed % $RECORDS_PER_INFILE_INSERT == 0 ) {
-                    $dbh->begin_work;
-                    my $cb     = gen_exec_array_cb( \@replnk_rows );
-                    my $tuples = $sth->execute_array(
-                        {   ArrayTupleFetch  => $cb,
-                            ArrayTupleStatus => \my @tuple_status
-                        }
-                    );
-                    if ($tuples) {
+                    my $cb = gen_exec_array_cb( \@replnk_rows );
+                    my $rows = vs_db_insert( $dbh, $sth, $cb,
+                        "Error inserting read TRs." );
+                    if ($rows) {
+                        $inserted += $rows;
                         @replnk_rows = ();
-                        $inserted += $tuples;
-                        $dbh->commit;
                     }
                     else {
-                        for my $tuple ( 0 .. @replnk_rows - 1 ) {
-                            my $status = $tuple_status[$tuple];
-                            $status = [ 0, "Skipped" ]
-                                unless defined $status;
-                            next unless ref $status;
-                            printf "Failed to insert row %s. Status %s\n",
-                                join( ",", $replnk_rows[$tuple] ),
-                                $status->[1];
-                        }
-                        eval { $dbh->rollback; };
-                        if ($@) {
-                            die "Database rollback failed.\n";
-                        }
-                        die "Error inserting read TRs.\n";
+                        die
+                            "Something went wrong inserting, but somehow wasn't caught!\n";
                     }
                 }
 
@@ -272,32 +255,15 @@ foreach my $ifile (@indexfiles) {
 # Remaining rows
 if (@replnk_rows) {
     my $cb = gen_exec_array_cb( \@replnk_rows );
-    $dbh->begin_work;
-    my $tuples = $sth->execute_array(
-        {   ArrayTupleFetch  => $cb,
-            ArrayTupleStatus => \my @tuple_status
-        }
-    );
-    if ($tuples) {
+    my $rows = vs_db_insert( $dbh, $sth, $cb,
+        "Error inserting read TRs." );
+    if ($rows) {
+        $inserted += $rows;
         @replnk_rows = ();
-        $inserted += $tuples;
-        $dbh->commit;
     }
     else {
-        for my $tuple ( 0 .. @replnk_rows - 1 ) {
-            my $status = $tuple_status[$tuple];
-            $status = [ 0, "Skipped" ]
-                unless defined $status;
-            next unless ref $status;
-            printf "Failed to insert row %s. Status %s\n",
-                join( ",", $replnk_rows[$tuple] ),
-                $status->[1];
-        }
-        eval { $dbh->rollback; };
-        if ($@) {
-            die "Database rollback failed.\n";
-        }
-        die "Error inserting read TRs.\n";
+        die
+            "Something went wrong inserting, but somehow wasn't caught!\n";
     }
 }
 

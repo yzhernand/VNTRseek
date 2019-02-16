@@ -24,6 +24,7 @@ use warnings;
 use Carp;
 use feature 'say';
 use Exporter qw(import);
+use POSIX qw(ceil);
 
 our @EXPORT_OK
     = qw(fork_proc init_bam get_reader formats_regexs compressed_formats_regexs set_install_dir);
@@ -72,7 +73,7 @@ my %decompress_cmds;
     "xzcat "
 );
 
-my $records_before_split = 1e8;
+my $records_before_split = 1e6;
 
 =head2 Methods
 
@@ -231,6 +232,10 @@ sub fork_proc {
         my $reads_processed = 0;
         my %reads;
         while ( my ( $header, $body ) = $reader->() ) {
+
+            # Avoid duplicate reads when reading from BAM files
+            next if ( exists $reads{$header} );
+
             $reads{$header} = { seq => $body, written => 0 };
 
             # warn "header: $header\nbody: $body\n"
@@ -266,10 +271,12 @@ sub fork_proc {
                 close $index_fh;
                 close $reads_fh;
 
+                %reads = ();
                 $output_prefix
                     = "$output_dir/${current_file}_" . ++$current_fragment;
                 open $trf_pipe,
-                    "|$trf_param | $trf2proclu_param -o '$output_prefix.index' > '$output_prefix.leb36'";
+                    "|$trf_param | $trf2proclu_param -o '$output_prefix.index' > '$output_prefix.leb36'"
+                    or die "Cannot start TRF+trf2proclu pipe: $!\n";
             }
         }
 
@@ -288,8 +295,7 @@ sub fork_proc {
             if ( exists $reads{$head}
                 && ( $reads{$head}->{written} == 0 ) )
             {
-                print $reads_fh $head . "\t"
-                    . $reads{$head}->{seq} . "\n";
+                print $reads_fh $head . "\t" . $reads{$head}->{seq} . "\n";
                 $reads{$head}->{written} = 1;
             }
         }
@@ -712,24 +718,29 @@ sub init_bam {
             # next if ( ( $num_aln + $num_unaln ) == 0 );
 
             my $samviewflags = ($unmapped) ? $unmappedflag : $badmapflag;
-            my $region       = ($unmapped) ? ""            : "$chr:1-$end";
+            my @end_coords = map { $_ * 10e6 } ( 1 .. ceil( $end / 10e6 ) );
 
             # my $sam2fastacmd = "| samtools sort -n - | samtools fasta -";
-            if ($is_paired_end) {
-                my $cmd = join( ' ',
-                    $samviewcmd, $samviewflags, $firstsegflag, $bamfile,
-                    $region );
-                push @samcmds, { cmd => $cmd, pair => "/1" };
-                $cmd = join( ' ',
-                    $samviewcmd, $samviewflags, $lastsegflag, $bamfile,
-                    $region );
-                push @samcmds, { cmd => $cmd, pair => "/2" };
-            }
-            else {
-                my $cmd = join( ' ',
-                    $samviewcmd, $samviewflags, $unpairedflag, $bamfile,
-                    $region );
-                push @samcmds, { cmd => $cmd, pair => "" };
+            for my $i ( 0 .. $#end_coords ) {
+                my $region
+                    = "$chr:" . ( 1 + ( $i * 10e6 ) ) . "-" . $end_coords[$i];
+
+                if ($is_paired_end) {
+                    my $cmd = join( ' ',
+                        $samviewcmd, $samviewflags, $firstsegflag, $bamfile,
+                        $region );
+                    push @samcmds, { cmd => $cmd, pair => "/1" };
+                    $cmd = join( ' ',
+                        $samviewcmd, $samviewflags, $lastsegflag, $bamfile,
+                        $region );
+                    push @samcmds, { cmd => $cmd, pair => "/2" };
+                }
+                else {
+                    my $cmd = join( ' ',
+                        $samviewcmd, $samviewflags, $unpairedflag, $bamfile,
+                        $region );
+                    push @samcmds, { cmd => $cmd, pair => "" };
+                }
             }
         }
     }
@@ -779,7 +790,7 @@ sub read_bam {
             undef,   undef, undef, undef, $seq
         ) = split( /\s+/, $bam_rec );
         return ( $header . $cmdhash->{pair}, $seq );
-        }
+    };
 }
 
 =item I<read_FORMAT() stub>
