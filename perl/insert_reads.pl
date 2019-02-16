@@ -309,12 +309,18 @@ for my $read_file ( @readfiles ) {
     while (my $line = <$r_fh>) {
         chomp $line;
         ($headstr, $dnastr) = split "\t", $line;
+
+        # Special last line
+        if ($headstr eq 'totalreads') {
+            $totalReads+=$dnastr;
+            # Jump out of while loop
+            last;
+        }
         $headstr = trim($headstr);
         $dnastr  = trimall($dnastr);
         # warn "head: $headstr\tdna: $dnastr\n";
 
         my $dnabak = $dnastr;
-        $totalReads++;
         if ( exists $HEADHASH{"$headstr"} ) {
 
             $processed++;

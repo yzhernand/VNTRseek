@@ -275,7 +275,8 @@ sub fork_proc {
                 $output_prefix
                     = "$output_dir/${current_file}_" . ++$current_fragment;
                 open $trf_pipe,
-                    "|$trf_param | $trf2proclu_param -o '$output_prefix.index' > '$output_prefix.leb36'"
+                    "|$trf_param | $trf2proclu_param -o "
+                    . "'$output_prefix.index' > '$output_prefix.leb36'"
                     or die "Cannot start TRF+trf2proclu pipe: $!\n";
             }
         }
@@ -295,10 +296,14 @@ sub fork_proc {
             if ( exists $reads{$head}
                 && ( $reads{$head}->{written} == 0 ) )
             {
-                print $reads_fh $head . "\t" . $reads{$head}->{seq} . "\n";
+                say $reads_fh $head . "\t" . $reads{$head}->{seq};
                 $reads{$head}->{written} = 1;
             }
         }
+
+        # Last .reads file gets one more line with the total number
+        # of reads we read (different from reads with TRs count)
+        say $reads_fh "totalreads\t$reads_processed";
         close $index_fh;
         close $reads_fh;
 
