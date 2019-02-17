@@ -792,13 +792,12 @@ sub read_bam {
     return sub {
         my ($header, $lpos, $seq ) = ("", -1, "");
 
-        # Skip redundant reads from previous regions
-        # Start with lpos = -1 so that we always read at least one
-        # line
+        # Skip redundant reads from previous regions. Start with
+        # lpos = -1 so that we always read at least one line.
         while ( $lpos < $cmdhash->{start} ) {
             my $bam_rec = <$samout>;
             return () unless ($bam_rec);
-            
+
             ($header, undef, undef, $lpos, undef,
             undef,   undef, undef, undef, $seq
             ) = split( /\t/, $bam_rec );
