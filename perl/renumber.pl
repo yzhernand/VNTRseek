@@ -58,7 +58,7 @@ if ( -d $ARGV[0] ) {
     print STDERR "$file_count LEB36 files found in directory $ARGV[0]\n";
 }
 
-my $UNR = 0;    # "universal number of records
+my $UNR = 1;    # "universal number of records
 
 my $output_index;
 my $output_index_h;
@@ -83,7 +83,6 @@ if ($switch_sign) {
         }
 
         while ( my $leb36_line = <$input_leb36_h> ) {
-            $UNR++;
             my @leb36_line = split /\s+/, $leb36_line;  # split on white space
 
             if ($use_index) {
@@ -101,6 +100,19 @@ if ($switch_sign) {
 
             $leb36_line[0] = -abs( $leb36_line[0] );
             print $output_leb36_h join( ' ', @leb36_line ) . "\n";
+
+            $UNR++;
+            if ( $UNR <= 0 ) {
+                $output_leb36_h->close;
+                $input_leb36_h->close;
+                unlink $output_leb36;
+                if ($use_index) {
+                    $output_index_h->close;
+                    $input_index_h->close;
+                    unlink $output_index;
+                }
+                die "Integer overflow\n";
+            }
         }
         if ($use_index) {
             die "Too many lines in $input.index\n"
@@ -120,6 +132,13 @@ if ($switch_sign) {
     }
 }
 else {
+    # Keep a hash of the TR data (everything after the first column)
+    # to filter out duplicate TRs. These may occur when reading from
+    # BAM files since chromosome regions are split into smaller
+    # chunks, but reads may cross those boundaries and be processed
+    # twice...
+    my %tr_hash;
+    my $drop_next = 0;
     foreach my $input (@files) {
         my $output_leb36   = "$input.leb36.tmp";
         my $output_leb36_h = FileHandle->new(">$output_leb36")
@@ -136,6 +155,29 @@ else {
         }
 
         while ( my $leb36_line = <$input_leb36_h> ) {
+            my @leb36_line = split /\s+/, $leb36_line;  # split on white space
+
+            if ($use_index) {
+                $index_line = <$input_index_h>;
+                chomp $index_line;
+                die "Too few lines in $input.index\n"
+                    unless defined $index_line;
+                @index_line = split /\t+/, $index_line; # split on white space
+                die
+                    "Numbers differ at line $UNR in $input.index and $input.leb36\n"
+                    if $leb36_line[0] != $index_line[0];
+                # Store TR info (not pattern)
+                my $tr_line = join("\t", @index_line[1..5]);
+                # Drop this line in both files
+                next if (exists $tr_hash{$tr_line});
+                $tr_hash{$tr_line} = 1;
+                $index_line[0] = $UNR;
+                print $output_index_h join( "\t", @index_line ) . "\n";
+            }
+
+            $leb36_line[0] = $UNR;
+            print $output_leb36_h join( ' ', @leb36_line ) . "\n";
+
             $UNR++;
             if ( $UNR <= 0 ) {
                 $output_leb36_h->close;
@@ -148,23 +190,6 @@ else {
                 }
                 die "Integer overflow\n";
             }
-            my @leb36_line = split /\s+/, $leb36_line;  # split on white space
-
-            if ($use_index) {
-                $index_line = <$input_index_h>;
-                chomp $index_line;
-                die "Too few lines in $input.index\n"
-                    if not defined $index_line;
-                @index_line = split /\t+/, $index_line; # split on white space
-                die
-                    "Numbers differ at line $UNR in $input.index and $input.leb36\n"
-                    if $leb36_line[0] != $index_line[0];
-                $index_line[0] = $UNR;
-                print $output_index_h join( "\t", @index_line ) . "\n";
-            }
-
-            $leb36_line[0] = $UNR;
-            print $output_leb36_h join( ' ', @leb36_line ) . "\n";
         }
         if ($use_index) {
             die "Too many lines in $input.index\n"

@@ -232,10 +232,6 @@ sub fork_proc {
         my $reads_processed = 0;
         my %reads;
         while ( my ( $header, $body ) = $reader->() ) {
-
-            # Avoid duplicate reads when reading from BAM files
-            next if ( exists $reads{$header} );
-
             $reads{$header} = { seq => $body, written => 0 };
 
             # warn "header: $header\nbody: $body\n"
@@ -270,6 +266,10 @@ sub fork_proc {
                             $reads{$head}->{written} = 1;
                         }
                     }
+
+                    # .reads file gets one more line with the total number
+                    # of reads we read (different from reads with TRs count)
+                    say $reads_fh "totalreads\t$reads_processed";
                     close $index_fh;
                     close $reads_fh;
                 }
@@ -305,7 +305,7 @@ sub fork_proc {
                 }
             }
 
-            # Last .reads file gets one more line with the total number
+            # .reads file gets one more line with the total number
             # of reads we read (different from reads with TRs count)
             say $reads_fh "totalreads\t$reads_processed";
             close $index_fh;
