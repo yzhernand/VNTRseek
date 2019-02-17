@@ -16,14 +16,15 @@ use FindBin;
 
 # this is where the pipeline is installed
 use lib "$FindBin::RealBin/lib";    # must be same as install dir!
-use ProcInputReads qw(fork_proc init_bam formats_regexs compressed_formats_regexs set_install_dir);
+use ProcInputReads
+    qw(fork_proc init_bam formats_regexs compressed_formats_regexs set_install_dir);
 our $install_dir = "$FindBin::RealBin";
 set_install_dir($install_dir);
 
-my $files_processed = 0;    # files processed
-my $files_to_process = 0;   # Either: the actual number of files to process
-                            # OR the number of splits of a BAM file (and others?)
-my %p;                      # associates forked pids with output pipe pids
+my $files_processed  = 0;    # files processed
+my $files_to_process = 0;    # Either: the actual number of files to process
+     # OR the number of splits of a BAM file (and others?)
+my %p;    # associates forked pids with output pipe pids
 my $max_processes = 0;
 
 my %opts;
@@ -76,13 +77,13 @@ my ( $input_format, $compression );
 my %supported_formats_regexs = formats_regexs();
 while ( my ( $sf, $pat_re ) = each %supported_formats_regexs ) {
     if (@filenames = sort
-        grep( /${pat_re}/, @dircontents )
+        grep( /${pat_re}/ && -f "$input_dir/$_", @dircontents )
         )
     {
         $input_format = $sf;
 
         # Remove bam.bai files
-        @filenames = grep (!/\.bai$/, @filenames);
+        @filenames = grep ( !/\.bai$/, @filenames );
 
         # Determine compression format
         my %cmp_formats_regexs = compressed_formats_regexs();
@@ -101,7 +102,8 @@ my $compression_msg
     = ($compression)
     ? "compressed as $compression"
     : "assuming uncompressed";
-die "0 supported files found in $input_dir. Exiting\n" if $files_to_process == 0;
+die "0 supported files found in $input_dir. Exiting\n"
+    if $files_to_process == 0;
 warn
     "$files_to_process supported files ($input_format format, $compression_msg) found in $input_dir\n";
 
@@ -123,21 +125,25 @@ if ( $max_processes == 0 ) {
 }
 
 # If BAM, init files list
-if ($input_format eq "bam") {
-    @filenames = init_bam($input_dir, $IS_PAIRED_READS, \@filenames);
+if ( $input_format eq "bam" ) {
+    @filenames = init_bam( $input_dir, $IS_PAIRED_READS, \@filenames );
     $files_to_process = @filenames;
-    warn "BAM input. Will need to process $files_to_process sets of reads from file.\n";
+    warn
+        "BAM input. Will need to process $files_to_process sets of reads from file.\n";
 }
 
-$max_processes = ($files_to_process < $max_processes) ? $files_to_process : $max_processes;
+$max_processes
+    = ( $files_to_process < $max_processes )
+    ? $files_to_process
+    : $max_processes;
 warn "Will use $max_processes processes\n";
 
 # fork as many new processes as there are CPUs
 for ( my $i = 0; $i < $max_processes; $i++ ) {
     $p{ fork_proc(
-            $input_dir,        $output_dir,   $TRF_PARAM,
-            $TRF2PROCLU_PARAM, $reverse_read, $strip_454_TCAG,
-            $warn_454_TCAG,    $input_format, $compression,
+            $input_dir,        $output_dir,        $TRF_PARAM,
+            $TRF2PROCLU_PARAM, $reverse_read,      $strip_454_TCAG,
+            $warn_454_TCAG,    $input_format,      $compression,
             $files_processed,  \$files_to_process, \@filenames
         )
     } = 1;
@@ -173,10 +179,12 @@ while ( ( my $pid = wait ) != -1 ) {
         # to process.
         if ( $files_processed < $num_files ) {
             $p{ fork_proc(
-                    $input_dir,        $output_dir,   $TRF_PARAM,
-                    $TRF2PROCLU_PARAM, $reverse_read, $strip_454_TCAG,
-                    $warn_454_TCAG,    $input_format, $compression,
-                    $files_processed,  \$files_to_process, \@filenames
+                    $input_dir,         $output_dir,
+                    $TRF_PARAM,         $TRF2PROCLU_PARAM,
+                    $reverse_read,      $strip_454_TCAG,
+                    $warn_454_TCAG,     $input_format,
+                    $compression,       $files_processed,
+                    \$files_to_process, \@filenames
                 )
             } = 1;
             $files_processed++;
@@ -190,4 +198,4 @@ while ( ( my $pid = wait ) != -1 ) {
 
 warn "Processing complete -- processed $files_processed file(s).\n";
 my $exstring = qq(find "${input_dir}" -type f -size 0 -delete);
-    system($exstring);
+system($exstring);
