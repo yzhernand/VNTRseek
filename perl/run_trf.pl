@@ -126,6 +126,7 @@ if ( $max_processes == 0 ) {
 if ($input_format eq "bam") {
     @filenames = init_bam($input_dir, $IS_PAIRED_READS, \@filenames);
     $files_to_process = @filenames;
+    warn "BAM input. Will need to process $files_to_process sets of reads from file.";
 }
 
 $max_processes = ($files_to_process < $max_processes) ? $files_to_process : $max_processes;

@@ -675,7 +675,7 @@ sub init_bam {
     my @samcmds;
 
     # $start is always 1
-    my $samviewcmd   = "samtools view";
+    my $samviewcmd   = "samtools view -@ 1";
     my $unpairedflag = "-F 1"
         ; # Probably not required: only single-end fragments in a single-end template anyway
     my $firstsegflag      = "-f 64";
@@ -692,11 +692,6 @@ sub init_bam {
         # my $baifile = $bamfile . ".bai";
 
         # warn "$baifile\n";
-
-# Check if .bai file exists and then run MakeBedFiles.jar
-# die
-#     "Error reading bam file: corresponding bai file required for processing bam files."
-#     unless ( -e -r $baifile );
 
         # Requires samtools to be installed/available
         # Get all regions in the bam file
@@ -732,24 +727,27 @@ sub init_bam {
 
             # my $sam2fastacmd = "| samtools sort -n - | samtools fasta -";
             for my $i ( 0 .. $#end_coords ) {
-                my $region
-                    = "$chr:" . ( 1 + ( $i * 10e6 ) ) . "-" . $end_coords[$i];
+                my $start_coord = ( 1 + ( $i * 10e6 ) );
+                my $region = "$chr:" . $start_coord . "-" . $end_coords[$i];
 
                 if ($is_paired_end) {
                     my $cmd = join( ' ',
                         $samviewcmd, $samviewflags, $firstsegflag, $bamfile,
                         $region );
-                    push @samcmds, { cmd => $cmd, pair => "/1" };
+                    push @samcmds,
+                        { cmd => $cmd, pair => "/1", start => $start_coord };
                     $cmd = join( ' ',
                         $samviewcmd, $samviewflags, $lastsegflag, $bamfile,
                         $region );
-                    push @samcmds, { cmd => $cmd, pair => "/2" };
+                    push @samcmds,
+                        { cmd => $cmd, pair => "/2", start => $start_coord };
                 }
                 else {
                     my $cmd = join( ' ',
                         $samviewcmd, $samviewflags, $unpairedflag, $bamfile,
                         $region );
-                    push @samcmds, { cmd => $cmd, pair => "" };
+                    push @samcmds,
+                        { cmd => $cmd, pair => "", start => $start_coord };
                 }
             }
         }
@@ -796,9 +794,12 @@ sub read_bam {
         return () unless ($bam_rec);
 
         # print ">" $1 "\n" $10
-        my ($header, undef, undef, undef, undef,
+        my ($header, undef, undef, $lpos, undef,
             undef,   undef, undef, undef, $seq
         ) = split( /\s+/, $bam_rec );
+
+        # Skip redundant reads from previous regions
+        next if ( $lpos < $cmdhash->{start} );
         return ( $header . $cmdhash->{pair}, $seq );
     };
 }
