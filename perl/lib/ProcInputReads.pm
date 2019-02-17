@@ -790,16 +790,19 @@ sub read_bam {
     open my $samout, "-|", $cmdhash->{cmd}
         or die "Error opening samtools pipe: $!\n";
     return sub {
-        my $bam_rec = <$samout>;
-        return () unless ($bam_rec);
-
-        # print ">" $1 "\n" $10
-        my ($header, undef, undef, $lpos, undef,
-            undef,   undef, undef, undef, $seq
-        ) = split( /\s+/, $bam_rec );
+        my ($header, $lpos, $seq ) = ("", -1, "");
 
         # Skip redundant reads from previous regions
-        next if ( $lpos < $cmdhash->{start} );
+        # Start with lpos = -1 so that we always read at least one
+        # line
+        while ( $lpos < $cmdhash->{start} ) {
+            my $bam_rec = <$samout>;
+            return () unless ($bam_rec);
+            
+            ($header, undef, undef, $lpos, undef,
+            undef,   undef, undef, undef, $seq
+            ) = split( /\t/, $bam_rec );
+        }
         return ( $header . $cmdhash->{pair}, $seq );
     };
 }
