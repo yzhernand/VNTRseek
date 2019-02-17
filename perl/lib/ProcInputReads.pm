@@ -255,21 +255,24 @@ sub fork_proc {
                 }
 
                 # scan output file and write out reads with TRs to new file
-                open my $index_fh, "<", "$output_prefix.index";
-                open my $reads_fh, ">", "$output_prefix.reads";
-                while ( my $line = <$index_fh> ) {
-                    my @fields = split /\t/, $line;
-                    my $head = $fields[1];
-                    if ( exists $reads{$head}
-                        && ( $reads{$head}->{written} == 0 ) )
-                    {
-                        print $reads_fh $head . "\t"
-                            . $reads{$head}->{seq} . "\n";
-                        $reads{$head}->{written} = 1;
+                if ( -e "$output_prefix.index" && -s "$output_prefix.index" )
+                {
+                    open my $index_fh, "<", "$output_prefix.index";
+                    open my $reads_fh, ">", "$output_prefix.reads";
+                    while ( my $line = <$index_fh> ) {
+                        my @fields = split /\t/, $line;
+                        my $head = $fields[1];
+                        if ( exists $reads{$head}
+                            && ( $reads{$head}->{written} == 0 ) )
+                        {
+                            print $reads_fh $head . "\t"
+                                . $reads{$head}->{seq} . "\n";
+                            $reads{$head}->{written} = 1;
+                        }
                     }
+                    close $index_fh;
+                    close $reads_fh;
                 }
-                close $index_fh;
-                close $reads_fh;
 
                 %reads = ();
                 $output_prefix
@@ -288,24 +291,26 @@ sub fork_proc {
         }
 
         # scan output file and write out reads with TRs to new file
-        open my $index_fh, "<", "$output_prefix.index";
-        open my $reads_fh, ">", "$output_prefix.reads";
-        while ( my $line = <$index_fh> ) {
-            my @fields = split /\t/, $line;
-            my $head = $fields[1];
-            if ( exists $reads{$head}
-                && ( $reads{$head}->{written} == 0 ) )
-            {
-                say $reads_fh $head . "\t" . $reads{$head}->{seq};
-                $reads{$head}->{written} = 1;
+        if ( -e "$output_prefix.index" && -s "$output_prefix.index" ) {
+            open my $index_fh, "<", "$output_prefix.index";
+            open my $reads_fh, ">", "$output_prefix.reads";
+            while ( my $line = <$index_fh> ) {
+                my @fields = split /\t/, $line;
+                my $head = $fields[1];
+                if ( exists $reads{$head}
+                    && ( $reads{$head}->{written} == 0 ) )
+                {
+                    say $reads_fh $head . "\t" . $reads{$head}->{seq};
+                    $reads{$head}->{written} = 1;
+                }
             }
-        }
 
-        # Last .reads file gets one more line with the total number
-        # of reads we read (different from reads with TRs count)
-        say $reads_fh "totalreads\t$reads_processed";
-        close $index_fh;
-        close $reads_fh;
+            # Last .reads file gets one more line with the total number
+            # of reads we read (different from reads with TRs count)
+            say $reads_fh "totalreads\t$reads_processed";
+            close $index_fh;
+            close $reads_fh;
+        }
 
         exit;
     }
