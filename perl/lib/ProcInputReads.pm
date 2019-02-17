@@ -675,7 +675,7 @@ sub init_bam {
     my @samcmds;
 
     # $start is always 1
-    my $samviewcmd   = "samtools view -@ 1";
+    my $samviewcmd   = "samtools view ";
     my $unpairedflag = "-F 1"
         ; # Probably not required: only single-end fragments in a single-end template anyway
     my $firstsegflag      = "-f 64";
