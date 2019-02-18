@@ -733,19 +733,19 @@ sub init_bam {
                 if ($is_paired_end) {
                     my $cmd = join( ' ',
                         $samviewcmd, $samviewflags, $firstsegflag, $bamfile,
-                        '*' );
+                        "'*'" );
                     push @samcmds,
                         { cmd => $cmd, pair => "/1", start => "unmapped" };
                     $cmd = join( ' ',
                         $samviewcmd, $samviewflags, $lastsegflag, $bamfile,
-                        '*' );
+                        "'*'" );
                     push @samcmds,
                         { cmd => $cmd, pair => "/2", start => "unmapped" };
                 }
                 else {
                     my $cmd = join( ' ',
                         $samviewcmd, $samviewflags, $unpairedflag, $bamfile,
-                        '*' );
+                        "'*'" );
                     push @samcmds,
                         { cmd => $cmd, pair => "", start => "unmapped" };
                 }

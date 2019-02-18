@@ -197,5 +197,5 @@ while ( ( my $pid = wait ) != -1 ) {
 }
 
 warn "Processing complete -- processed $files_processed file(s).\n";
-my $exstring = qq(find "${input_dir}" -type f -size 0 -delete);
+my $exstring = qq(find "${output_dir}" -type f -size 0 -delete);
 system($exstring);
