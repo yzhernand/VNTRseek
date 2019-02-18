@@ -65,7 +65,7 @@
 #include <malloc.h>
 #include <strings.h>
 #include <sqlite3.h>
-
+#include <errno.h>
 
 //#define _WIN_32_YES
 
@@ -610,7 +610,8 @@ int main(int argc, char **argv)
         fiptr->in = fopen(fiptr->inputfile, "r");
 
         if (NULL == fiptr->in) {
-            printf("\nERROR: Unable to open input file '%s'.\n\n", fiptr->inputfile);
+            printf("\nERROR opening input file '%s': %s\n", fiptr->inputfile,
+                strerror(errno));
             exit(1);
         }
 
