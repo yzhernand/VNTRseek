@@ -223,7 +223,7 @@ foreach my $ifile (@indexfiles) {
                     ];
 
                 if ( $processed % $RECORDS_PER_INFILE_INSERT == 0 ) {
-                    my $cb = gen_exec_array_cb( \@replnk_rows );
+                    my $cb   = gen_exec_array_cb( \@replnk_rows );
                     my $rows = vs_db_insert( $dbh, $sth, $cb,
                         "Error inserting read TRs." );
                     if ($rows) {
@@ -255,15 +255,13 @@ foreach my $ifile (@indexfiles) {
 # Remaining rows
 if (@replnk_rows) {
     my $cb = gen_exec_array_cb( \@replnk_rows );
-    my $rows = vs_db_insert( $dbh, $sth, $cb,
-        "Error inserting read TRs." );
+    my $rows = vs_db_insert( $dbh, $sth, $cb, "Error inserting read TRs." );
     if ($rows) {
         $inserted += $rows;
         @replnk_rows = ();
     }
     else {
-        die
-            "Something went wrong inserting, but somehow wasn't caught!\n";
+        die "Something went wrong inserting, but somehow wasn't caught!\n";
     }
 }
 
@@ -304,20 +302,22 @@ my @fasta_reads_rows;
 
 # print Dumper(\%HEADHASH) . "\n";
 my $files_processed = 0;
-for my $read_file ( @readfiles ) {
+for my $read_file (@readfiles) {
     open my $r_fh, "<", "$indexfolder/$read_file";
-    while (my $line = <$r_fh>) {
+    while ( my $line = <$r_fh> ) {
         chomp $line;
-        ($headstr, $dnastr) = split "\t", $line;
+        ( $headstr, $dnastr ) = split "\t", $line;
 
         # Special last line
-        if ($headstr eq 'totalreads') {
-            $totalReads+=$dnastr;
+        if ( $headstr eq 'totalreads' ) {
+            $totalReads += $dnastr;
+
             # Jump out of while loop
             last;
         }
         $headstr = trim($headstr);
         $dnastr  = trimall($dnastr);
+
         # warn "head: $headstr\tdna: $dnastr\n";
 
         my $dnabak = $dnastr;
@@ -337,7 +337,8 @@ for my $read_file ( @readfiles ) {
             if ( $processed % $RECORDS_PER_INFILE_INSERT == 0 ) {
                 my $cb = gen_exec_array_cb( \@fasta_reads_rows );
                 my $rows = vs_db_insert( $dbh, $sth, $cb,
-                    "Error inserting reads." );
+                    "Error inserting reads. HEADHASH dump: "
+                        . Dumper( \%HEADHASH ) );
                 if ($rows) {
                     $inserted += $rows;
                     @fasta_reads_rows = ();
@@ -357,8 +358,9 @@ for my $read_file ( @readfiles ) {
 
 # cleanup
 if (@fasta_reads_rows) {
-    my $cb = gen_exec_array_cb( \@fasta_reads_rows );
-    my $rows = vs_db_insert( $dbh, $sth, $cb, "Error inserting reads." );
+    my $cb   = gen_exec_array_cb( \@fasta_reads_rows );
+    my $rows = vs_db_insert( $dbh, $sth, $cb,
+        "Error inserting reads. HEADHASH dump: " . Dumper( \%HEADHASH ) );
     if ($rows) {
         $inserted += $rows;
         @fasta_reads_rows = ();
