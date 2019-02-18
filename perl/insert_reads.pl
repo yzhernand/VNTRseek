@@ -337,8 +337,8 @@ for my $read_file (@readfiles) {
             if ( $processed % $RECORDS_PER_INFILE_INSERT == 0 ) {
                 my $cb = gen_exec_array_cb( \@fasta_reads_rows );
                 my $rows = vs_db_insert( $dbh, $sth, $cb,
-                    "Error inserting reads. HEADHASH dump: "
-                        . Dumper( \%HEADHASH ) );
+                    "Error inserting reads. row dump: "
+                        . Dumper( \@fasta_reads_rows ) );
                 if ($rows) {
                     $inserted += $rows;
                     @fasta_reads_rows = ();
@@ -360,7 +360,7 @@ for my $read_file (@readfiles) {
 if (@fasta_reads_rows) {
     my $cb   = gen_exec_array_cb( \@fasta_reads_rows );
     my $rows = vs_db_insert( $dbh, $sth, $cb,
-        "Error inserting reads. HEADHASH dump: " . Dumper( \%HEADHASH ) );
+        "Error inserting reads. row dump: " . Dumper( \@fasta_reads_rows ) );
     if ($rows) {
         $inserted += $rows;
         @fasta_reads_rows = ();

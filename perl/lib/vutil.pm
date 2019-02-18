@@ -1210,17 +1210,18 @@ sub vs_db_insert {
             $status = [ 0, "Skipped" ]
                 unless defined $status;
             next unless ref $status;
-            printf STDERR "Failed to insert row %s. Status %s\n",
+            printf STDERR "Failed to insert row %s. Status: %s\n",
                 join( ",", $tuple ),
                 $status->[1];
         }
         eval { $dbh->rollback; };
         if ($@) {
-            croak "Database rollback failed.\n";
+            warn "Database rollback failed.\n";
         }
-        croak "$errstr\n";
     };
 
+    croak "$errstr\n"
+        unless ($tuples);
     $dbh->commit;
     return $tuples;
 }
