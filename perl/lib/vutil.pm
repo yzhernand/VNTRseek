@@ -1210,7 +1210,7 @@ sub vs_db_insert {
             $status = [ 0, "Skipped" ]
                 unless defined $status;
             next unless ref $status;
-            printf "Failed to insert row %s. Status %s\n",
+            printf STDERR "Failed to insert row %s. Status %s\n",
                 join( ",", $tuple ),
                 $status->[1];
         }

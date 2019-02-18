@@ -277,7 +277,7 @@ sub fork_proc {
                 # Reset reads hash and reads_processed. Prevents
                 # memory bloat in the former case, and lets us record
                 # only the reads processed this split in the latter
-                %reads = ();
+                %reads           = ();
                 $reads_processed = 0;
                 $output_prefix
                     = "$output_dir/${current_file}_" . ++$current_fragment;
@@ -754,6 +754,13 @@ sub init_bam {
                         { cmd => $cmd, pair => "", start => $start_coord };
                 }
             }
+
+            if ($unmapped) {
+                my $cmd = join( ' ',
+                    $samviewcmd, $samviewflags, $bamfile, "'*'" );
+                push @samcmds,
+                    { cmd => $cmd, pair => "", start => "unmapped" };
+            }
         }
     }
 
@@ -794,17 +801,25 @@ sub read_bam {
     open my $samout, "-|", $cmdhash->{cmd}
         or die "Error opening samtools pipe: $!\n";
     return sub {
-        my ($header, $lpos, $seq ) = ("", -1, "");
+        my ( $header, $lpos, $seq ) = ( "", -1, "" );
 
         # Skip redundant reads from previous regions. Start with
         # lpos = -1 so that we always read at least one line.
-        while ( $lpos < $cmdhash->{start} ) {
+        # We also must enter the loop if processing the unmapped
+        # reads.
+        while ( ( $cmdhash->{start} eq "unmapped" )
+            || $lpos < $cmdhash->{start} )
+        {
             my $bam_rec = <$samout>;
             return () unless ($bam_rec);
 
-            ($header, undef, undef, $lpos, undef,
-            undef,   undef, undef, undef, $seq
+            (   $header, undef, undef, $lpos, undef,
+                undef,   undef, undef, undef, $seq
             ) = split( /\t/, $bam_rec );
+
+            # If we got a read, and this is an unmapped read, just
+            # jump out of loop.
+            last if ( $cmdhash->{start} eq "unmapped" );
         }
         return ( $header . $cmdhash->{pair}, $seq );
     };
