@@ -727,39 +727,56 @@ sub init_bam {
             # next if ( ( $num_aln + $num_unaln ) == 0 );
 
             my $samviewflags = ($unmapped) ? $unmappedflag : $badmapflag;
-            my @end_coords = map { $_ * 10e6 } ( 1 .. ceil( $end / 10e6 ) );
 
-            # my $sam2fastacmd = "| samtools sort -n - | samtools fasta -";
-            for my $i ( 0 .. $#end_coords ) {
-                my $start_coord = ( 1 + ( $i * 10e6 ) );
-                my $region = "$chr:" . $start_coord . "-" . $end_coords[$i];
-
+            # Redundant code, simplfiy later
+            if ($unmapped) {
                 if ($is_paired_end) {
                     my $cmd = join( ' ',
                         $samviewcmd, $samviewflags, $firstsegflag, $bamfile,
-                        $region );
+                        '*' );
                     push @samcmds,
-                        { cmd => $cmd, pair => "/1", start => $start_coord };
+                        { cmd => $cmd, pair => "/1", start => "unmapped" };
                     $cmd = join( ' ',
                         $samviewcmd, $samviewflags, $lastsegflag, $bamfile,
-                        $region );
+                        '*' );
                     push @samcmds,
-                        { cmd => $cmd, pair => "/2", start => $start_coord };
+                        { cmd => $cmd, pair => "/2", start => "unmapped" };
                 }
                 else {
                     my $cmd = join( ' ',
                         $samviewcmd, $samviewflags, $unpairedflag, $bamfile,
-                        $region );
+                        '*' );
                     push @samcmds,
-                        { cmd => $cmd, pair => "", start => $start_coord };
+                        { cmd => $cmd, pair => "", start => "unmapped" };
                 }
             }
+            else {
+                my @end_coords = map { $_ * 10e6 } ( 1 .. ceil( $end / 10e6 ) );
 
-            if ($unmapped) {
-                my $cmd = join( ' ',
-                    $samviewcmd, $samviewflags, $bamfile, "'*'" );
-                push @samcmds,
-                    { cmd => $cmd, pair => "", start => "unmapped" };
+                for my $i ( 0 .. $#end_coords ) {
+                    my $start_coord = ( 1 + ( $i * 10e6 ) );
+                    my $region = "$chr:" . $start_coord . "-" . $end_coords[$i];
+
+                    if ($is_paired_end) {
+                        my $cmd = join( ' ',
+                            $samviewcmd, $samviewflags, $firstsegflag, $bamfile,
+                            $region );
+                        push @samcmds,
+                            { cmd => $cmd, pair => "/1", start => $start_coord };
+                        $cmd = join( ' ',
+                            $samviewcmd, $samviewflags, $lastsegflag, $bamfile,
+                            $region );
+                        push @samcmds,
+                            { cmd => $cmd, pair => "/2", start => $start_coord };
+                    }
+                    else {
+                        my $cmd = join( ' ',
+                            $samviewcmd, $samviewflags, $unpairedflag, $bamfile,
+                            $region );
+                        push @samcmds,
+                            { cmd => $cmd, pair => "", start => $start_coord };
+                    }
+                }
             }
         }
     }
