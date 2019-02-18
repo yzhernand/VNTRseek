@@ -274,7 +274,11 @@ sub fork_proc {
                     close $reads_fh;
                 }
 
+                # Reset reads hash and reads_processed. Prevents
+                # memory bloat in the former case, and lets us record
+                # only the reads processed this split in the latter
                 %reads = ();
+                $reads_processed = 0;
                 $output_prefix
                     = "$output_dir/${current_file}_" . ++$current_fragment;
                 open $trf_pipe,
