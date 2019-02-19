@@ -1003,9 +1003,9 @@ int main( int argc, char **argv ) {
         int *hval;
         if ((hval = EasyStringHashGet(headerHash, repPtr->header)) == NULL) {
             readCount++;
-            ge7ReadCount += (repPtr->patsize >= 7);
+            ge7ReadCount += ((repPtr->patsize >= 7) && ( repPtr->spanning ));
             int *flag = malloc(sizeof(int));
-            *flag = (repPtr->patsize >= 7);
+            *flag = ((repPtr->patsize >= 7) && ( repPtr->spanning ));
             EasyStringHashSet(headerHash, repPtr->header, flag);
         }
         // We've seen this header before. Only increment ge7ReadCount
@@ -1016,8 +1016,8 @@ int main( int argc, char **argv ) {
         }
 
         TRCount ++;
-        // Increment the ge7TRCount if TR pattern >= 7
-        ge7TRCount += (repPtr->patsize >= 7);
+        // Increment the ge7TRCount if TR pattern >= 7 and spanning
+        ge7TRCount += ((repPtr->patsize >= 7) && ( repPtr->spanning ));
 
         // fprintf( fph, "%d\t%s\t%d\t%d\t%.1f\t%d\t%s\n", repPtr->id,
         //   repPtr->header, repPtr->firstindex, repPtr->lastindex,
