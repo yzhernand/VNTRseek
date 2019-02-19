@@ -75,7 +75,6 @@ $stats{NUMBER_TRS_IN_READS}                   = 0;
 $stats{NUMBER_TRS_IN_READS_GE7}               = 0;
 $stats{NUMBER_READS_WITHTRS_GE7}              = 0;
 $stats{NUMBER_READS_WITHTRS}                  = 0;
-$stats{NUMBER_READS_WITHTRS_GE7_AFTER_REDUND} = 0;
 
 opendir( my $dirhandle, "$readpf" );
 my @dircontents = grep( /\.indexhist$/, readdir($dirhandle));
