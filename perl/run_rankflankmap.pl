@@ -11,10 +11,12 @@ use DBI;
 use POSIX qw(strftime);
 use FindBin;
 use File::Basename;
+use Try::Tiny;
 
 use lib "$FindBin::RealBin/lib";
 
-use vutil qw(get_config get_dbh set_statistics get_trunc_query);
+use vutil
+    qw(get_config get_dbh set_statistics get_trunc_query gen_exec_array_cb vs_db_insert);
 
 my $updatedClustersCount = 0;
 my $updatedRefsCount     = 0;
@@ -55,53 +57,28 @@ my $map_insert_sth;
 my $rankflank_insert_sth;
 
 #goto AAA;
+# disable indices
+$dbh->do("PRAGMA foreign_keys = OFF");
+$dbh->do("PRAGMA synchronous = OFF");
+$dbh->do("PRAGMA journal_mode = TRUNCATE");
 
 # clear map
+$dbh->begin_work;
 $dbh->do( get_trunc_query( $run_conf{BACKEND}, "map" ) )
     or die "Couldn't do statement: " . $dbh->errstr;
 
 # clear rankflank
 $dbh->do( get_trunc_query( $run_conf{BACKEND}, "rankflank" ) )
     or die "Couldn't do statement: " . $dbh->errstr;
+$dbh->commit;
 
-# disable indices
-if ( $run_conf{BACKEND} eq "mysql" ) {
-    $dbh->do('ALTER TABLE map DISABLE KEYS;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-
-    $dbh->do('ALTER TABLE rankflank DISABLE KEYS;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-
-    $dbh->do('SET AUTOCOMMIT = 0;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-
-    $dbh->do('SET FOREIGN_KEY_CHECKS = 0;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-
-    $dbh->do('SET UNIQUE_CHECKS = 0;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-
-    # prepare statments
-    $map_insert_sth
-        = $dbh->prepare(
-        "LOAD DATA LOCAL INFILE '/$tmp/${DBSUFFIX}_map.txt' INTO TABLE map FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';"
-        ) or die "Couldn't prepare statement: " . $dbh->errstr;
-    $rankflank_insert_sth
-        = $dbh->prepare(
-        "LOAD DATA LOCAL INFILE '/$tmp/${DBSUFFIX}_rankflank.txt' INTO TABLE rankflank FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';"
-        ) or die "Couldn't prepare statement: " . $dbh->errstr;
-}
-elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-    $dbh->do("PRAGMA foreign_keys = OFF");
-    $dbh->{AutoCommit} = 0;
-    $map_insert_sth = $dbh->prepare(
-        qq{INSERT INTO map (refid, readid, reserved, reserved2)
-        VALUES (?, ?, 0, 0)}
-    ) or die "Couldn't prepare statement: " . $dbh->errstr;
-    $rankflank_insert_sth
-        = $dbh->prepare(qq{INSERT INTO rankflank VALUES (?, ?, ?, ?)})
-        or die "Couldn't prepare statement: " . $dbh->errstr;
-}
+$map_insert_sth = $dbh->prepare(
+    qq{INSERT INTO map (refid, readid, reserved, reserved2)
+    VALUES (?, ?, 0, 0)}
+) or die "Couldn't prepare statement: " . $dbh->errstr;
+$rankflank_insert_sth
+    = $dbh->prepare(qq{INSERT INTO rankflank VALUES (?, ?, ?, ?)})
+    or die "Couldn't prepare statement: " . $dbh->errstr;
 
 open FILE, "<$inputfile" or die "error opening for reading '$inputfile': $!";
 
@@ -114,15 +91,7 @@ my $k = 0;
 my $upload;
 my $uploadedrank = 0;
 my $uploadedmap  = 0;
-
-# open out files
-my $MAPFILE;
-my $RFFILE;
-
-if ( $run_conf{BACKEND} eq "mysql" ) {
-    open $MAPFILE, ">/$tmp/${DBSUFFIX}_map.txt"       or die $!;
-    open $RFFILE,  ">/$tmp/${DBSUFFIX}_rankflank.txt" or die $!;
-}
+my ( @map_rows, @rankflank_rows );
 
 #foreach my $file (@files) {
 foreach my $file (@allfiles) {
@@ -198,21 +167,20 @@ foreach my $file (@allfiles) {
        #$map_insert_sth->execute($1,$readid)             # Execute the query
        #      or die "Couldn't execute statement: " . $map_insert_sth->errstr;
                         $k++;
-                        if ( $run_conf{BACKEND} eq "mysql" ) {
-                            print $MAPFILE "$1,$readid\n";
-
-                            if ( $k % $RECORDS_PER_INFILE_INSERT == 0 ) {
-                                close($MAPFILE);
-                                $upload = $map_insert_sth->execute();
-                                $uploadedmap += $upload;
-
-                                open( $MAPFILE, ">/$tmp/${DBSUFFIX}_map.txt" )
-                                    or die $!;
+                        push @map_rows, [ $1, $readid ];
+                        if ( @map_rows % $RECORDS_PER_INFILE_INSERT == 0 ) {
+                            my $cb = gen_exec_array_cb( \@map_rows );
+                            my $rows
+                                = vs_db_insert( $dbh, $map_insert_sth, $cb,
+                                "Error inserting into map table." );
+                            if ($rows) {
+                                $uploadedmap += $rows;
+                                @map_rows = ();
                             }
-                        }
-                        elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-                            $map_insert_sth->execute( $1, $readid );
-                            $uploadedmap++;
+                            else {
+                                die
+                                    "Something went wrong inserting, but somehow wasn't caught!\n";
+                            }
                         }
                     }
                 }
@@ -226,22 +194,25 @@ foreach my $file (@allfiles) {
 #$rankflank_insert_sth->execute($readid,$rstr,$bestscore)             # Execute the query
 #      or die "Couldn't execute statement: " . $rankflank_insert_sth->errstr;
                         $j++;
-                        if ( $run_conf{BACKEND} eq "mysql" ) {
-                            print $RFFILE "$rstr,$readid,$bestscore,$ties\n";
 
-                            if ( $j % $RECORDS_PER_INFILE_INSERT == 0 ) {
-                                close($RFFILE);
-                                $upload = $rankflank_insert_sth->execute();
-                                $uploadedrank += $upload;
-                                open( $RFFILE,
-                                    ">/$tmp/${DBSUFFIX}_rankflank.txt" )
-                                    or die $!;
+                        push @rankflank_rows,
+                            [ $rstr, $readid, $bestscore, $ties ];
+                        if ( @rankflank_rows % $RECORDS_PER_INFILE_INSERT
+                            == 0 )
+                        {
+                            my $cb = gen_exec_array_cb( \@rankflank_rows );
+                            my $rows
+                                = vs_db_insert( $dbh, $rankflank_insert_sth,
+                                $cb,
+                                "Error inserting into rankflank table." );
+                            if ($rows) {
+                                $uploadedrank += $rows;
+                                @rankflank_rows = ();
                             }
-                        }
-                        elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-                            $rankflank_insert_sth->execute( $rstr, $readid,
-                                $bestscore, $ties );
-                            $uploadedrank++;
+                            else {
+                                die
+                                    "Something went wrong inserting, but somehow wasn't caught!\n";
+                            }
                         }
 
                     }
@@ -255,81 +226,59 @@ foreach my $file (@allfiles) {
 
         # load the files and remove the temp files
 
-        print STDERR "\nprocessed: $clusters_processed";
+        ( $ENV{DEBUG} ) && warn "processed: $clusters_processed\n";
 
     }    # end of if (index($file,"_map")) {
 
 }    # end of foreach @files
 close(FILE);
 
-if ( $run_conf{BACKEND} eq "mysql" ) {
-
-    # finish writing and loading out files
-    close($RFFILE);
-    close($MAPFILE);
-
-    $upload = $map_insert_sth->execute();
-    $uploadedmap += $upload;
-
-    $upload = $rankflank_insert_sth->execute();
-    $uploadedrank += $upload;
-    unlink("/$tmp/${DBSUFFIX}_map.txt");
-    unlink("/$tmp/${DBSUFFIX}_rankflank.txt");
-    print STDERR "Enabling indices...\n";
-
-    # enable indices
-    $dbh->do('ALTER TABLE map ENABLE KEYS;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-
-    $dbh->do('ALTER TABLE rankflank ENABLE KEYS;')
-        or die "Couldn't do statement: " . $dbh->errstr;
+if (@map_rows) {
+    my $cb   = gen_exec_array_cb( \@map_rows );
+    my $rows = vs_db_insert( $dbh, $map_insert_sth, $cb,
+        "Error inserting into map table." );
+    if ($rows) {
+        $uploadedmap += $rows;
+        @map_rows = ();
+    }
+    else {
+        die "Something went wrong inserting, but somehow wasn't caught!\n";
+    }
 }
 
 if ( $uploadedmap != $k ) {
     die
-        "\nUploaded number of map entries($uploadedmap) not equal to the number of uploaded counter ($k), aborting!";
-}
-if ( $uploadedrank != $j ) {
-    die
-        "\nUploaded number of rankflank entries($uploadedrank) not equal to the number of uploaded counter ($j), aborting!";
+        "Uploaded number of map entries($uploadedmap) not equal to the number of uploaded counter ($k), aborting!\n";
 }
 
+if (@rankflank_rows) {
+    my $cb   = gen_exec_array_cb( \@rankflank_rows );
+    my $rows = vs_db_insert( $dbh, $rankflank_insert_sth, $cb,
+        "Error inserting into rankflank table." );
+    if ($rows) {
+        $uploadedrank += $rows;
+        @rankflank_rows = ();
+    }
+    else {
+        die "Something went wrong inserting, but somehow wasn't caught!\n";
+    }
+}
+
+if ( $uploadedrank != $j ) {
+    die
+        "Uploaded number of rankflank entries($uploadedrank) not equal to the number of uploaded counter ($j), aborting!\n";
+}
 AAA:
 
 # create temp table for deletions
-if ( $run_conf{BACKEND} eq "mysql" ) {
-    $dbh->do(
-        'CREATE TEMPORARY TABLE ranktemp (
-        `refid` INT(11) NOT NULL,
-        `readid` INT(11) NOT NULL,
-        PRIMARY KEY (refid,readid)
-        ) ENGINE=INNODB;'
-    ) or die "Couldn't do statement: " . $dbh->errstr;
+$dbh->do(
+    'CREATE TEMPORARY TABLE ranktemp (
+    `refid` integer NOT NULL,
+    `readid` integer NOT NULL,
+    PRIMARY KEY (`refid`, `readid`))'
+) or die "Couldn't do statement: " . $dbh->errstr;
 
-    $dbh->do('ALTER TABLE ranktemp DISABLE KEYS;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-}
-elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-    $dbh->do(
-        'CREATE TEMPORARY TABLE ranktemp (
-        `refid` integer NOT NULL,
-        `readid` integer NOT NULL,
-        PRIMARY KEY (`refid`, `readid`))'
-    ) or die "Couldn't do statement: " . $dbh->errstr;
-}
-
-my $TEMPFILE;
-
-if ( $run_conf{BACKEND} eq "mysql" ) {
-    open( $TEMPFILE, ">$tmp/ranktemp_$DBSUFFIX.txt" ) or die $!;
-}
-elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-    $sth1 = $dbh->prepare(
-        qq{
-        INSERT INTO ranktemp VALUES (?, ?);
-    }
-    );
-}
+$sth1 = $dbh->prepare( qq{INSERT INTO ranktemp VALUES (?, ?)} );
 print STDERR
     "Prunning (keep best ref for each read) from rankflank table...\n";
 my $query
@@ -343,18 +292,25 @@ my $oldref   = -1;
 my $oldread  = -1;
 my $oldscore = -1.0;
 
+my @rows;
 while ( my @data = $sth->fetchrow_array() ) {
     if ( $data[1] == $oldread && $data[3] != $oldscore ) {
 
         # delete old one
-        if ( $run_conf{BACKEND} eq "mysql" ) {
-            print $TEMPFILE $oldref, ",", $oldread, "\n";
+        push @rows, [ $oldref, $oldread ];
+        if ( @rows % $RECORDS_PER_INFILE_INSERT == 0 ) {
+            my $cb  = gen_exec_array_cb( \@rows );
+            my $num = vs_db_insert( $dbh, $sth1, $cb,
+                "Error inserting into temporary rank table." );
+            if ($num) {
+                $count += $num;
+                @rows = ();
+            }
+            else {
+                die
+                    "Something went wrong inserting, but somehow wasn't caught!\n";
+            }
         }
-        elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-            $sth1->execute( $oldref, $oldread );
-        }
-
-        $count++;
     }
     $oldref   = $data[0];
     $oldread  = $data[1];
@@ -363,8 +319,18 @@ while ( my @data = $sth->fetchrow_array() ) {
     $i++;
 }
 
-my $num = $sth->rows;
-$sth->finish;
+if (@rows) {
+    my $cb  = gen_exec_array_cb( \@rows );
+    my $num = vs_db_insert( $dbh, $sth1, $cb,
+        "Error inserting into temporary rank table." );
+    if ($num) {
+        $count += $num;
+        @rows = ();
+    }
+    else {
+        die "Something went wrong inserting, but somehow wasn't caught!\n";
+    }
+}
 
 print STDERR "Prunning complete. Pruned $count rankflank records.\n";
 
@@ -383,15 +349,20 @@ while ( my @data = $sth->fetchrow_array() ) {
 
     if ( $data[0] == $oldref && $data[2] == $oldseq ) {
 
-        # delete old one
-        if ( $run_conf{BACKEND} eq "mysql" ) {
-            print $TEMPFILE $oldref, ",", $oldread, "\n";
+        push @rows, [ $oldref, $oldread ];
+        if ( @rows % $RECORDS_PER_INFILE_INSERT == 0 ) {
+            my $cb  = gen_exec_array_cb( \@rows );
+            my $num = vs_db_insert( $dbh, $sth1, $cb,
+                "Error inserting into temporary rank table." );
+            if ($num) {
+                $count += $num;
+                @rows = ();
+            }
+            else {
+                die
+                    "Something went wrong inserting, but somehow wasn't caught!\n";
+            }
         }
-        elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-            $sth1->execute( $oldref, $oldread );
-        }
-
-        $count++;
     }
     $oldref  = $data[0];
     $oldread = $data[1];
@@ -399,62 +370,41 @@ while ( my @data = $sth->fetchrow_array() ) {
     $i++;
 }
 
-$num = $sth->rows;
-$sth->finish;
-
-# load the file into tempfile
-if ( $run_conf{BACKEND} eq "mysql" ) {
-    close($TEMPFILE);
-    $dbh->do(
-        "LOAD DATA LOCAL INFILE '$tmp/ranktemp_$DBSUFFIX.txt' INTO TABLE ranktemp FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';"
-    ) or die "Couldn't do statement: " . $dbh->errstr;
-    $dbh->do('ALTER TABLE ranktemp ENABLE KEYS;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-
-    # cleanup temp file
-    unlink("$tmp/ranktemp_$DBSUFFIX.txt");
+if (@rows) {
+    my $cb  = gen_exec_array_cb( \@rows );
+    my $num = vs_db_insert( $dbh, $sth1, $cb,
+        "Error inserting into temporary rank table." );
+    if ($num) {
+        $count += $num;
+        @rows = ();
+    }
+    else {
+        die "Something went wrong inserting, but somehow wasn't caught!\n";
+    }
 }
 
 print STDERR "Prunning complete. Pruned $count rankflank records.\n";
 
 # delete from rankflank based on temptable entries
 my $delfromtable = 0;
-if ( $run_conf{BACKEND} eq "mysql" ) {
-    $query = qq{
-    DELETE FROM t1 USING rankflank t1
-    INNER JOIN ranktemp t2
-        ON ( t1.refid = t2.refid AND t1.readid = t2.readid )
-    };
-}
-elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-    $query = qq{
-        DELETE FROM rankflank
-        WHERE EXISTS (
-            SELECT * FROM ranktemp t2
-            WHERE rankflank.refid = t2.refid
-                AND rankflank.readid = t2.readid
-        )
-    };
-}
-$sth          = $dbh->prepare($query);
+$query = qq{
+    DELETE FROM rankflank
+    WHERE EXISTS (
+        SELECT * FROM ranktemp t2
+        WHERE rankflank.refid = t2.refid
+            AND rankflank.readid = t2.readid
+    )
+};
+$sth = $dbh->prepare($query);
+$dbh->begin_work;
 $delfromtable = $sth->execute();
+$dbh->commit;
 
 # $sth->finish;
 
 # set old settings
-if ( $run_conf{BACKEND} eq "mysql" ) {
-    $sth = $dbh->do('SET AUTOCOMMIT = 1;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-    $sth = $dbh->do('SET FOREIGN_KEY_CHECKS = 1;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-
-    $sth = $dbh->do('SET UNIQUE_CHECKS = 1;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-}
-elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-    $dbh->do("PRAGMA foreign_keys = ON");
-    $dbh->{AutoCommit} = 1;
-}
+$dbh->do("PRAGMA foreign_keys = ON");
+$dbh->do("PRAGMA synchronous = ON");
 
 if ( $delfromtable != $count ) {
     die
