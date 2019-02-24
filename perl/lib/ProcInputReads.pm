@@ -158,6 +158,54 @@ sub check_trf_pipe_close {
     }
 }
 
+=item C<write_reads>
+
+Write out reads with TRs to files in the output directory.
+
+=cut
+
+
+##** @function write_reads ($output_prefix, $reads_processed, $read_hash)
+##
+## @brief      Writes reads with TRs to output directory. File names
+##             have same prefix as the corresponding index file.
+##
+## @param      $output_prefix    The output file prefix
+## @param      $reads_processed  The number of reads processed before
+##             calling this function by this process.
+## @param      $read_hash        A hashref with read headers as keys,
+##             and sequences as values.
+##
+## @return     none. Dies on error.
+##
+sub write_reads {
+    my ($output_prefix, $reads_processed, $read_hash) = @_;
+    open my $index_fh, "<", "$output_prefix.index";
+    open my $reads_fh, ">", "$output_prefix.reads";
+    while ( my $line = <$index_fh> ) {
+        my @fields = split /\t/, $line;
+        my $head = $fields[1];
+        if ( exists $read_hash->{$head}
+            && ( $read_hash->{$head}->{written} == 0 ) )
+        {
+            print $reads_fh $head . "\t"
+                . $read_hash->{$head}->{seq} . "\n";
+            $read_hash->{$head}->{written} = 1;
+        }
+        elsif (!exists $read_hash->{$head}) {
+            die "Error: unlogged read found in index."
+            . "Possibly a bug in the sequence reading"
+            . "code. Please file a bug report.\n";
+        }
+    }
+
+    # .reads file gets one more line with the total number
+    # of reads we read (different from reads with TRs count)
+    say $reads_fh "totalreads\t$reads_processed";
+    close $index_fh;
+    close $reads_fh;
+}
+
 =item C<compressed_formats_regexs>
 
 Returns a hash of sequence format names and the regular expressions
@@ -232,7 +280,15 @@ sub fork_proc {
         my $reads_processed = 0;
         my %reads;
         while ( my ( $header, $body ) = $reader->() ) {
-            $reads{$header} = { seq => $body, written => 0 };
+            if ( exists $reads{$header} ) {
+                die "Error: duplicate reads in input. Make sure your"
+                    . "input only consists of unique reads. This can happen"
+                    . "if your input contains alternative alignments of the"
+                    . "same sequence after converting from BAM/CRAM.\n";
+            }
+            else {
+                $reads{$header} = { seq => $body, written => 0 };
+            }
 
             # warn "header: $header\nbody: $body\n"
             #     if ($ENV{DEBUG});
@@ -253,25 +309,7 @@ sub fork_proc {
                 # scan output file and write out reads with TRs to new file
                 if ( -e "$output_prefix.index" && -s "$output_prefix.index" )
                 {
-                    open my $index_fh, "<", "$output_prefix.index";
-                    open my $reads_fh, ">", "$output_prefix.reads";
-                    while ( my $line = <$index_fh> ) {
-                        my @fields = split /\t/, $line;
-                        my $head = $fields[1];
-                        if ( exists $reads{$head}
-                            && ( $reads{$head}->{written} == 0 ) )
-                        {
-                            print $reads_fh $head . "\t"
-                                . $reads{$head}->{seq} . "\n";
-                            $reads{$head}->{written} = 1;
-                        }
-                    }
-
-                    # .reads file gets one more line with the total number
-                    # of reads we read (different from reads with TRs count)
-                    say $reads_fh "totalreads\t$reads_processed";
-                    close $index_fh;
-                    close $reads_fh;
+                    write_reads($output_prefix, $reads_processed, \%reads);
                 }
 
                 # Reset reads hash and reads_processed. Prevents
@@ -296,24 +334,7 @@ sub fork_proc {
 
         # scan output file and write out reads with TRs to new file
         if ( -e "$output_prefix.index" && -s "$output_prefix.index" ) {
-            open my $index_fh, "<", "$output_prefix.index";
-            open my $reads_fh, ">", "$output_prefix.reads";
-            while ( my $line = <$index_fh> ) {
-                my @fields = split /\t/, $line;
-                my $head = $fields[1];
-                if ( exists $reads{$head}
-                    && ( $reads{$head}->{written} == 0 ) )
-                {
-                    say $reads_fh $head . "\t" . $reads{$head}->{seq};
-                    $reads{$head}->{written} = 1;
-                }
-            }
-
-            # .reads file gets one more line with the total number
-            # of reads we read (different from reads with TRs count)
-            say $reads_fh "totalreads\t$reads_processed";
-            close $index_fh;
-            close $reads_fh;
+            write_reads($output_prefix, $reads_processed, \%reads);
         }
 
         exit;
@@ -751,30 +772,44 @@ sub init_bam {
                 }
             }
             else {
-                my @end_coords = map { $_ * 10e6 } ( 1 .. ceil( $end / 10e6 ) );
+                my @end_coords
+                    = map { $_ * 10e6 } ( 1 .. ceil( $end / 10e6 ) );
 
                 for my $i ( 0 .. $#end_coords ) {
                     my $start_coord = ( 1 + ( $i * 10e6 ) );
-                    my $region = "$chr:" . $start_coord . "-" . $end_coords[$i];
+                    my $region
+                        = "$chr:" . $start_coord . "-" . $end_coords[$i];
 
                     if ($is_paired_end) {
                         my $cmd = join( ' ',
-                            $samviewcmd, $samviewflags, $firstsegflag, $bamfile,
-                            $region );
+                            $samviewcmd, $samviewflags, $firstsegflag,
+                            $bamfile, $region );
                         push @samcmds,
-                            { cmd => $cmd, pair => "/1", start => $start_coord };
+                            {
+                            cmd   => $cmd,
+                            pair  => "/1",
+                            start => $start_coord
+                            };
                         $cmd = join( ' ',
-                            $samviewcmd, $samviewflags, $lastsegflag, $bamfile,
-                            $region );
+                            $samviewcmd, $samviewflags, $lastsegflag,
+                            $bamfile, $region );
                         push @samcmds,
-                            { cmd => $cmd, pair => "/2", start => $start_coord };
+                            {
+                            cmd   => $cmd,
+                            pair  => "/2",
+                            start => $start_coord
+                            };
                     }
                     else {
                         my $cmd = join( ' ',
-                            $samviewcmd, $samviewflags, $unpairedflag, $bamfile,
-                            $region );
+                            $samviewcmd, $samviewflags, $unpairedflag,
+                            $bamfile, $region );
                         push @samcmds,
-                            { cmd => $cmd, pair => "", start => $start_coord };
+                            {
+                            cmd   => $cmd,
+                            pair  => "",
+                            start => $start_coord
+                            };
                     }
                 }
             }
