@@ -12,7 +12,10 @@ use FindBin;
 use File::Basename;
 
 use lib "$FindBin::RealBin/lib";
-use vutil qw(get_config get_dbh set_statistics get_trunc_query);
+use vutil
+    qw(get_config get_dbh set_statistics get_trunc_query gen_exec_array_cb);
+
+my $RECORDS_PER_INFILE_INSERT = 100000;
 
 # Perl trim function to remove whitespace from the start and end of the string
 sub trim($) {
@@ -40,7 +43,7 @@ my $cpucount     = $ARGV[4];
 my $TEMPDIR      = $ARGV[5];
 my $KEEPPCRDUPS  = $ARGV[6];
 
-# set these mysql credentials in vs.cnf (in installation directory)
+# get run configuration, let's us connect to DB
 my %run_conf = get_config( $DBSUFFIX, $run_dir );
 my $dbh = get_dbh( { userefdb => 1 } )
     or die "Could not connect to database: $DBI::errstr";
@@ -118,36 +121,11 @@ my $query = q{CREATE TEMPORARY TABLE pduptemp (
     PRIMARY KEY (refid,readid)
     )};
 
-if ( $run_conf{BACKEND} eq "mysql" ) {
-    $query .= " ENGINE=INNODB";
-}
-
 $dbh->do($query)
     or die "Couldn't do statement: " . $dbh->errstr;
 
-my $TEMPFILE;
-if ( $run_conf{BACKEND} eq "mysql" ) {
-    $dbh->do('ALTER TABLE pduptemp DISABLE KEYS;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-
-    $dbh->do('SET AUTOCOMMIT = 0;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-
-    $dbh->do('SET FOREIGN_KEY_CHECKS = 0;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-
-    $dbh->do('SET UNIQUE_CHECKS = 0;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-
-    open( $TEMPFILE, ">$TEMPDIR/pduptemp_$DBSUFFIX.txt" ) or die $!;
-}
-elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-    $dbh->do("PRAGMA foreign_keys = OFF");
-
-    # warn "\nTurning off AutoCommit\n";
-    $dbh->{AutoCommit} = 0;
-    $sth = $dbh->prepare(q{INSERT INTO pduptemp VALUES (?, ?)});
-}
+$dbh->do("PRAGMA foreign_keys = OFF");
+$sth = $dbh->prepare(q{INSERT INTO pduptemp VALUES (?, ?)});
 
 #my $query = "DELETE FROM rank WHERE refid=? AND readid=?;";
 #$sth = $dbh->prepare($query);
@@ -161,14 +139,15 @@ closedir($dir);
 
 my $i       = 0;
 my $deleted = 0;
+my @to_delete;
 foreach my $ifile (@indexfiles) {
 
     $i++;
 
     if ( $ifile =~ /(\d+)\.seq\.pcr_dup/ ) {
 
-        my $ref        = $1;
-        my $filedelted = 0;
+        my $ref         = $1;
+        my $filedeleted = 0;
         print "\n $i. " . $ifile . "...";
 
         if ( open( my $fh, "$indexfolder/$ifile" ) ) {
@@ -210,16 +189,42 @@ foreach my $ifile (@indexfiles) {
 
                         #$sth->execute($ref,$read);
                         #$sth1->execute($ref,$read);
-                        if ( $run_conf{BACKEND} eq "mysql" ) {
-                            print $TEMPFILE $ref, ",", $read, "\n";
-                        }
-                        elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-                            $sth->execute( $ref, $read );
-                        }
-
                         #print "deleting: -$ref -> $read\n";
                         $deleted++;
-                        $filedelted++;
+                        $filedeleted++;
+                        push @to_delete, [ $ref, $read ];
+
+                        if ( $deleted % $RECORDS_PER_INFILE_INSERT == 0 ) {
+                            $dbh->begin_work();
+                            my $cb     = gen_exec_array_cb( \@to_delete );
+                            my $tuples = $sth->execute_array(
+                                {   ArrayTupleFetch  => $cb,
+                                    ArrayTupleStatus => \my @tuple_status
+                                }
+                            );
+                            if ($tuples) {
+                                @to_delete = ();
+                                $dbh->commit;
+                            }
+                            else {
+                                for my $tuple ( 0 .. @to_delete - 1 ) {
+                                    my $status = $tuple_status[$tuple];
+                                    $status = [ 0, "Skipped" ]
+                                        unless defined $status;
+                                    next unless ref $status;
+                                    printf
+                                        "Failed to insert row %s. Status %s\n",
+                                        join( ",", $to_delete[$tuple] ),
+                                        $status->[1];
+                                }
+                                eval { $dbh->rollback; };
+                                if ($@) {
+                                    die "Database rollback failed.\n";
+                                }
+                                die
+                                    "Error when inserting entries into temporary pcr duplicates table.\n";
+                            }
+                        }
 
                   #print "$1 (newid:$NEWIDS{$1}) - $5 (newid: $NEWIDS{$5})\n";
                   #exit(1);
@@ -234,7 +239,7 @@ foreach my $ifile (@indexfiles) {
             }
 
             close($fh);
-            print "($filedelted deleted)";
+            print "($filedeleted deleted)";
 
         }
 
@@ -245,33 +250,48 @@ foreach my $ifile (@indexfiles) {
 #$sth->finish;
 #$sth1->finish;
 
-# load the file into tempfile
-if ( $run_conf{BACKEND} eq "mysql" ) {
-    close($TEMPFILE);
-    $dbh->do(
-        "LOAD DATA LOCAL INFILE '$TEMPDIR/pduptemp_$DBSUFFIX.txt' INTO TABLE pduptemp FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';"
-    ) or die "Couldn't do statement: " . $dbh->errstr;
-    $dbh->do('ALTER TABLE pduptemp ENABLE KEYS;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-
-    # delete from rankdflank based on temptable entries
-    $query = q{DELETE FROM t1
-    USING rank t1 INNER JOIN
-        pduptemp t2 ON ( t1.refid = t2.refid AND t1.readid = t2.readid )};
+if (@to_delete) {
+    $dbh->begin_work();
+    my $cb     = gen_exec_array_cb( \@to_delete );
+    my $tuples = $sth->execute_array(
+        {   ArrayTupleFetch  => $cb,
+            ArrayTupleStatus => \my @tuple_status
+        }
+    );
+    if ($tuples) {
+        @to_delete = ();
+        $dbh->commit;
+    }
+    else {
+        for my $tuple ( 0 .. @to_delete - 1 ) {
+            my $status = $tuple_status[$tuple];
+            $status = [ 0, "Skipped" ]
+                unless defined $status;
+            next unless ref $status;
+            printf "Failed to insert row %s. Status %s\n",
+                join( ",", $to_delete[$tuple] ),
+                $status->[1];
+        }
+        eval { $dbh->rollback; };
+        if ($@) {
+            die "Database rollback failed.\n";
+        }
+        die
+            "Error when inserting entries into temporary pcr duplicates table.\n";
+    }
 }
-elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-    $dbh->commit;
 
-    # delete from rankdflank based on temptable entries
-    $query = q{DELETE FROM rank
-    WHERE EXISTS (
-        SELECT * FROM pduptemp t2
-        WHERE rank.refid = t2.refid
-            AND rank.readid = t2.readid
-    )};
-}
+# delete from rankdflank based on temptable entries
+$query = q{DELETE FROM rank
+WHERE EXISTS (
+    SELECT * FROM pduptemp t2
+    WHERE rank.refid = t2.refid
+        AND rank.readid = t2.readid
+)};
 
+$dbh->begin_work();
 my $delfromtable = $dbh->do($query);
+$dbh->commit();
 
 # cleanup temp file
 if ( $run_conf{BACKEND} eq "mysql" ) {
@@ -329,8 +349,9 @@ $sth = $dbh->prepare(
     INNER JOIN rankflank ON rankflank.refid=map.refid AND rankflank.readid=map.readid
     WHERE rank.ties=0 OR rankflank.ties=0}
 );
+$dbh->begin_work();
 $sth->execute();
-$dbh->commit;
+$dbh->commit();
 
 if ( $run_conf{BACKEND} eq "mysql" ) {
     $dbh->do('ALTER TABLE pduptemp ENABLE KEYS;')
@@ -342,8 +363,10 @@ $query = q{UPDATE map SET bbb=1
     SELECT refid FROM pduptemp t2
     WHERE map.refid = t2.refid AND map.readid=t2.readid
 )};
+$dbh->begin_work();
 $i = $dbh->do($query)
     or die "Couldn't do statement: " . $dbh->errstr;
+$dbh->commit();
 
 $stats{BBB_WITH_MAP_DUPS} = $i;
 
@@ -397,20 +420,7 @@ if ( open( my $fh, ">$pcleanfolder/result/$DBSUFFIX.ties_entries.txt" ) ) {
 warn "Ties list complete with $i removed entries.\n";
 
 # set old settings
-if ( $run_conf{BACKEND} eq "mysql" ) {
-    $sth = $dbh->do('SET AUTOCOMMIT = 1;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-
-    $sth = $dbh->do('SET FOREIGN_KEY_CHECKS = 1;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-
-    $sth = $dbh->do('SET UNIQUE_CHECKS = 1;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-}
-elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-    $dbh->do("PRAGMA foreign_keys = ON");
-    $dbh->{AutoCommit} = 1;
-}
+$dbh->do("PRAGMA foreign_keys = ON");
 
 if ( $delfromtable != $deleted ) {
     die
