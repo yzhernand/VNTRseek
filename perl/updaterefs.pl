@@ -14,7 +14,7 @@ use Data::Dumper;
 use lib "$FindBin::RealBin/lib";
 
 use vutil
-    qw(get_config get_dbh get_trunc_query set_statistics get_statistics gen_exec_array_cb);
+    qw(get_config get_dbh get_trunc_query set_statistics get_statistics gen_exec_array_cb vs_db_insert);
 
 my $RECORDS_PER_INFILE_INSERT = 100000;
 
@@ -2092,33 +2092,16 @@ while ( my @data = $get_supported_reftrs_sth->fetchrow_array() ) {
     );
 
     if ( @supported_refTRs % $RECORDS_PER_INFILE_INSERT == 0 ) {
-        $dbh->begin_work;
-        my $cb     = gen_exec_array_cb( \@supported_refTRs );
-        my $tuples = $update_ref_table_sth->execute_array(
-            {   ArrayTupleFetch  => $cb,
-                ArrayTupleStatus => \my @tuple_status
-            }
-        );
-        if ($tuples) {
+        my $cb = gen_exec_array_cb( \@supported_refTRs );
+        my $rows = vs_db_insert( $dbh, $update_ref_table_sth, $cb,
+            "Error when inserting entries into our supported reference TRs table. Row dump: "
+                . Dumper( \@supported_refTRs ) );
+        if ($rows) {
             @supported_refTRs = ();
-            $dbh->commit;
         }
         else {
-            for my $tuple ( 0 .. @supported_refTRs - 1 ) {
-                my $status = $tuple_status[$tuple];
-                $status = [ 0, "Skipped" ]
-                    unless defined $status;
-                next unless ref $status;
-                printf "Failed to insert row %s. Status %s\n",
-                    join( ",", $supported_refTRs[$tuple] ),
-                    $status->[1];
-            }
-            eval { $dbh->rollback; };
-            if ($@) {
-                die "Database rollback failed.\n";
-            }
             die
-                "Error when inserting entries into our supported reference TRs table.\n";
+                "Something went wrong inserting, but somehow wasn't caught!\n";
         }
     }
 }
@@ -2127,33 +2110,16 @@ my $updfromtable = $i;
 
 # Insert last rows:
 if (@supported_refTRs) {
-    $dbh->begin_work;
-    my $cb     = gen_exec_array_cb( \@supported_refTRs );
-    my $tuples = $update_ref_table_sth->execute_array(
-        {   ArrayTupleFetch  => $cb,
-            ArrayTupleStatus => \my @tuple_status
-        }
-    );
-    if ($tuples) {
+    my $cb = gen_exec_array_cb( \@supported_refTRs );
+    my $rows = vs_db_insert( $dbh, $update_ref_table_sth, $cb,
+        "Error when inserting entries into our supported reference TRs table. Row dump: "
+            . Dumper( \@supported_refTRs ) );
+    if ($rows) {
         @supported_refTRs = ();
-        $dbh->commit;
     }
     else {
-        for my $tuple ( 0 .. @supported_refTRs - 1 ) {
-            my $status = $tuple_status[$tuple];
-            $status = [ 0, "Skipped" ]
-                unless defined $status;
-            next unless ref $status;
-            printf "Failed to insert row %s. Status %s\n",
-                join( ",", $supported_refTRs[$tuple] ),
-                $status->[1];
-        }
-        eval { $dbh->rollback; };
-        if ($@) {
-            die "Database rollback failed.\n";
-        }
         die
-            "Error when inserting entries into our supported reference TRs table.\n";
+            "Something went wrong inserting, but somehow wasn't caught!\n";
     }
 }
 if ( $updfromtable != $supported_vntr_count ) {

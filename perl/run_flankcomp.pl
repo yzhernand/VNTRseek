@@ -15,7 +15,7 @@ use File::Basename;
 use lib "$FindBin::RealBin/lib";
 
 use vutil
-    qw(get_config get_dbh set_statistics get_trunc_query gen_exec_array_cb);
+    qw(get_config get_dbh set_statistics get_trunc_query gen_exec_array_cb vs_db_insert);
 
 sub nowhitespace($) {
     my $string = shift;
@@ -37,7 +37,7 @@ my $DBSUFFIX  = $ARGV[1];
 my $run_dir   = $ARGV[2];
 my $TEMPDIR   = $ARGV[3];
 
-# set these mysql credentials in vs.cnf (in installation directory)
+# get run config
 my %run_conf = get_config( $DBSUFFIX, $run_dir );
 
 my $clusters_processed = 0;
@@ -92,7 +92,7 @@ $sth = $dbh->prepare(q{INSERT INTO clusterlnk VALUES (?, ?, ?, 0, 0)})
 my $totalreps = 0;
 
 # DBI->trace("3|SQL", "dbitrace.log");
-my @clusters;
+my @cluster_links;
 while (<$fh>) {
     $clusters_processed++;
 
@@ -108,36 +108,18 @@ while (<$fh>) {
 
         my $dir = q{'};
         if ( $val =~ s/([\'\"])// ) { $dir = $1; }
-        push @clusters, [ $clusters_processed, $val, $dir ];
+        push @cluster_links, [ $clusters_processed, $val, $dir ];
 
         if ( ( $totalreps % $RECORDS_PER_INFILE_INSERT == 0 ) ) {
-            $dbh->begin_work();
-            my $cb     = gen_exec_array_cb( \@clusters );
-            my $tuples = $sth->execute_array(
-                {   ArrayTupleFetch  => $cb,
-                    ArrayTupleStatus => \my @tuple_status
-                }
-            );
-            if ($tuples) {
-                @clusters = ();
-                $dbh->commit;
+            my $cb = gen_exec_array_cb( \@cluster_links );
+            my $rows = vs_db_insert( $dbh, $sth, $cb,
+                "Error when inserting entries into our clusterlnk table.\n");
+            if ($rows) {
+                @cluster_links = ();
             }
             else {
-                for my $tuple ( 0 .. @clusters - 1 ) {
-                    my $status = $tuple_status[$tuple];
-                    $status = [ 0, "Skipped" ]
-                        unless defined $status;
-                    next unless ref $status;
-                    printf "Failed to insert row %s. Status %s\n",
-                        join( ",", $clusters[$tuple] ),
-                        $status->[1];
-                }
-                eval { $dbh->rollback; };
-                if ($@) {
-                    die "Database rollback failed.\n";
-                }
                 die
-                    "Error when inserting entries into our clusterlnk table.\n";
+                    "Something went wrong inserting, but somehow wasn't caught!\n";
             }
         }
 
@@ -146,33 +128,16 @@ while (<$fh>) {
 }    # end of while loop
 
 # Finish insert
-if (@clusters) {
-    $dbh->begin_work();
-    my $cb     = gen_exec_array_cb( \@clusters );
-    my $tuples = $sth->execute_array(
-        {   ArrayTupleFetch  => $cb,
-            ArrayTupleStatus => \my @tuple_status
-        }
-    );
-    if ($tuples) {
-        @clusters = ();
-        $dbh->commit;
+if (@cluster_links) {
+    my $cb = gen_exec_array_cb( \@cluster_links );
+    my $rows = vs_db_insert( $dbh, $sth, $cb,
+        "Error when inserting entries into our clusterlnk table.\n");
+    if ($rows) {
+        @cluster_links = ();
     }
     else {
-        for my $tuple ( 0 .. @clusters - 1 ) {
-            my $status = $tuple_status[$tuple];
-            $status = [ 0, "Skipped" ]
-                unless defined $status;
-            next unless ref $status;
-            printf "Failed to insert row %s. Status %s\n",
-                join( ",", $clusters[$tuple] ),
-                $status->[1];
-        }
-        eval { $dbh->rollback; };
-        if ($@) {
-            die "Database rollback failed.\n";
-        }
-        die "Error when inserting entries into our clusterlnk table.\n";
+        die
+            "Something went wrong inserting, but somehow wasn't caught!\n";
     }
 }
 
@@ -207,7 +172,7 @@ $sth2 = $dbh->prepare(
 my $i;
 seek( $fh, 0, 0 );
 $clusters_processed = 0;
-$dbh->begin_work;
+my @clusters;
 while (<$fh>) {
     $clusters_processed++;
 
@@ -313,9 +278,23 @@ while (<$fh>) {
         warn
             "Cluster $clusters_processed, numrefs: $numrefs, numreads: $numreads\n";
     }
-    $sth2->execute( $clusters_processed, $minpat, $maxpat, $repeatcount,
-        $refcount )    # Execute the query
-        or die "Couldn't execute statement: " . $sth2->errstr;
+    push @clusters, [$clusters_processed, $minpat, $maxpat, $repeatcount,
+        $refcount];
+    # $sth2->execute( $clusters_processed, $minpat, $maxpat, $repeatcount,
+    #     $refcount )    # Execute the query
+    #     or die "Couldn't execute statement: " . $sth2->errstr;
+    if ( ( @clusters % $RECORDS_PER_INFILE_INSERT == 0 ) ) {
+        my $cb = gen_exec_array_cb( \@clusters );
+        my $rows = vs_db_insert( $dbh, $sth2, $cb,
+            "Error when inserting entries into our clusters table.\n");
+        if ($rows) {
+            @clusters = ();
+        }
+        else {
+            die
+                "Something went wrong inserting, but somehow wasn't caught!\n";
+        }
+    }
 
     # $dbh->commit;
 
@@ -327,33 +306,22 @@ while (<$fh>) {
 
 }    # end of while loop
 
-# delete temp ref file
-unlink("$TEMPDIR/refs_$DBSUFFIX.txt");
-
-#cleanup
-close($fh);
-
-#close(QFILE);
-
-$sth->finish;
-$sth1->finish;
-$dbh->commit;
+if ( @clusters ) {
+    my $cb = gen_exec_array_cb( \@clusters );
+    my $rows = vs_db_insert( $dbh, $sth2, $cb,
+        "Error when inserting entries into our clusters table.\n");
+    if ($rows) {
+        @clusters = ();
+    }
+    else {
+        die
+            "Something went wrong inserting, but somehow wasn't caught!\n";
+    }
+}
 
 # enable old settings
-if ( $run_conf{BACKEND} eq "mysql" ) {
-    $dbh->do('SET AUTOCOMMIT = 1;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-
-    $dbh->do('SET FOREIGN_KEY_CHECKS = 1;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-
-    $dbh->do('SET UNIQUE_CHECKS = 1;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-}
-elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-    $dbh->do("PRAGMA foreign_keys = ON");
-    $dbh->do("PRAGMA synchronous = ON");
-}
+$dbh->do("PRAGMA foreign_keys = ON");
+$dbh->do("PRAGMA synchronous = ON");
 
 $dbh->disconnect();
 
