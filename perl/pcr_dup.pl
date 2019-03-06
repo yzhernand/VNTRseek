@@ -125,6 +125,7 @@ $dbh->do($query)
     or die "Couldn't do statement: " . $dbh->errstr;
 
 $dbh->do("PRAGMA foreign_keys = OFF");
+$dbh->do("PRAGMA synchronous = OFF");
 $sth = $dbh->prepare(q{INSERT INTO pduptemp VALUES (?, ?)});
 
 #my $query = "DELETE FROM rank WHERE refid=? AND readid=?;";
@@ -195,34 +196,15 @@ foreach my $ifile (@indexfiles) {
                         push @to_delete, [ $ref, $read ];
 
                         if ( $deleted % $RECORDS_PER_INFILE_INSERT == 0 ) {
-                            $dbh->begin_work();
-                            my $cb     = gen_exec_array_cb( \@to_delete );
-                            my $tuples = $sth->execute_array(
-                                {   ArrayTupleFetch  => $cb,
-                                    ArrayTupleStatus => \my @tuple_status
-                                }
-                            );
-                            if ($tuples) {
+                            my $cb = gen_exec_array_cb( \@to_delete );
+                            my $rows = vs_db_insert( $dbh, $sth, $cb,
+                                "Error when inserting entries into temporary pcr duplicates table.\n");
+                            if ($rows) {
                                 @to_delete = ();
-                                $dbh->commit;
                             }
                             else {
-                                for my $tuple ( 0 .. @to_delete - 1 ) {
-                                    my $status = $tuple_status[$tuple];
-                                    $status = [ 0, "Skipped" ]
-                                        unless defined $status;
-                                    next unless ref $status;
-                                    printf
-                                        "Failed to insert row %s. Status %s\n",
-                                        join( ",", $to_delete[$tuple] ),
-                                        $status->[1];
-                                }
-                                eval { $dbh->rollback; };
-                                if ($@) {
-                                    die "Database rollback failed.\n";
-                                }
                                 die
-                                    "Error when inserting entries into temporary pcr duplicates table.\n";
+                                    "Something went wrong inserting, but somehow wasn't caught!\n";
                             }
                         }
 
@@ -251,33 +233,15 @@ foreach my $ifile (@indexfiles) {
 #$sth1->finish;
 
 if (@to_delete) {
-    $dbh->begin_work();
-    my $cb     = gen_exec_array_cb( \@to_delete );
-    my $tuples = $sth->execute_array(
-        {   ArrayTupleFetch  => $cb,
-            ArrayTupleStatus => \my @tuple_status
-        }
-    );
-    if ($tuples) {
+    my $cb = gen_exec_array_cb( \@to_delete );
+    my $rows = vs_db_insert( $dbh, $sth, $cb,
+        "Error when inserting entries into temporary pcr duplicates table.\n");
+    if ($rows) {
         @to_delete = ();
-        $dbh->commit;
     }
     else {
-        for my $tuple ( 0 .. @to_delete - 1 ) {
-            my $status = $tuple_status[$tuple];
-            $status = [ 0, "Skipped" ]
-                unless defined $status;
-            next unless ref $status;
-            printf "Failed to insert row %s. Status %s\n",
-                join( ",", $to_delete[$tuple] ),
-                $status->[1];
-        }
-        eval { $dbh->rollback; };
-        if ($@) {
-            die "Database rollback failed.\n";
-        }
         die
-            "Error when inserting entries into temporary pcr duplicates table.\n";
+            "Something went wrong inserting, but somehow wasn't caught!\n";
     }
 }
 
@@ -421,6 +385,7 @@ warn "Ties list complete with $i removed entries.\n";
 
 # set old settings
 $dbh->do("PRAGMA foreign_keys = ON");
+$dbh->do("PRAGMA synchronous = ON");
 
 if ( $delfromtable != $deleted ) {
     die
