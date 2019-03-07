@@ -2233,6 +2233,7 @@ $dbh->commit;
 # set old db settings
 $dbh->do("PRAGMA foreign_keys = ON");
 $dbh->do("PRAGMA synchronous = ON");
+$dbh->do("PRAGMA temp_store = 0");
 
 # Index for getting copies gained/lost
 # $dbh->do(q{CREATE INDEX IF NOT EXISTS
