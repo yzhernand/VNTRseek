@@ -1943,9 +1943,11 @@ my $dbh = get_dbh( { userefdb => 1 } )
 
 #goto AAA;
 
-# warn "\nTurning off AutoCommit\n";
 $dbh->do("PRAGMA foreign_keys = OFF");
 $dbh->do("PRAGMA synchronous = OFF");
+
+# Store temporary tables in memory 
+$dbh->do("PRAGMA temp_store = 2");
 # $dbh->begin_work;
 $dbh->do( get_trunc_query( $run_conf{BACKEND}, "main.fasta_ref_reps" ) )
     or die "Couldn't do statement: " . $dbh->errstr;
@@ -1956,10 +1958,16 @@ $dbh->do( get_trunc_query( $run_conf{BACKEND}, "main.fasta_ref_reps" ) )
 # Must negate refid to match in JOIN later.
 $dbh->do(
     q{CREATE TEMPORARY TABLE temp.vntr_support AS
-    SELECT -refid AS rid, GROUP_CONCAT(sameasref) AS sameasref,
-    GROUP_CONCAT(support) AS support
-    FROM vntr_support GROUP BY refid ORDER BY -refid ASC}
+    SELECT rid,pattern,sameasref,support
+    FROM refdb.fasta_ref_reps INNER JOIN (
+        SELECT -refid AS rid, GROUP_CONCAT(sameasref) AS sameasref,
+        GROUP_CONCAT(support) AS support
+        FROM vntr_support GROUP BY refid ORDER BY -refid ASC
+    ) USING (rid)}
 );
+
+# Avoid DB lock issues with shared database
+$dbh->do(q{DETACH DATABASE refdb});
 
 my ($supported_vntr_count)
     = $dbh->selectrow_array(
@@ -1968,8 +1976,8 @@ my ($supported_vntr_count)
 # now we can SELECT from reference TR table, using the temp table
 # to JOIN.
 my $get_supported_reftrs_sth = $dbh->prepare(
-    q{SELECT rid,pattern,sameasref,support
-    FROM refdb.fasta_ref_reps INNER JOIN temp.vntr_support USING (rid)}
+    q{SELECT *
+    FROM temp.vntr_support}
 ) or die "Couldn't prepare statement: " . $dbh->errstr;
 
 warn "\nUpdating fasta_ref_reps table...\n";
