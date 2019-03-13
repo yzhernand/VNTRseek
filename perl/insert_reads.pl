@@ -155,13 +155,13 @@ die "read file count doesn't equal index file count: ($indexcount vs "
 
 foreach my $ifile (@indexfiles) {
 
-    open( $fh1, "<$indexfolder/$ifile" ) or die $!;
+    open( $fh1, "<", "$indexfolder/$ifile" ) or die $!;
     $i = 0;
 
     my $lfile = $ifile;
     $lfile =~ s/index/leb36/;
 
-    open( $fh2, "<$indexfolder/$lfile" ) or die $!;
+    open( $fh2, "<", "$indexfolder/$lfile" ) or die $!;
 
     print STDERR "\n" . $ifile . "-" . $lfile . "...";
 
