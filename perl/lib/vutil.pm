@@ -679,7 +679,7 @@ sub make_refseq_db {
         "fasta_ref_reps" (LENGTH(pattern))};
     my $fasta_ref_reps_arraysize_q = q{CREATE INDEX IF NOT EXISTS
         "idx_fasta_ref_reps_arraysize" ON
-        "fasta_ref_reps"(lastindex - firstindex + 1)};
+        "fasta_ref_reps" (lastindex - firstindex + 1)};
 
     # $dbh->do($create_fasta_ref_reps_q);
     # $dbh->do($fasta_ref_reps_index_q);
@@ -929,11 +929,16 @@ sub load_refprofiles_db {
 ################################################################
 sub set_indist {
     my ( $dbh, $indist_file, $redo ) = @_;
-    return
-        unless $redo;
+    my ($indists_unset) = $dbh->selectrow_array(
+        q{SELECT COUNT(*) IN
+    (SELECT COUNT(*) FROM fasta_ref_reps
+    GROUP BY is_indist)
+    FROM fasta_ref_reps});
 
-    ( $ENV{DEBUG} )
-        && warn "Updating indistinguishable TRs...\n";
+    return
+        unless ($redo || $indists_unset);
+
+    warn "Updating indistinguishable TRs...\n";
     open my $indist_fh, "<", $indist_file
         or die "Error opening indist file $indist_file: $!\n";
     my $count = 0;
