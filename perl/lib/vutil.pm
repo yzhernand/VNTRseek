@@ -856,7 +856,8 @@ sub load_refprofiles_db {
         }
         catch {
             if (/sqlite_create_module failed with error not an error/) {
-                warn
+                ( $ENV{DEBUG} )
+                    && warn
                     "Not creating VirtualTable; module already registered.\n";
             }
             else {
@@ -945,10 +946,11 @@ sub set_indist {
         q{SELECT COUNT(*) IN
     (SELECT COUNT(*) FROM fasta_ref_reps
     GROUP BY is_indist)
-    FROM fasta_ref_reps});
+    FROM fasta_ref_reps}
+    );
 
     return
-        unless ($redo || $indists_unset);
+        unless ( $redo || $indists_unset );
 
     warn "Updating indistinguishable TRs...\n";
     open my $indist_fh, "<", $indist_file
@@ -1214,7 +1216,7 @@ sub vs_db_insert {
     $dbh->begin_work;
     try {
         $tuples = $sth->execute_array(
-            {   ArrayTupleFetch => $cb_or_sth,
+            {   ArrayTupleFetch  => $cb_or_sth,
                 ArrayTupleStatus => \@tuple_status
             }
         );

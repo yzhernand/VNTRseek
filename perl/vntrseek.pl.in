@@ -497,7 +497,7 @@ if ( $STEP == 2 ) {
             die "command exited with value $rc";
         }
     }
-    
+
     set_statistics(
         {   FILE_REFERENCE_LEB => $opts{REFERENCE} . ".leb36",
             FILE_REFERENCE_SEQ => $opts{REFERENCE} . ".seq",
