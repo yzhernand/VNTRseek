@@ -116,8 +116,8 @@ GetOptions(
     "MAX_FLANK_CONSIDERED=i", "MIN_SUPPORT_REQUIRED=i",
     "KEEPPCRDUPS=i",          "DBSUFFIX|RUN=s",
     "SERVER=s",               "STRIP_454_KEYTAGS=i",
-    "IS_PAIRED_READS=i",      "PLOIDY",
-    "REDO_REFDB=i",           "INPUT_DIR|FASTA_DIR=s",
+    "IS_PAIRED_READS=i",      "PLOIDY=i",
+    "REDO_REFDB",             "INPUT_DIR|FASTA_DIR=s",
     "OUTPUT_ROOT=s",          "TMPDIR=s",
     "REFERENCE=s",            "REFERENCE_INDIST_PRODUCE=i",
     "CLEAN"
@@ -129,13 +129,21 @@ if ( $opts{"HELP"} ) {
     exit 0;
 }
 
-# Die if no starting step is supplied
-die "$HELPSTRING\n" unless @ARGV;
-
 if ( !exists $opts{"DBSUFFIX"} ) {
-    die("Please set database suffix (DBSUFFIX) variable using command line.\n"
+    if ( exists $opts{REFERENCE} ) {
+        print "\nPreparing reference set $opts{REFERENCE}...\n";
+        my $dbh
+            = get_ref_dbh( $opts{REFERENCE}, { redo => $opts{REDO_REFDB} } );
+        die "Error importing reference set\n" unless $dbh;
+        exit;
+    }
+
+    die("Please set run name (RUN) variable using command line.\n"
     );
 }
+
+# Die if no starting step is supplied
+die "$HELPSTRING\n" unless @ARGV;
 
 my $STEP = shift;
 

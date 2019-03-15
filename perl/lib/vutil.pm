@@ -631,12 +631,24 @@ sub get_dbh {
 
         # First initialize the reference DB, if needed
         # Don't save the returned dbh
-        _init_ref_dbh( $VSCNF_FILE{REFERENCE},
-            { redo => $VSCNF_FILE{REDO_REFDB} } );
+        # _init_ref_dbh( $VSCNF_FILE{REFERENCE},
+        #     { redo => $VSCNF_FILE{REDO_REFDB} } );
         ( $ENV{DEBUG} )
             && warn "Connecting to refseq db at $refdbfile\n";
-        $dbh->do(qq{ATTACH DATABASE "$refdbfile" AS refdb})
-            or die "Could not attach refseq db '$refdbfile': $DBI::errstr";
+        try {
+            $dbh->do(qq{ATTACH DATABASE "$refdbfile" AS refdb});
+        }
+        catch {
+            warn "$_\n";
+            if (/unable to open database/) {
+                die "Try running VNTRseek as:\n"
+                    . "\n\tvntrseek --reference $VSCNF_FILE{REFERENCE} --redo_refdb\n\n"
+                    . "then clear the error and try again.\n";
+            }
+            else {
+                exit 1;
+            }
+        }
     }
 
     return $dbh;
