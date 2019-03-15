@@ -1421,10 +1421,11 @@ sub print_latex {
         = $sum_spanN;    # INITIAL REF-TRs RDE GE7 PC ADDBACK MAP SPANN
      #my $refTRsMappedSingleton = GetStatistics("NUMBER_REFS_SINGLE_REF_CLUSTER_WITH_READS_MAPPED");  # INITIAL REF-TRs RDE GE7 PC ADDBACK MAP SINGLETON
 
-    my $readTRsMappedToSingleton
-        = -777;    # INITIAL READ-TRs RDE GE7 PC ADDBACK MAP SINGLETON
-    my $readTRsMappedToIndistinguishable = -777
-        ;   # INITIAL READ-TRs RDE GE7 PC ADDBACK MAP TIE-OK INDISTINGUISHABLE
+    # INITIAL READ-TRs RDE GE7 PC ADDBACK MAP SINGLETON
+    my $readTRsMappedToSingleton = 0;
+
+    # INITIAL READ-TRs RDE GE7 PC ADDBACK MAP TIE-OK INDISTINGUISHABLE
+    my $readTRsMappedToIndistinguishable = 0;
 
     $sth = $dbh->prepare(
         q{SELECT is_singleton, count(distinct map.readid)
@@ -1449,7 +1450,7 @@ sub print_latex {
         die
             "Error: mismatch of sum of mapped read TRs by distinguishablility and total read TRs mapped. "
             . "(Expected $readTRsMapped, got "
-            . $readTRsMappedToIndistinguishable + $readTRsMappedToSingleton
+            . ($readTRsMappedToIndistinguishable + $readTRsMappedToSingleton)
             . ")\n";
     }
 
@@ -1508,7 +1509,7 @@ sub print_latex {
         die
             "Error: mismatch of sum of mapped ref TRs by distinguishablility and total ref TRs mapped. "
             . "(Expected $refTRsMapped, got '$refTRsMappedIndistinguishable' + '$refTRsMappedSingleton' = '"
-            . $refTRsMappedIndistinguishable + $refTRsMappedSingleton
+            . ($refTRsMappedIndistinguishable + $refTRsMappedSingleton)
             . "')\n";
     }
 
@@ -1946,11 +1947,13 @@ my $dbh = get_dbh( { userefdb => 1 } )
 $dbh->do("PRAGMA foreign_keys = OFF");
 $dbh->do("PRAGMA synchronous = OFF");
 
-# Store temporary tables in memory 
+# Store temporary tables in memory
 $dbh->do("PRAGMA temp_store = 2");
+
 # $dbh->begin_work;
 $dbh->do( get_trunc_query( $run_conf{BACKEND}, "main.fasta_ref_reps" ) )
     or die "Couldn't do statement: " . $dbh->errstr;
+
 # $dbh->commit;
 
 # Create a temporary table of all refids from vntr_support
@@ -2070,7 +2073,7 @@ while ( my @data = $get_supported_reftrs_sth->fetchrow_array() ) {
             ? ( $ref->{hetez_same} = 1 )
             : ( $ref->{hetez_diff} = 1 );
     }
-    elsif ( $ref->{nsupport} == 1) {
+    elsif ( $ref->{nsupport} == 1 ) {
         ( $ref->{nsameasref} == 1 )
             ? ( $ref->{homez_same} = 1 )
             : ( $ref->{homez_diff} = 1 );
@@ -2085,6 +2088,7 @@ while ( my @data = $get_supported_reftrs_sth->fetchrow_array() ) {
     ( $ENV{DEBUG} ) && warn "Saving ref entry: " . Dumper($ref) . "\n";
     push(
         @supported_refTRs,
+
         # rid, alleles_sup, allele_sup_same_as_ref, entropy,
         #     has_support, span1, spanN, homez_same, homez_diff,
         #     hetez_same, hetez_diff, hetez_multi, support_vntr,
@@ -2126,8 +2130,7 @@ if (@supported_refTRs) {
         @supported_refTRs = ();
     }
     else {
-        die
-            "Something went wrong inserting, but somehow wasn't caught!\n";
+        die "Something went wrong inserting, but somehow wasn't caught!\n";
     }
 }
 if ( $updfromtable != $supported_vntr_count ) {
