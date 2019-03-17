@@ -126,8 +126,8 @@ sub get_config {
         read_config_file($config_file);
         if ( $VSCNF_FILE{ERR} eq "NO_FILE" ) {
             warn "Run config does not exist. "
-                . "A new one will be created, but make sure your"
-                . "dbsuffix is correct!\n";
+                . "A new one will be created, but make sure your "
+                . "run name (dbsuffix) is correct!\n";
 
             # $VSCNF_FILE{NEW_RUN} = 1;
         }
@@ -212,8 +212,9 @@ sub set_config {
         );
     }
 
-    if ( "" eq $in_hash{HTML_DIR} ) {
-        warn "Warning: 'html_dir' option is unset.\n";
+    if ( !defined $in_hash{HTML_DIR} || ( "" eq $in_hash{HTML_DIR} ) ) {
+
+        # warn "Warning: 'html_dir' option is unset.\n";
     }
     elsif ( !( -e $in_hash{HTML_DIR} ) && !mkdir("$in_hash{HTML_DIR}") ) {
         croak("Could not create html_dir directory ($in_hash{HTML_DIR}).\n");
