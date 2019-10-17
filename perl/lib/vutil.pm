@@ -58,16 +58,7 @@ sub read_config_file {
     }
     catch {
         ( $ENV{DEBUG} ) && warn "$_\n";
-        if (/No such file or directory/) {
-            $VSCNF_FILE{ERR} = "NO_FILE";
-        }
-        elsif (/Permission denied/) {
-            $VSCNF_FILE{ERR} = "PERM";
-        }
-        else {
-            $VSCNF_FILE{ERR} = $_;
-        }
-
+        $VSCNF_FILE{ERR} = $_;
         return 0;
     };
 
@@ -108,11 +99,11 @@ sub get_config {
 
         # Must read global file first. Sets up the defaults.
         read_config_file("$installdir/vs.cnf");
-        if ( $VSCNF_FILE{ERR} eq "PERM" ) {
+        if ( $VSCNF_FILE{ERR} =~ /Permission denied/ ) {
             die "Could not read global config. Please make sure "
                 . "your user or group has read permissions.\n";
         }
-        elsif ( $VSCNF_FILE{ERR} eq "NO_FILE" ) {
+        elsif ( $VSCNF_FILE{ERR} =~ /No such file or directory/ ) {
             die "Global config does not exist! Either reinstall "
                 . "VNTRseek or copy the default configuration from "
                 . "source distribution and modify as needed.\n";
@@ -124,14 +115,14 @@ sub get_config {
 
         $VSCNF_FILE{ERR} = "";
         read_config_file($config_file);
-        if ( $VSCNF_FILE{ERR} eq "NO_FILE" ) {
+        if ( $VSCNF_FILE{ERR} =~ /No such file or directory/ ) {
             warn "Run config does not exist. "
                 . "A new one will be created, but make sure your "
                 . "run name (dbsuffix) is correct!\n";
 
             # $VSCNF_FILE{NEW_RUN} = 1;
         }
-        elsif ( $VSCNF_FILE{ERR} eq "PERM" ) {
+        elsif ( $VSCNF_FILE{ERR} =~ /Permission denied/ ) {
             die "Could not read run config. Please make sure "
                 . "your user or group has read AND write permissions.\n";
         }

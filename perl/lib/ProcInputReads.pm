@@ -164,7 +164,6 @@ Write out reads with TRs to files in the output directory.
 
 =cut
 
-
 ##** @function write_reads ($output_prefix, $reads_processed, $read_hash)
 ##
 ## @brief      Writes reads with TRs to output directory. File names
@@ -179,7 +178,7 @@ Write out reads with TRs to files in the output directory.
 ## @return     none. Dies on error.
 ##
 sub write_reads {
-    my ($output_prefix, $reads_processed, $read_hash) = @_;
+    my ( $output_prefix, $reads_processed, $read_hash ) = @_;
     open my $index_fh, "<", "$output_prefix.index";
     open my $reads_fh, ">", "$output_prefix.reads";
     while ( my $line = <$index_fh> ) {
@@ -188,14 +187,13 @@ sub write_reads {
         if ( exists $read_hash->{$head}
             && ( $read_hash->{$head}->{written} == 0 ) )
         {
-            print $reads_fh $head . "\t"
-                . $read_hash->{$head}->{seq} . "\n";
+            print $reads_fh $head . "\t" . $read_hash->{$head}->{seq} . "\n";
             $read_hash->{$head}->{written} = 1;
         }
-        elsif (!exists $read_hash->{$head}) {
+        elsif ( !exists $read_hash->{$head} ) {
             die "Error: unlogged read found in index."
-            . "Possibly a bug in the sequence reading"
-            . "code. Please file a bug report.\n";
+                . "Possibly a bug in the sequence reading"
+                . "code. Please file a bug report.\n";
         }
     }
 
@@ -280,6 +278,30 @@ sub fork_proc {
         my $reads_processed = 0;
         my %reads;
         while ( my ( $header, $body ) = $reader->() ) {
+            if ( $reads_processed && ( $reads_processed++ % $records_before_split ) == 0 ) {
+                if ( !close $trf_pipe ) {
+                    check_trf_pipe_close( $!, $?, $output_prefix,
+                        $current_file, $current_fragment );
+                }
+
+                # scan output file and write out reads with TRs to new file
+                if ( -e "$output_prefix.index" && -s "$output_prefix.index" )
+                {
+                    write_reads( $output_prefix, $reads_processed, \%reads );
+                }
+
+                # Reset reads hash and reads_processed. Prevents
+                # memory bloat in the former case, and lets us record
+                # only the reads processed this split in the latter
+                %reads           = ();
+                $reads_processed = 0;
+                $output_prefix
+                    = "$output_dir/${current_file}_" . ++$current_fragment;
+                open $trf_pipe,
+                    "|$trf_param | $trf2proclu_param -o "
+                    . "'$output_prefix.index' > '$output_prefix.leb36'"
+                    or die "Cannot start TRF+trf2proclu pipe: $!\n";
+            }
             if ( exists $reads{$header} ) {
                 die "Error: duplicate reads in input. Make sure your"
                     . "input only consists of unique reads. This can happen"
@@ -300,30 +322,6 @@ sub fork_proc {
 
             # $trf_pipe, $header, $body, $debug_reads_processed );
             # $debug_reads_processed++;
-            if ( ( ++$reads_processed % $records_before_split ) == 0 ) {
-                if ( !close $trf_pipe ) {
-                    check_trf_pipe_close( $!, $?, $output_prefix,
-                        $current_file, $current_fragment );
-                }
-
-                # scan output file and write out reads with TRs to new file
-                if ( -e "$output_prefix.index" && -s "$output_prefix.index" )
-                {
-                    write_reads($output_prefix, $reads_processed, \%reads);
-                }
-
-                # Reset reads hash and reads_processed. Prevents
-                # memory bloat in the former case, and lets us record
-                # only the reads processed this split in the latter
-                %reads           = ();
-                $reads_processed = 0;
-                $output_prefix
-                    = "$output_dir/${current_file}_" . ++$current_fragment;
-                open $trf_pipe,
-                    "|$trf_param | $trf2proclu_param -o "
-                    . "'$output_prefix.index' > '$output_prefix.leb36'"
-                    or die "Cannot start TRF+trf2proclu pipe: $!\n";
-            }
         }
 
         # Normally, close() returns false for failure of a pipe.
@@ -334,7 +332,7 @@ sub fork_proc {
 
         # scan output file and write out reads with TRs to new file
         if ( -e "$output_prefix.index" && -s "$output_prefix.index" ) {
-            write_reads($output_prefix, $reads_processed, \%reads);
+            write_reads( $output_prefix, $reads_processed, \%reads );
         }
 
         exit;

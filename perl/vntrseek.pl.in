@@ -457,6 +457,12 @@ if ( $STEP == 1 ) {
         SetError( $STEP, "command failed: $!", -1 );
         die "command failed: $!\n";
     }
+    #elsif ($? & 127) {
+    #    my $rc = ( $? & 127 );
+    #    SetError( $STEP, "Died with signal $rc while running TRF and TRF2PROCLU", $rc );
+    #    die sprintf("died with signal %d, %s coredump\n",
+    #    $rc,  ($? & 128) ? 'with' : 'without');
+    #}
     else {
         my $rc = ( $? >> 8 );
         if ( 0 != $rc ) {

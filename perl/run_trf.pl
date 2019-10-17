@@ -25,7 +25,6 @@ my $files_processed  = 0;    # files processed
 my $files_to_process = 0;    # Either: the actual number of files to process
      # OR the number of splits of a BAM file (and others?)
 my %p;    # associates forked pids with output pipe pids
-my $max_processes = 0;
 
 my %opts;
 getopts( 'p:t:u:swr', \%opts );
@@ -37,16 +36,16 @@ if ( !scalar(@ARGV) || !defined( $opts{'t'} ) || !defined( $opts{'u'} ) ) {
 
 my $TRF_PARAM        = $opts{'t'};
 my $TRF2PROCLU_PARAM = $opts{'u'};
-my $strip_454_TCAG   = ( defined $opts{'s'} && $opts{'s'} ) ? 1 : 0;
-my $warn_454_TCAG    = ( defined $opts{'w'} && $opts{'w'} ) ? 1 : 0;
-my $IS_PAIRED_READS  = ( defined $opts{'r'} && $opts{'r'} ) ? 1 : 0;
+my $strip_454_TCAG   = ( exists $opts{'s'} && $opts{'s'} ) ? 1 : 0;
+my $warn_454_TCAG    = ( exists $opts{'w'} && $opts{'w'} ) ? 1 : 0;
+my $IS_PAIRED_READS  = ( exists $opts{'r'} && $opts{'r'} ) ? 1 : 0;
+my $max_processes    = ( exists $opts{'p'} && $opts{'p'} ) ? $opts{'p'} : 2;
 
 my $reverse_read = 1; # if 1, each read will be reversed and processed as well
 
 my $HEADER_SUFFIX = ""
     ;   # set by program automatically for paired reads to distinguish headers
 
-$max_processes = $opts{'p'} if defined $opts{'p'};
 
 # Input directory
 my $input_dir = $ARGV[0];
