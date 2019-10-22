@@ -340,7 +340,7 @@ sub set_datetime {
         croak "set_datetime: expects 1 parameter, passed $argc !\n";
     }
 
-    my $NAME = shift;
+    my $NAME  = shift;
     my $VALUE = strftime( "%F %T", localtime );
 
     return set_statistics( { $NAME, $VALUE } );
@@ -366,7 +366,7 @@ sub get_statistics {
 
     # my $DBSUFFIX = shift;
     my @stats = @_;
-    my $dbh = get_dbh( { readonly => 1 } );
+    my $dbh   = get_dbh( { readonly => 1 } );
     my $sql_clause;
     ( $ENV{DEBUG} ) && warn Dumper( \@stats ) . "\n";
 
@@ -1183,7 +1183,7 @@ sub gen_exec_array_cb {
     my $arr_idx = 0;
     return sub {
         return ( $arr_idx < @$arr_ref ) ? $arr_ref->[ $arr_idx++ ] : undef;
-        }
+    }
 }
 
 #-------------------------------------------------------------------------------
@@ -1216,15 +1216,23 @@ sub vs_db_insert {
     }
     catch {
         warn "$_\n";
+
+        use Set::IntSpan;
+        my %status_hash;
+
         for my $tuple ( 0 .. @tuple_status - 1 ) {
             my $status = $tuple_status[$tuple];
             $status = [ 0, "Skipped" ]
                 unless defined $status;
             next unless ref $status;
-            printf STDERR "Failed to insert row %s. Status: %s\n",
-                join( ",", $tuple ),
-                $status->[1];
+            push @{ $status_hash{ $status->[1] } }, $tuple;
         }
+
+        while ( my ( $msg, $rows ) = each %status_hash ) {
+            warn "$msg (rows: "
+                . Set::IntSpan->new($rows)->run_list() . ")\n";
+        }
+
         eval { $dbh->rollback; };
         if ($@) {
             warn "Database rollback failed.\n";

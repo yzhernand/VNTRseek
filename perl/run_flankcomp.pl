@@ -113,9 +113,9 @@ while (<$fh>) {
         push @cluster_links, [ $clusters_processed, $val, $dir ];
 
         if ( ( $totalreps % $RECORDS_PER_INFILE_INSERT == 0 ) ) {
-            my $cb = gen_exec_array_cb( \@cluster_links );
+            my $cb   = gen_exec_array_cb( \@cluster_links );
             my $rows = vs_db_insert( $write_dbh, $sth, $cb,
-                "Error when inserting entries into our clusterlnk table.\n");
+                "Error when inserting entries into our clusterlnk table.\n" );
             if ($rows) {
                 @cluster_links = ();
             }
@@ -131,15 +131,14 @@ while (<$fh>) {
 
 # Finish insert
 if (@cluster_links) {
-    my $cb = gen_exec_array_cb( \@cluster_links );
+    my $cb   = gen_exec_array_cb( \@cluster_links );
     my $rows = vs_db_insert( $write_dbh, $sth, $cb,
-        "Error when inserting entries into our clusterlnk table.\n");
+        "Error when inserting entries into our clusterlnk table.\n" );
     if ($rows) {
         @cluster_links = ();
     }
     else {
-        die
-            "Something went wrong inserting, but somehow wasn't caught!\n";
+        die "Something went wrong inserting, but somehow wasn't caught!\n";
     }
 }
 
@@ -284,15 +283,16 @@ while (<$fh>) {
         warn
             "Cluster $clusters_processed, numrefs: $numrefs, numreads: $numreads\n";
     }
-    push @clusters, [$clusters_processed, $minpat, $maxpat, $repeatcount,
-        $refcount];
+    push @clusters,
+        [ $clusters_processed, $minpat, $maxpat, $repeatcount, $refcount ];
+
     # $sth2->execute( $clusters_processed, $minpat, $maxpat, $repeatcount,
     #     $refcount )    # Execute the query
     #     or die "Couldn't execute statement: " . $sth2->errstr;
     if ( ( @clusters % $RECORDS_PER_INFILE_INSERT == 0 ) ) {
-        my $cb = gen_exec_array_cb( \@clusters );
+        my $cb   = gen_exec_array_cb( \@clusters );
         my $rows = vs_db_insert( $write_dbh, $sth2, $cb,
-            "Error when inserting entries into our clusters table.\n");
+            "Error when inserting entries into our clusters table.\n" );
         if ($rows) {
             @clusters = ();
         }
@@ -305,23 +305,22 @@ while (<$fh>) {
     # $dbh->commit;
 
     # stats
-    $range = int( ( $maxpat / $minpat - 1.0 ) * 100 + .5 );
-    $mostReps    = max( $mostReps,    $repeatcount );
+    $range       = int( ( $maxpat / $minpat - 1.0 ) * 100 + .5 );
+    $mostReps    = max( $mostReps, $repeatcount );
     $mostRefReps = max( $mostRefReps, $refcount );
-    $maxRange    = max( $maxRange,    $range );
+    $maxRange    = max( $maxRange, $range );
 
 }    # end of while loop
 
-if ( @clusters ) {
-    my $cb = gen_exec_array_cb( \@clusters );
+if (@clusters) {
+    my $cb   = gen_exec_array_cb( \@clusters );
     my $rows = vs_db_insert( $write_dbh, $sth2, $cb,
-        "Error when inserting entries into our clusters table.\n");
+        "Error when inserting entries into our clusters table.\n" );
     if ($rows) {
         @clusters = ();
     }
     else {
-        die
-            "Something went wrong inserting, but somehow wasn't caught!\n";
+        die "Something went wrong inserting, but somehow wasn't caught!\n";
     }
 }
 
@@ -344,9 +343,6 @@ my %stats = (
 set_statistics( \%stats );
 
 print STDERR
-    "Processing complete -- processed $clusters_processed cluster(s).\n";
-
-warn strftime( "\n\nend: %F %T\n\n", localtime );
-
-1;
+    "Processing complete -- processed $clusters_processed cluster(s)."
+    . strftime( "\n\nend: %F %T\n\n", localtime );
 
