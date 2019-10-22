@@ -44,8 +44,10 @@ my $clusters_processed = 0;
 my $totalRefReps       = 0;
 my $totalReadReps      = 0;
 
-my $dbh = get_dbh( { userefdb => 1 } )
-    or die "Could not connect to database: $DBI::errstr";
+my $read_dbh = get_dbh( { userefdb => 1, readonly => 1 } )
+    or die "Could not connect to database for reading: $DBI::errstr";
+my $write_dbh = get_dbh()
+    or die "Could not connect to database for writing: $DBI::errstr";
 
 my $sth;
 my $sth1;
@@ -64,14 +66,14 @@ my $BREAK_SIZE = 4000;
 #exit(1);
 
 # clear database cluster tables
-$dbh->do( get_trunc_query( $run_conf{BACKEND}, "clusters" ) )
-    or die "Couldn't do statement: " . $dbh->errstr;
+$write_dbh->do( get_trunc_query( $run_conf{BACKEND}, "clusters" ) )
+    or die "Couldn't do statement: " . $write_dbh->errstr;
 
-$dbh->do( get_trunc_query( $run_conf{BACKEND}, "clusterlnk" ) )
-    or die "Couldn't do statement: " . $dbh->errstr;
+$write_dbh->do( get_trunc_query( $run_conf{BACKEND}, "clusterlnk" ) )
+    or die "Couldn't do statement: " . $write_dbh->errstr;
 
-$dbh->do("PRAGMA foreign_keys = OFF");
-$dbh->do("PRAGMA synchronous = OFF");
+$write_dbh->do("PRAGMA foreign_keys = OFF");
+$write_dbh->do("PRAGMA synchronous = OFF");
 
 #############################################################################################
 #############################################################################################
@@ -85,8 +87,8 @@ print STDERR "\nInserting into clusterlnk table...\n";
 open my $fh, "<$inputfile" or die $!;
 my $TEMPFILE;
 
-$sth = $dbh->prepare(q{INSERT INTO clusterlnk VALUES (?, ?, ?, 0, 0)})
-    or die "Couldn't prepare statement: " . $dbh->errstr;
+$sth = $write_dbh->prepare(q{INSERT INTO clusterlnk VALUES (?, ?, ?, 0, 0)})
+    or die "Couldn't prepare statement: " . $write_dbh->errstr;
 
 # insert into clusterlnk
 my $totalreps = 0;
@@ -112,7 +114,7 @@ while (<$fh>) {
 
         if ( ( $totalreps % $RECORDS_PER_INFILE_INSERT == 0 ) ) {
             my $cb = gen_exec_array_cb( \@cluster_links );
-            my $rows = vs_db_insert( $dbh, $sth, $cb,
+            my $rows = vs_db_insert( $write_dbh, $sth, $cb,
                 "Error when inserting entries into our clusterlnk table.\n");
             if ($rows) {
                 @cluster_links = ();
@@ -130,7 +132,7 @@ while (<$fh>) {
 # Finish insert
 if (@cluster_links) {
     my $cb = gen_exec_array_cb( \@cluster_links );
-    my $rows = vs_db_insert( $dbh, $sth, $cb,
+    my $rows = vs_db_insert( $write_dbh, $sth, $cb,
         "Error when inserting entries into our clusterlnk table.\n");
     if ($rows) {
         @cluster_links = ();
@@ -148,26 +150,30 @@ if (@cluster_links) {
 #############################################################################################
 #############################################################################################
 
+# Sync the DB so the next SELECTs work
+$write_dbh->do("PRAGMA synchronous = FULL");
+$write_dbh->do("PRAGMA synchronous = OFF");
+
 print STDERR "\nPrinting DNA and inserting into cluster table...\n";
 
 # now print dna and quals (also insert into cluster table)
-$sth = $dbh->prepare(
+$sth = $read_dbh->prepare(
     q{SELECT rid,flankleft,sequence,flankright,pattern,copynum,direction
     FROM refdb.fasta_ref_reps
     INNER JOIN clusterlnk ON rid=-repeatid
     WHERE clusterid = ?}
-) or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth1 = $dbh->prepare(
+) or die "Couldn't prepare statement: " . $read_dbh->errstr;
+$sth1 = $read_dbh->prepare(
     q{SELECT rid, dna, first, last, pattern, copynum,direction
     FROM fasta_reads
     INNER JOIN replnk ON fasta_reads.sid=replnk.sid
     INNER JOIN clusterlnk ON rid=repeatid
     WHERE clusterid = ?}
-) or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth2 = $dbh->prepare(
+) or die "Couldn't prepare statement: " . $read_dbh->errstr;
+$sth2 = $write_dbh->prepare(
     q{INSERT INTO clusters(cid,minpat,maxpat,repeatcount,refcount)
     VALUES(?,?,?,?,?)}
-) or die "Couldn't prepare statement: " . $dbh->errstr;
+) or die "Couldn't prepare statement: " . $write_dbh->errstr;
 
 my $i;
 seek( $fh, 0, 0 );
@@ -285,7 +291,7 @@ while (<$fh>) {
     #     or die "Couldn't execute statement: " . $sth2->errstr;
     if ( ( @clusters % $RECORDS_PER_INFILE_INSERT == 0 ) ) {
         my $cb = gen_exec_array_cb( \@clusters );
-        my $rows = vs_db_insert( $dbh, $sth2, $cb,
+        my $rows = vs_db_insert( $write_dbh, $sth2, $cb,
             "Error when inserting entries into our clusters table.\n");
         if ($rows) {
             @clusters = ();
@@ -308,7 +314,7 @@ while (<$fh>) {
 
 if ( @clusters ) {
     my $cb = gen_exec_array_cb( \@clusters );
-    my $rows = vs_db_insert( $dbh, $sth2, $cb,
+    my $rows = vs_db_insert( $write_dbh, $sth2, $cb,
         "Error when inserting entries into our clusters table.\n");
     if ($rows) {
         @clusters = ();
@@ -320,10 +326,11 @@ if ( @clusters ) {
 }
 
 # enable old settings
-$dbh->do("PRAGMA foreign_keys = ON");
-$dbh->do("PRAGMA synchronous = ON");
+$write_dbh->do("PRAGMA foreign_keys = ON");
+$write_dbh->do("PRAGMA synchronous = ON");
 
-$dbh->disconnect();
+$write_dbh->disconnect();
+$read_dbh->disconnect();
 
 # update the stats table
 my %stats = (
