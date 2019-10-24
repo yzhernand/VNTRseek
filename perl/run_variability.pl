@@ -10,7 +10,7 @@ use DBI;
 use POSIX qw(strftime);
 use FindBin;
 use lib "$FindBin::RealBin/lib";
-use vutil qw(get_config get_dbh set_statistics get_trunc_query);
+use vutil qw(get_config get_dbh set_statistics gen_exec_array_cb vs_db_insert get_trunc_query);
 
 if ( $ENV{DEBUG} ) {
     use Data::Dumper;
