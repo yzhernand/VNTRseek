@@ -182,7 +182,7 @@ while ( my @data = $readsWithMultTRsMappedMultRefs_sth->fetchrow_array() ) {
 
         if ( ( @mdup % $RECORDS_PER_INFILE_INSERT == 0 ) ) {
             my $cb   = gen_exec_array_cb( \@mdup );
-            my $rows = vs_db_insert( $write_dbh, $insert_mduptemp_sth, $cb,
+            my $rows = vs_db_insert( $dbh, $insert_mduptemp_sth, $cb,
                 "Error when inserting entries into mduptemp table.\n" );
             if ($rows) {
                 @mdup = ();
@@ -212,7 +212,7 @@ while ( my @data = $readsWithMultTRsMappedMultRefs_sth->fetchrow_array() ) {
 # $sth3->finish();
 if ( @mdup ) {
     my $cb   = gen_exec_array_cb( \@mdup );
-    my $rows = vs_db_insert( $write_dbh, $insert_mduptemp_sth, $cb,
+    my $rows = vs_db_insert( $dbh, $insert_mduptemp_sth, $cb,
         "Error when inserting entries into mduptemp table.\n" );
     if ($rows) {
         @mdup = ();
