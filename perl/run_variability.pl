@@ -42,7 +42,7 @@ my $TEMPDIR            = $ARGV[5];
 
 warn strftime( "\n\nstart: %F %T\n\n", localtime );
 my %run_conf = get_config( $DBSUFFIX, $run_dir );
-my $dbh = get_dbh( { userefdb => 1 } )
+my $dbh      = get_dbh()
     or die "Could not connect to database: $DBI::errstr";
 
 my ( $sth, $sth1, $sth6, $sth7, $sth8, $query, $query2 );
@@ -50,22 +50,7 @@ my $TEMPFILE;
 my $TEMP_CLNK;
 
 # change settings to speedup updates and inserts
-if ( $run_conf{BACKEND} eq "mysql" ) {
-    $dbh->do('SET AUTOCOMMIT = 0;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-
-    $dbh->do('SET FOREIGN_KEY_CHECKS = 0;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-
-    $dbh->do('SET UNIQUE_CHECKS = 0;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-}
-elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-    $dbh->do("PRAGMA foreign_keys = OFF");
-
-    # warn "\nTurning off AutoCommit\n";
-    $dbh->{AutoCommit} = 0;
-}
+$dbh->do("PRAGMA foreign_keys = OFF");
 
 # update reserved field on entire table
 $dbh->do('UPDATE clusterlnk SET reserved=0,reserved2=0;')
@@ -88,26 +73,14 @@ $query2 = q{CREATE TEMPORARY TABLE ctrlnk (
     PRIMARY KEY (clusterid,repeatid)
     )};
 
-# create temp table for updates
-if ( $run_conf{BACKEND} eq "mysql" ) {
-    $query  .= " ENGINE=INNODB";
-    $query2 .= " ENGINE=INNODB";
-}
-
 $dbh->do($query)
     or die "Couldn't do statement: " . $dbh->errstr;
 $dbh->do($query2)
     or die "Couldn't do statement: " . $dbh->errstr;
 
-if ( $run_conf{BACKEND} eq "mysql" ) {
-    $dbh->do('ALTER TABLE mapr DISABLE KEYS;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-    $dbh->do('ALTER TABLE ctrlnk DISABLE KEYS;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-}
-
 # prepare statments
-$sth = $dbh->prepare(
+my $read_dbh = get_dbh( { userefdb => 1, readonly => 1 } );
+$sth = $read_dbh->prepare(
     q{SELECT rid,flankleft,sequence,flankright,pattern,copynum,(lastindex-firstindex+1) AS arlen
   FROM refdb.fasta_ref_reps
   WHERE rid = ?}
@@ -118,21 +91,9 @@ $sth1 = $dbh->prepare(
   WHERE rid = ?}
 ) or die "Couldn't prepare statement: " . $dbh->errstr;
 
-if ( $run_conf{BACKEND} eq "mysql" ) {
-    $query = q{LOAD DATA LOCAL INFILE '$TEMPDIR/clnk_$DBSUFFIX.txt'
-  INTO TABLE ctrlnk FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n'};
-    $query2 = q{LOAD DATA LOCAL INFILE '$TEMPDIR/mapr_$DBSUFFIX.txt'
-  INTO TABLE mapr FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n'};
-    open( $TEMP_CLNK, ">$TEMPDIR/clnk_$DBSUFFIX.txt" ) or die $!;
-    open( $TEMPFILE,  ">$TEMPDIR/mapr_$DBSUFFIX.txt" ) or die $!;
-}
-elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-    $query  = q{INSERT INTO ctrlnk VALUES(?, ?, ?)};
-    $query2 = q{INSERT INTO mapr VALUES(?, ?)};
-}
-$sth6 = $dbh->prepare($query)
+$sth6 = $dbh->prepare(q{INSERT INTO ctrlnk VALUES(?, ?, ?)})
     or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth7 = $dbh->prepare($query2)
+$sth7 = $dbh->prepare(q{INSERT INTO mapr VALUES(?, ?)})
     or die "Couldn't prepare statement: " . $dbh->errstr;
 $sth8 = $dbh->prepare(
     q{SELECT map.refid, map.readid from clusterlnk
@@ -544,6 +505,7 @@ sub add_zero_support {
 }
 
 # this is a function that detects if reads have (somewhat) different number of copy numbers then reference(s)
+# TODO Rewrite signature for this function: we'll no longer use mapr_fh and clnk_fh
 sub VNTR_YES_NO {
 
     my $mapr_fh  = ${ shift() };
@@ -564,6 +526,7 @@ sub VNTR_YES_NO {
 
     # for each read in map file
     # warn Dumper( \%readhash );
+    my @rows;
     while ( my ( $key, @temp ) = each(%readhash) ) {
 
         my $valread;
@@ -639,25 +602,25 @@ sub VNTR_YES_NO {
 #$sth7->execute(-$val,$key)             # set the reserved field on map read, (added 11/19/2010)
 #    or die "Couldn't execute statement: " . $sth7->errstr;
 
+                    if ( $ENV{DEBUG} ) {
+                        warn "mapr insert: " . -$val . ", $key\n";
+                    }
+                    push @rows, [ -$val, $key ];
                     $processed++;
 
-                    if ( $run_conf{BACKEND} eq "mysql" ) {
-                        print $mapr_fh -$val, ",", $key, "\n";
-
-                        if ( $processed % $RECORDS_PER_INFILE_INSERT == 0 ) {
-                            close($mapr_fh);
-                            $sth7->execute();
-                            open( $mapr_fh, ">$TEMPDIR/mapr_$DBSUFFIX.txt" )
-                                or die $!;
+                    if ( @rows % $RECORDS_PER_INFILE_INSERT == 0 ) {
+                        my $cb   = gen_exec_array_cb( \@rows );
+                        my $rows = vs_db_insert( $dbh, $sth7, $cb,
+                            "Error when inserting entries into our mapr table.\n"
+                        );
+                        if ($rows) {
+                            @rows = ();
+                        }
+                        else {
+                            die
+                                "Something went wrong inserting, but somehow wasn't caught!\n";
                         }
                     }
-                    elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-                        if ( $ENV{DEBUG} ) {
-                            warn "mapr insert: " . -$val . ", $key\n";
-                        }
-                        $sth7->execute( -$val, $key );
-                    }
-
                 }
 
             }
@@ -668,6 +631,19 @@ sub VNTR_YES_NO {
 
     }    # end of loop
 
+    if (@rows) {
+        my $cb   = gen_exec_array_cb( \@rows );
+        my $rows = vs_db_insert( $dbh, $sth7, $cb,
+            "Error when inserting entries into our mapr table.\n" );
+        if ($rows) {
+            @rows = ();
+        }
+        else {
+            die
+                "Something went wrong inserting, but somehow wasn't caught!\n";
+        }
+    }
+
     # create self support for refs
     foreach my $val ( keys %newrefs ) {
         my $valref = $refs{$val};
@@ -677,17 +653,25 @@ sub VNTR_YES_NO {
     }
 
     # write to clustmp file (to update clusterlnk entries)
+    @rows = ();
     foreach my $val ( keys %REF_UPDATED ) {
         $cl_processed++;
         $change = $REF_UPDATED{$val};
-        if ( $run_conf{BACKEND} eq "mysql" ) {
-            print $clnk_fh "$clusterid,$val,$change\n";
+        if ( $ENV{DEBUG} ) {
+            warn "ctrlnk insert: $clusterid, $val, $change\n";
         }
-        elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-            $sth6->execute( $clusterid, $val, $change );
-            if ( $ENV{DEBUG} ) {
-                warn "ctrlnk insert: $clusterid, $val, $change\n";
-            }
+    }
+
+    if (@rows) {
+        my $cb   = gen_exec_array_cb( \@rows );
+        my $rows = vs_db_insert( $dbh, $sth6, $cb,
+            "Error when inserting entries into our ctrlnk table.\n" );
+        if ($rows) {
+            @rows = ();
+        }
+        else {
+            die
+                "Something went wrong inserting, but somehow wasn't caught!\n";
         }
     }
 
