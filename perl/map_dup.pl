@@ -3,6 +3,8 @@
 # removes *reads* that are mapped to multiple references (due to multiple TRs). Picks the best TR by profile, when same, picks best by flank. When same, removes both.
 # !!!  makes an exception if references are on same chromosome and close together
 
+my $RECORDS_PER_INFILE_INSERT = 100000;
+
 use strict;
 use warnings;
 use Cwd;
@@ -51,26 +53,7 @@ $dbh->do($query)
 
 my $sth;
 my $TEMPFILE;
-if ( $run_conf{BACKEND} eq "mysql" ) {
-    $dbh->do('ALTER TABLE mduptemp DISABLE KEYS;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-
-    $dbh->do('SET AUTOCOMMIT = 0;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-
-    $dbh->do('SET FOREIGN_KEY_CHECKS = 0;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-
-    $dbh->do('SET UNIQUE_CHECKS = 0;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-    open( $TEMPFILE, ">", "$TEMPDIR/mduptemp_$DBSUFFIX.txt" ) or die $!;
-}
-elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-    $dbh->do("PRAGMA foreign_keys = OFF");
-
-    # warn "\nTurning off AutoCommit\n";
-    $dbh->{AutoCommit} = 0;
-}
+$dbh->do("PRAGMA foreign_keys = OFF");
 
 my $read_dbh = get_dbh( { userefdb => 1, readonly => 1 } );
 my ($numTRsInRead) = $read_dbh->selectrow_array(
@@ -117,7 +100,9 @@ my $readsWithMultTRsMappedMultRefs_sth = $dbh->prepare(
 $readsWithMultTRsMappedMultRefs_sth->execute()
     or die "Cannot execute: " . $readsWithMultTRsMappedMultRefs_sth->errstr();
 my $insert_mduptemp_sth = $dbh->prepare(q{INSERT INTO mduptemp VALUES(?, ?)});
-my $i                   = 0;
+
+my $i = 0;
+my @mdup = ();
 while ( my @data = $readsWithMultTRsMappedMultRefs_sth->fetchrow_array() ) {
 
     # TODO Use read length to calculate $maxRepeatsPerRead
@@ -159,13 +144,7 @@ while ( my @data = $readsWithMultTRsMappedMultRefs_sth->fetchrow_array() ) {
                 || ( $numTRsInRead > $maxRepeatsPerRead ) )
             )
         {
-            #$sth3->execute($oldrefid,$oldreadid);
-            if ( $run_conf{BACKEND} eq "mysql" ) {
-                print $TEMPFILE $oldrefid, ",", $oldreadid, "\n";
-            }
-            elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-                $insert_mduptemp_sth->execute( $oldrefid, $oldreadid );
-            }
+            push @mdup, [ $oldrefid, $oldreadid ];
             print "X";
             $deleted++;
             $isDeleted = 1;
@@ -179,13 +158,7 @@ while ( my @data = $readsWithMultTRsMappedMultRefs_sth->fetchrow_array() ) {
 # delete every entry (except first which is deleted in another block) if more than $maxRepeatsPerRead exist
         if ( $j > 1 && $numTRsInRead > $maxRepeatsPerRead ) {
 
-            #$sth3->execute($data2[1],$data2[0]);
-            if ( $run_conf{BACKEND} eq "mysql" ) {
-                print $TEMPFILE $data2[1], ",", $data2[0], "\n";
-            }
-            elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-                $insert_mduptemp_sth->execute( $data2[1], $data2[0] );
-            }
+            push @mdup, [ $data2[1], $data2[0] ];
             print "X";
             $deleted++;
             $isDeleted = 1;
@@ -200,17 +173,23 @@ while ( my @data = $readsWithMultTRsMappedMultRefs_sth->fetchrow_array() ) {
 
             }
             else {
-
-                #$sth3->execute($data2[1],$data2[0]);
-                if ( $run_conf{BACKEND} eq "mysql" ) {
-                    print $TEMPFILE $data2[1], ",", $data2[0], "\n";
-                }
-                elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-                    $insert_mduptemp_sth->execute( $data2[1], $data2[0] );
-                }
+                push @mdup, [ $data2[1], $data2[0] ];
                 print "X";
                 $deleted++;
                 $isDeleted = 1;
+            }
+        }
+
+        if ( ( @mdup % $RECORDS_PER_INFILE_INSERT == 0 ) ) {
+            my $cb   = gen_exec_array_cb( \@mdup );
+            my $rows = vs_db_insert( $write_dbh, $insert_mduptemp_sth, $cb,
+                "Error when inserting entries into mduptemp table.\n" );
+            if ($rows) {
+                @mdup = ();
+            }
+            else {
+                die
+                    "Something went wrong inserting, but somehow wasn't caught!\n";
             }
         }
 
@@ -223,30 +202,27 @@ while ( my @data = $readsWithMultTRsMappedMultRefs_sth->fetchrow_array() ) {
         $oldrefid   = $data2[1];
     }
 
-    if ($isDeleted) { $ReadsDeleted++; }
+    $ReadsDeleted+=$isDeleted;
 
 }
 
-my $numReadsWithMultTRsMappedMultRefs
-    = $readsWithMultTRsMappedMultRefs_sth->rows;
+# my $numReadsWithMultTRsMappedMultRefs
+#     = $readsWithMultTRsMappedMultRefs_sth->rows;
 
 # $sth3->finish();
-$trsInRead_sth->finish();
-$readsWithMultTRsMappedMultRefs_sth->finish();
-if ( $run_conf{BACKEND} eq "mysql" ) {
+if ( @mdup ) {
+    my $cb   = gen_exec_array_cb( \@mdup );
+    my $rows = vs_db_insert( $write_dbh, $insert_mduptemp_sth, $cb,
+        "Error when inserting entries into mduptemp table.\n" );
+    if ($rows) {
+        @mdup = ();
+    }
+    else {
+        die
+            "Something went wrong inserting, but somehow wasn't caught!\n";
+    }
+}
 
-    # load the file into tempfile
-    close($TEMPFILE);
-    $dbh->do(
-        q{LOAD DATA LOCAL INFILE '$TEMPDIR/mduptemp_$DBSUFFIX.txt'
-        INTO TABLE mduptemp FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n'}
-    ) or die "Couldn't do statement: " . $dbh->errstr;
-    $dbh->do('ALTER TABLE mduptemp ENABLE KEYS;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-}
-elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-    $dbh->commit;
-}
 
 # update based on temp table
 my $updfromtable = 0;
@@ -258,24 +234,7 @@ $query = q{UPDATE map SET bbb=0
 $updfromtable = $dbh->do($query)
     or die "Couldn't do statement: " . $dbh->errstr;
 
-# set old db settings
-if ( $run_conf{BACKEND} eq "mysql" ) {
-    $sth = $dbh->do('SET AUTOCOMMIT = 1;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-
-    $sth = $dbh->do('SET FOREIGN_KEY_CHECKS = 1;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-
-    $sth = $dbh->do('SET UNIQUE_CHECKS = 1;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-
-    # cleanup temp file
-    unlink("$TEMPDIR/mduptemp_$DBSUFFIX.txt");
-}
-elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-    $dbh->do("PRAGMA foreign_keys = ON");
-    $dbh->{AutoCommit} = 1;
-}
+$dbh->do("PRAGMA foreign_keys = ON");
 
 if ( $updfromtable != $deleted ) {
     die
@@ -288,10 +247,10 @@ $dbh->do(q{UPDATE stats SET BBB=(SELECT count(*) FROM map WHERE bbb=1)})
 
 $dbh->disconnect();
 
-printf "\n\n%d entries deleted!\n", $deleted;
-printf "%d reads deleted!\n",       $ReadsDeleted;
+printf STDERR "\n\n%d entries deleted!\n", $deleted;
+printf STDERR "%d reads deleted!\n",       $ReadsDeleted;
 
-print strftime( "\n\nend: %F %T\n\n\n", localtime );
+print STDERR strftime( "\n\nend: %F %T\n\n\n", localtime );
 
 1;
 
