@@ -337,7 +337,7 @@ $stats{BBB_WITH_MAP_DUPS} = $i;
 # make a list of ties
 warn "Making a list of ties (references)...\n";
 if ( open( my $fh, ">$pcleanfolder/result/$DBSUFFIX.ties.txt" ) ) {
-    my $read_dbh = get_dbh( { userefdb => 1 } );
+    my $read_dbh = get_dbh( { userefdb => 1, readonly => 1 } );
     $query = qq{SELECT map.refid, max(bbb) as mbb,
             (select head from refdb.fasta_ref_reps where rid=map.refid) as chr,
             (select firstindex from refdb.fasta_ref_reps where rid=map.refid) as tind

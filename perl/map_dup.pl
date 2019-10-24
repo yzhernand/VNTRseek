@@ -28,12 +28,12 @@ my $curdir = getcwd;
 my $maxRepeatsPerRead = 2;
 
 my $DBSUFFIX = $ARGV[0];
-my $run_dir    = $ARGV[1];
+my $run_dir  = $ARGV[1];
 my $TEMPDIR  = $ARGV[2];
 
 # set these mysql credentials in vs.cnf (in installation directory)
-my %run_conf = get_config($DBSUFFIX, $run_dir );
-my $dbh = get_dbh( {userefdb => 1} )
+my %run_conf = get_config( $DBSUFFIX, $run_dir );
+my $dbh      = get_dbh()
     or die "Could not connect to database: $DBI::errstr";
 
 #my $sth3 = $dbh->prepare("UPDATE map SET bbb=0 WHERE refid=? AND readid=?;")
@@ -67,23 +67,25 @@ if ( $run_conf{BACKEND} eq "mysql" ) {
 }
 elsif ( $run_conf{BACKEND} eq "sqlite" ) {
     $dbh->do("PRAGMA foreign_keys = OFF");
+
     # warn "\nTurning off AutoCommit\n";
     $dbh->{AutoCommit} = 0;
 }
 
-my ($numTRsInRead)
-    = $dbh->selectrow_array(q{SELECT COUNT(*)
+my $read_dbh = get_dbh( { userefdb => 1, readonly => 1 } );
+my ($numTRsInRead) = $read_dbh->selectrow_array(
+    q{SELECT COUNT(*)
     FROM map
     INNER JOIN replnk on replnk.rid=map.readid
     INNER JOIN rank ON rank.refid=map.refid AND rank.readid=map.readid
     INNER JOIN rankflank ON rankflank.refid=map.refid AND rankflank.readid=map.readid
     INNER JOIN fasta_ref_reps ON fasta_ref_reps.rid=map.refid
     WHERE replnk.sid=? AND bbb=1
-    ORDER BY rank.score ASC, rankflank.score ASC, map.refid ASC})
-    or die "Couldn't prepare statement: " . $dbh->errstr;
+    ORDER BY rank.score ASC, rankflank.score ASC, map.refid ASC}
+) or die "Couldn't prepare statement: " . $dbh->errstr;
 
-my $trsInRead_sth
-    = $dbh->prepare(q{SELECT map.readid,map.refid,(
+my $trsInRead_sth = $read_dbh->prepare(
+    q{SELECT map.readid,map.refid,(
         SELECT head
         FROM fasta_reads
         WHERE fasta_reads.sid=replnk.sid
@@ -98,24 +100,24 @@ my $trsInRead_sth
     INNER JOIN rankflank ON rankflank.refid=map.refid AND rankflank.readid=map.readid
     INNER JOIN refdb.fasta_ref_reps reftab ON reftab.rid=map.refid
     WHERE replnk.sid=? AND bbb=1
-    ORDER BY rank.score ASC, rankflank.score ASC, map.refid ASC})
-    or die "Couldn't prepare statement: " . $dbh->errstr;
+    ORDER BY rank.score ASC, rankflank.score ASC, map.refid ASC}
+) or die "Couldn't prepare statement: " . $dbh->errstr;
 
 # first get list of reads with multiple TRs that are mapped to more than one reference (sorted by read id)
-my $deleted      = 0;
-my $ReadsDeleted = 0;
-my $readsWithMultTRsMappedMultRefs_sth
-    = $dbh->prepare(q{SELECT replnk.sid,count(map.refid)
+my $deleted                            = 0;
+my $ReadsDeleted                       = 0;
+my $readsWithMultTRsMappedMultRefs_sth = $dbh->prepare(
+    q{SELECT replnk.sid,count(map.refid)
     FROM map
     INNER JOIN replnk on replnk.rid=map.readid
     WHERE bbb=1
     GROUP BY replnk.sid
-    HAVING count(map.refid)>1})
-    or die "Couldn't prepare statement: " . $dbh->errstr;
+    HAVING count(map.refid)>1}
+) or die "Couldn't prepare statement: " . $dbh->errstr;
 $readsWithMultTRsMappedMultRefs_sth->execute()
     or die "Cannot execute: " . $readsWithMultTRsMappedMultRefs_sth->errstr();
 my $insert_mduptemp_sth = $dbh->prepare(q{INSERT INTO mduptemp VALUES(?, ?)});
-my $i = 0;
+my $i                   = 0;
 while ( my @data = $readsWithMultTRsMappedMultRefs_sth->fetchrow_array() ) {
 
     # TODO Use read length to calculate $maxRepeatsPerRead
@@ -131,7 +133,8 @@ while ( my @data = $readsWithMultTRsMappedMultRefs_sth->fetchrow_array() ) {
     my $oldRfirst  = -1;
     my $oldRlast   = -1;
     my $isDeleted  = 0;
-    while ( my @data2   = $trsInRead_sth->fetchrow_array() ) {
+
+    while ( my @data2 = $trsInRead_sth->fetchrow_array() ) {
         $j++;
         my $readlen = $data2[8];
         my $RefDiff
@@ -161,7 +164,7 @@ while ( my @data = $readsWithMultTRsMappedMultRefs_sth->fetchrow_array() ) {
                 print $TEMPFILE $oldrefid, ",", $oldreadid, "\n";
             }
             elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-                $insert_mduptemp_sth->execute($oldrefid, $oldreadid);
+                $insert_mduptemp_sth->execute( $oldrefid, $oldreadid );
             }
             print "X";
             $deleted++;
@@ -181,7 +184,7 @@ while ( my @data = $readsWithMultTRsMappedMultRefs_sth->fetchrow_array() ) {
                 print $TEMPFILE $data2[1], ",", $data2[0], "\n";
             }
             elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-                $insert_mduptemp_sth->execute($data2[1], $data2[0]);
+                $insert_mduptemp_sth->execute( $data2[1], $data2[0] );
             }
             print "X";
             $deleted++;
@@ -203,7 +206,7 @@ while ( my @data = $readsWithMultTRsMappedMultRefs_sth->fetchrow_array() ) {
                     print $TEMPFILE $data2[1], ",", $data2[0], "\n";
                 }
                 elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-                    $insert_mduptemp_sth->execute($data2[1], $data2[0]);
+                    $insert_mduptemp_sth->execute( $data2[1], $data2[0] );
                 }
                 print "X";
                 $deleted++;
@@ -226,22 +229,24 @@ while ( my @data = $readsWithMultTRsMappedMultRefs_sth->fetchrow_array() ) {
 
 my $numReadsWithMultTRsMappedMultRefs
     = $readsWithMultTRsMappedMultRefs_sth->rows;
+
 # $sth3->finish();
 $trsInRead_sth->finish();
 $readsWithMultTRsMappedMultRefs_sth->finish();
 if ( $run_conf{BACKEND} eq "mysql" ) {
+
     # load the file into tempfile
     close($TEMPFILE);
-    $dbh->do(q{LOAD DATA LOCAL INFILE '$TEMPDIR/mduptemp_$DBSUFFIX.txt'
-        INTO TABLE mduptemp FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n'})
-    or die "Couldn't do statement: " . $dbh->errstr;
+    $dbh->do(
+        q{LOAD DATA LOCAL INFILE '$TEMPDIR/mduptemp_$DBSUFFIX.txt'
+        INTO TABLE mduptemp FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n'}
+    ) or die "Couldn't do statement: " . $dbh->errstr;
     $dbh->do('ALTER TABLE mduptemp ENABLE KEYS;')
         or die "Couldn't do statement: " . $dbh->errstr;
 }
 elsif ( $run_conf{BACKEND} eq "sqlite" ) {
     $dbh->commit;
 }
-
 
 # update based on temp table
 my $updfromtable = 0;
@@ -263,14 +268,14 @@ if ( $run_conf{BACKEND} eq "mysql" ) {
 
     $sth = $dbh->do('SET UNIQUE_CHECKS = 1;')
         or die "Couldn't do statement: " . $dbh->errstr;
+
     # cleanup temp file
     unlink("$TEMPDIR/mduptemp_$DBSUFFIX.txt");
 }
-elsif ($run_conf{BACKEND} eq "sqlite") {
+elsif ( $run_conf{BACKEND} eq "sqlite" ) {
     $dbh->do("PRAGMA foreign_keys = ON");
     $dbh->{AutoCommit} = 1;
 }
-
 
 if ( $updfromtable != $deleted ) {
     die
