@@ -45,7 +45,7 @@ my $KEEPPCRDUPS  = $ARGV[6];
 
 # get run configuration, let's us connect to DB
 my %run_conf = get_config( $DBSUFFIX, $run_dir );
-my $dbh = get_dbh( { userefdb => 1 } )
+my $dbh = get_dbh()
     or die "Could not connect to database: $DBI::errstr";
 my %stats;
 
@@ -337,13 +337,14 @@ $stats{BBB_WITH_MAP_DUPS} = $i;
 # make a list of ties
 warn "Making a list of ties (references)...\n";
 if ( open( my $fh, ">$pcleanfolder/result/$DBSUFFIX.ties.txt" ) ) {
+    my $read_dbh = get_dbh( { userefdb => 1 } );
     $query = qq{SELECT map.refid, max(bbb) as mbb,
             (select head from refdb.fasta_ref_reps where rid=map.refid) as chr,
             (select firstindex from refdb.fasta_ref_reps where rid=map.refid) as tind
         FROM map INNER JOIN rank ON rank.refid=map.refid AND rank.readid=map.readid
         INNER JOIN rankflank ON rankflank.refid=map.refid AND rankflank.readid=map.readid
         GROUP BY map.refid HAVING mbb=0 ORDER BY chr, tind};
-    $sth = $dbh->prepare($query);
+    $sth = $read_dbh->prepare($query);
     $sth->execute();
     $i = 0;
     while ( my @data = $sth->fetchrow_array() ) {
