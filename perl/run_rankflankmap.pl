@@ -107,7 +107,7 @@ foreach my $file (@allfiles) {
         while (<MFILE>) {
             chomp;
             my @mfields = split( '\t', $_ );
-            my $msize = scalar @mfields;
+            my $msize   = scalar @mfields;
             if ( $msize >= 8 ) {
                 my $readid = $mfields[0];
 
@@ -188,7 +188,7 @@ foreach my $file (@allfiles) {
                 # insert the rankflank
                 if ( $bestref ne "" ) {
                     my @ranks = split( ',', $bestref );
-                    my $ties = scalar(@ranks) - 1;
+                    my $ties  = scalar(@ranks) - 1;
                     foreach my $rstr (@ranks) {
 
 #$rankflank_insert_sth->execute($readid,$rstr,$bestscore)             # Execute the query
@@ -278,7 +278,7 @@ $dbh->do(
     PRIMARY KEY (`refid`, `readid`))'
 ) or die "Couldn't do statement: " . $dbh->errstr;
 
-$sth1 = $dbh->prepare( qq{INSERT INTO ranktemp VALUES (?, ?)} );
+$sth1 = $dbh->prepare(qq{INSERT INTO ranktemp VALUES (?, ?)});
 print STDERR
     "Prunning (keep best ref for each read) from rankflank table...\n";
 my $query
@@ -345,6 +345,7 @@ $count   = 0;
 $oldseq  = -1;
 $oldref  = -1;
 $oldread = -1;
+
 while ( my @data = $sth->fetchrow_array() ) {
 
     if ( $data[0] == $oldref && $data[2] == $oldseq ) {
@@ -395,9 +396,8 @@ $query = qq{
             AND rankflank.readid = t2.readid
     )
 };
-$sth = $dbh->prepare($query);
 $dbh->begin_work;
-$delfromtable = $sth->execute();
+$delfromtable = $dbh->do($query);
 $dbh->commit;
 
 # $sth->finish;

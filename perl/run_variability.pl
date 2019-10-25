@@ -10,7 +10,8 @@ use DBI;
 use POSIX qw(strftime);
 use FindBin;
 use lib "$FindBin::RealBin/lib";
-use vutil qw(get_config get_dbh set_statistics gen_exec_array_cb vs_db_insert get_trunc_query);
+use vutil
+    qw(get_config get_dbh set_statistics gen_exec_array_cb vs_db_insert get_trunc_query);
 
 if ( $ENV{DEBUG} ) {
     use Data::Dumper;
@@ -45,12 +46,14 @@ my %run_conf = get_config( $DBSUFFIX, $run_dir );
 my $dbh      = get_dbh()
     or die "Could not connect to database: $DBI::errstr";
 
-my ( $sth, $sth1, $sth6, $sth7, $sth8, $query, $query2 );
+my ( $sth, $sth1, $sth6, $sth7, $sth8, $query );
 my $TEMPFILE;
 my $TEMP_CLNK;
 
 # change settings to speedup updates and inserts
 $dbh->do("PRAGMA foreign_keys = OFF");
+
+$dbh->begin_work;
 
 # update reserved field on entire table
 $dbh->do('UPDATE clusterlnk SET reserved=0,reserved2=0;')
@@ -60,23 +63,23 @@ $dbh->do('UPDATE map SET reserved=0,reserved2=0;')
 $dbh->do( get_trunc_query( $run_conf{BACKEND}, "vntr_support" ) )
     or die "Couldn't do statement: " . $dbh->errstr;
 
-$query = q{CREATE TEMPORARY TABLE mapr (
+$dbh->do(
+    q{CREATE TEMPORARY TABLE mapr (
   `refid` INT(11) NOT NULL,
   `readid` INT(11) NOT NULL,
-  PRIMARY KEY (refid,readid))};
+  PRIMARY KEY (refid,readid))}
+);
 
 # create temp table for clusterlnk table updates and update clusterlnk table
-$query2 = q{CREATE TEMPORARY TABLE ctrlnk (
+$dbh->do(
+    q{CREATE TEMPORARY TABLE ctrlnk (
     `clusterid` INT(11) NOT NULL,
     `repeatid` INT(11) NOT NULL,
     `change` INT(11) NOT NULL,
     PRIMARY KEY (clusterid,repeatid)
-    )};
-
-$dbh->do($query)
-    or die "Couldn't do statement: " . $dbh->errstr;
-$dbh->do($query2)
-    or die "Couldn't do statement: " . $dbh->errstr;
+    )}
+);
+$dbh->commit;
 
 # prepare statments
 my $read_dbh = get_dbh( { userefdb => 1, readonly => 1 } );
@@ -85,7 +88,7 @@ $sth = $read_dbh->prepare(
   FROM refdb.fasta_ref_reps
   WHERE rid = ?}
 ) or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth1 = $dbh->prepare(
+$sth1 = $read_dbh->prepare(
     q{SELECT rid, dna, first, last, pattern, copynum
   FROM fasta_reads INNER JOIN replnk ON fasta_reads.sid=replnk.sid
   WHERE rid = ?}
@@ -95,7 +98,7 @@ $sth6 = $dbh->prepare(q{INSERT INTO ctrlnk VALUES(?, ?, ?)})
     or die "Couldn't prepare statement: " . $dbh->errstr;
 $sth7 = $dbh->prepare(q{INSERT INTO mapr VALUES(?, ?)})
     or die "Couldn't prepare statement: " . $dbh->errstr;
-$sth8 = $dbh->prepare(
+$sth8 = $read_dbh->prepare(
     q{SELECT map.refid, map.readid from clusterlnk
   INNER JOIN map ON map.refid=-clusterlnk.repeatid
   WHERE map.bbb=1 AND clusterlnk.clusterid=?
@@ -260,163 +263,106 @@ close($fh);
 $sth->finish;
 $sth1->finish;
 
-if ( $run_conf{BACKEND} eq "mysql" ) {
-
-    # cleanup temp files
-    close($TEMP_CLNK);
-    $sth6->execute();
-    unlink("$TEMPDIR/clnk_$DBSUFFIX.txt");
-
-    # finish loading the map file into tempfile and switch indexes back on
-    close($TEMPFILE);
-    $sth7->execute();
-    unlink("$TEMPDIR/mapr_$DBSUFFIX.txt");
-    $dbh->do('ALTER TABLE ctrlnk ENABLE KEYS;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-    $dbh->do('ALTER TABLE mapr ENABLE KEYS;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-    $query = q{UPDATE ctrlnk p, clusterlnk pp SET reserved=p.change
-        WHERE pp.clusterid = p.clusterid
-            AND pp.repeatid=p.repeatid};
-    $query2 = q{UPDATE mapr p, map pp SET reserved=1
-        WHERE pp.refid = p.refid
-            AND pp.readid = p.readid};
-}
-elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-    $dbh->commit;
-    $query = q{UPDATE clusterlnk SET reserved=(
-        SELECT change FROM ctrlnk t2
-        WHERE clusterlnk.clusterid = t2.clusterid
-            AND clusterlnk.repeatid=t2.repeatid
-        )
-        WHERE EXISTS (SELECT * FROM ctrlnk t2
-        WHERE clusterlnk.clusterid = t2.clusterid
-            AND clusterlnk.repeatid=t2.repeatid)};
-    $query2 = q{UPDATE map SET reserved=1
-        WHERE EXISTS (
-        SELECT * FROM mapr t2
-        WHERE map.refid = t2.refid
-            AND map.readid = t2.readid)};
-}
-
-my $updCLNKfromfile = $dbh->do($query)
-    or die "Couldn't execute statement: " . $sth->errstr;
+# $dbh->begin_work;
+my $updCLNKfromfile = $dbh->do(
+    q{UPDATE clusterlnk SET reserved=(
+    SELECT change FROM ctrlnk t2
+    WHERE clusterlnk.clusterid = t2.clusterid
+        AND clusterlnk.repeatid=t2.repeatid
+    )
+    WHERE EXISTS (SELECT * FROM ctrlnk t2
+    WHERE clusterlnk.clusterid = t2.clusterid
+        AND clusterlnk.repeatid=t2.repeatid)}
+);
 
 # update map based on temp table
-my $updfromtable = $dbh->do($query2)
-    or die "Couldn't execute statement: " . $sth->errstr;
+my $updfromtable = $dbh->do(
+    q{UPDATE map SET reserved=1
+    WHERE EXISTS (
+    SELECT * FROM mapr t2
+    WHERE map.refid = t2.refid
+        AND map.readid = t2.readid)}
+);
+
+# $dbh->commit;
 
 # write SUPPORT info to temp files to be loaded into vntr_support
-my $supcounter = 0;
-
-if ( $run_conf{BACKEND} eq "mysql" ) {
-    open( $TEMPFILE, ">$TEMPDIR/support_$DBSUFFIX.txt" ) or die $!;
-    $dbh->do('ALTER TABLE vntr_support DISABLE KEYS;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-    $query = q{LOAD DATA LOCAL INFILE '$TEMPDIR/support_$DBSUFFIX.txt'
-    INTO TABLE vntr_support FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n'};
-}
-elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-    $dbh->commit;
 
 # ($updfromtable) = $dbh->selectrow_array(q{SELECT COUNT(*) FROM map WHERE reserved=1});
-    $query = q{INSERT INTO vntr_support VALUES(?, ?, ?, ?, ?, ?)};
-}
-$sth = $dbh->prepare($query)
-    or die "Couldn't prepare statement: " . $dbh->errstr;
+$query = q{INSERT INTO vntr_support VALUES(?, ?, ?, ?, ?, ?)};
+$sth   = $dbh->prepare($query);
 
-my $supInsert = 0;
+my $supcounter = 0;
+my $supInsert  = 0;
+my @vntrs_supported;
 foreach my $key ( keys %VNTR_REF ) {
     $supcounter++;
-    if ( $run_conf{BACKEND} eq "mysql" ) {
-        print $TEMPFILE $VNTR_REF{$key}, ",", $VNTR_COPIES{$key}, ",",
-            $VNTR_SAMEASREF{$key}, ",", $VNTR_SUPPORT{$key}, ",",
-            $VNTR_COPIESFLOAT{$key};
-        if ( exists $VNTR_REPRESENTATIVE{$key} ) {
-            print $TEMPFILE ",", $VNTR_REPRESENTATIVE{$key};
+    push @vntrs_supported,
+        [
+        $VNTR_REF{$key},
+        $VNTR_COPIES{$key},
+        $VNTR_SAMEASREF{$key},
+        $VNTR_SUPPORT{$key},
+        $VNTR_COPIESFLOAT{$key},
+        ( exists $VNTR_REPRESENTATIVE{$key} )
+        ? $VNTR_REPRESENTATIVE{$key}
+        : undef
+        ];
+    if ( @vntrs_supported % $RECORDS_PER_INFILE_INSERT == 0 ) {
+        my $cb = gen_exec_array_cb( \@vntrs_supported );
+        my $rows
+            = vs_db_insert( $dbh, $sth, $cb,
+            "Error inserting into vntr_support table." );
+        if ($rows) {
+            $supInsert += $rows;
+            @vntrs_supported = ();
         }
-        print $TEMPFILE "\n";
-    }
-    if ( $run_conf{BACKEND} eq "sqlite" ) {
-        $sth->execute(
-            $VNTR_REF{$key},
-            $VNTR_COPIES{$key},
-            $VNTR_SAMEASREF{$key},
-            $VNTR_SUPPORT{$key},
-            $VNTR_COPIESFLOAT{$key},
-            ( exists $VNTR_REPRESENTATIVE{$key} )
-            ? $VNTR_REPRESENTATIVE{$key}
-            : undef
-        ) or die "Couldn't execute statement: " . $sth->errstr;
-        $supInsert++;
+        else {
+            die
+                "Something went wrong inserting, but somehow wasn't caught!\n";
+        }
     }
 }
 
-$query = q{CREATE TEMPORARY TABLE ctr (
+if (@vntrs_supported) {
+    my $cb = gen_exec_array_cb( \@vntrs_supported );
+    my $rows
+        = vs_db_insert( $dbh, $sth, $cb,
+        "Error inserting into vntr_support table." );
+    if ($rows) {
+        $supInsert += $rows;
+        @vntrs_supported = ();
+    }
+    else {
+        die "Something went wrong inserting, but somehow wasn't caught!\n";
+    }
+}
+
+$dbh->begin_work;
+$dbh->do(
+    q{CREATE TEMPORARY TABLE ctr (
     `clusterid` INT(11) NOT NULL PRIMARY KEY,
     `varbl` INT(11) NOT NULL DEFAULT 0
-    )};
-if ( $run_conf{BACKEND} eq "mysql" ) {
-    close($TEMPFILE);
+    )}
+);
 
-    # Count insertions from previous prepare
-    $supInsert = $sth->execute;
-
-    # Finish next query statement
-    $query .= " ENGINE=INNODB";
-    $dbh->do('ALTER TABLE vntr_support ENABLE KEYS;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-
-    # cleanup temp file
-    unlink("$TEMPDIR/support_$DBSUFFIX.txt");
-}
-elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-    $dbh->commit;
-}
-
-$dbh->do($query) or die "Couldn't do statement: " . $dbh->errstr;
-
-$query = q{INSERT INTO ctr SELECT clusterid, count(*) as vrefs
+my $InsClusToFile = $dbh->do(
+    q{INSERT INTO ctr SELECT clusterid, count(*) as vrefs
     FROM clusterlnk
     WHERE reserved>0
     GROUP by clusterid
-    ORDER BY vrefs DESC};
-my $InsClusToFile = $dbh->do($query)
-    or die "Couldn't do statement: " . $sth->errstr;
+    ORDER BY vrefs DESC}
+);
 
-if ( $run_conf{BACKEND} eq "mysql" ) {
-    $sth = $dbh->prepare('ALTER TABLE ctr ENABLE KEYS;')
-        or die "Couldn't prepare statement: " . $dbh->errstr;
-    $sth->execute()    # Execute the query
-        or die "Couldn't execute statement: " . $sth->errstr;
-    $sth->finish;
-    $query
-        = q{UPDATE ctr p, clusters pp SET variability=varbl WHERE pp.cid = p.clusterid};
-}
-elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-    $query = q{UPDATE OR IGNORE clusters
-        SET variability=(SELECT varbl FROM ctr t2
-        WHERE clusters.cid == t2.clusterid)};
-}
-
-my $UpdClusFromFile = $dbh->do($query)    # Execute the query
-    or die "Couldn't do statement: " . $sth->errstr;
+my $UpdClusFromFile = $dbh->do(
+    q{UPDATE OR IGNORE clusters
+    SET variability=(SELECT varbl FROM ctr t2
+    WHERE clusters.cid == t2.clusterid)}
+);
+$dbh->commit;
 
 # set old settings
-if ( $run_conf{BACKEND} eq "mysql" ) {
-    $sth = $dbh->do('SET AUTOCOMMIT = 1;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-
-    $sth = $dbh->do('SET FOREIGN_KEY_CHECKS = 1;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-
-    $sth = $dbh->do('SET UNIQUE_CHECKS = 1;')
-        or die "Couldn't do statement: " . $dbh->errstr;
-}
-elsif ( $run_conf{BACKEND} eq "sqlite" ) {
-    $dbh->do("PRAGMA foreign_keys = ON");
-    $dbh->{AutoCommit} = 1;
-}
+$dbh->do("PRAGMA foreign_keys = ON");
 $dbh->disconnect();
 
 if ( $supInsert != $supcounter ) {
@@ -631,6 +577,8 @@ sub VNTR_YES_NO {
 
     }    # end of loop
 
+    # TODO Optimize for SQLite: this function is called for every cluster,
+    # might be better to preserve array for accumulating rows across calls
     if (@rows) {
         my $cb   = gen_exec_array_cb( \@rows );
         my $rows = vs_db_insert( $dbh, $sth7, $cb,
@@ -657,11 +605,13 @@ sub VNTR_YES_NO {
     foreach my $val ( keys %REF_UPDATED ) {
         $cl_processed++;
         $change = $REF_UPDATED{$val};
+        push @rows, [ $clusterid, $val, $change ];
         if ( $ENV{DEBUG} ) {
             warn "ctrlnk insert: $clusterid, $val, $change\n";
         }
     }
 
+    # TODO: See TODO above for optimizing for SQLite
     if (@rows) {
         my $cb   = gen_exec_array_cb( \@rows );
         my $rows = vs_db_insert( $dbh, $sth6, $cb,
