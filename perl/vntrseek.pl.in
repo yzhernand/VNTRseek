@@ -210,7 +210,7 @@ my $TRF_PARAM
     = "'$TRF_EXE' - $MATCH $MISMATCH $INDEL 80 10 50 2000 -d -h -ngs";
 my $TRF2PROCLU_EXE = 'trf2proclu-ngs.exe';
 my $TRF2PROCLU_PARAM
-    = "'./$TRF2PROCLU_EXE' -f 1 -m $MATCH -s $MISMATCH -i $INDEL -p $MIN_PERIOD_REQUIRED -l $opts{MIN_FLANK_REQUIRED}";
+    = "'./$TRF2PROCLU_EXE' -m $MATCH -s $MISMATCH -i $INDEL -p $MIN_PERIOD_REQUIRED -l $opts{MIN_FLANK_REQUIRED}";
 
 if ( $DOALLSTEPS < 0 ) {
     die("Please set doallsteps (DOALLSTEPS) variable.\n");
@@ -451,7 +451,7 @@ if ( $STEP == 1 ) {
     my $extra_param  = ( $opts{STRIP_454_KEYTAGS} ) ? '-s' : '';
     my $extra_param2 = ( $opts{IS_PAIRED_READS} )   ? '-r' : '';
     system(
-        "./run_trf.pl -t \"$TRF_PARAM\" -u \"$TRF2PROCLU_PARAM\" $extra_param $extra_param2 -p $opts{NPROCESSES} $opts{INPUT_DIR} $read_profiles_folder"
+        "./run_trf_ng.pl -t \"$TRF_PARAM\" -u \"$TRF2PROCLU_PARAM\" $extra_param $extra_param2 -p $opts{NPROCESSES} $opts{INPUT_DIR} $read_profiles_folder"
     );
     if ( $? == -1 ) {
         SetError( $STEP, "command failed: $!", -1 );
