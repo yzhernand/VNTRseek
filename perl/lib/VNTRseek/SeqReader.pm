@@ -392,7 +392,7 @@ sub run_trf {
     };
 
     my ( %reads, $trf_out );
-    open my $trf_stdout, ">", "$output_prefix.leb36";
+    open my $trf_stdout, ">", "$output_prefix.index";
     my $proc_trf_output = sub {
         $trf_out .= $_[0];
 
