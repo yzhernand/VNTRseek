@@ -3,8 +3,8 @@ SET(PACKAGE_NAME VNTRseek)
 
 cmake_minimum_required(VERSION 3.0)
 # Set current VNTRseek version. Not user configurable
-SET(VNTRVer "1.10.0-rc.3")
-project(VNTRseek VERSION 1.10.0.3 LANGUAGES C)
+SET(VNTRVer "1.10.0-rc.4")
+project(VNTRseek VERSION 1.10.0.4 LANGUAGES C)
 # project(VNTRseek VERSION ${VNTRVer} LANGUAGES C)
 
 SET(InstallSuffix "vntrseek${VNTRVer}")

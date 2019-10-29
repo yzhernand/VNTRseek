@@ -9,9 +9,7 @@
 use v5.24;
 use warnings;
 use FindBin;
-# this is where the pipeline is installed
 use lib "$FindBin::RealBin/lib";
-
 use Getopt::Std;
 use IO::Handle;
 use Carp;
@@ -38,11 +36,6 @@ my $warn_454_TCAG    = ( exists $opts{'w'} && $opts{'w'} ) ? 1 : 0;
 my $is_paired_end    = ( exists $opts{'r'} && $opts{'r'} ) ? 1 : 0;
 my $max_processes    = ( exists $opts{'p'} && $opts{'p'} ) ? $opts{'p'} : 2;
 
-my $reverse_read = 1; # if 1, each read will be reversed and processed as well
-
-my $HEADER_SUFFIX = ""
-    ;   # set by program automatically for paired reads to distinguish headers
-
 # Input directory
 my $input_dir = shift || die "$0: Need to provide input directory\n";
 
@@ -62,14 +55,10 @@ my $seq_reader = VNTRseek::SeqReader->new(
     output_dir       => $output_dir,
     is_paired_end    => $is_paired_end,
     reads_split      => 1e6,
-    trf_param        => [$trf_bin, split /\s+/, $trf_param],
-    trf2proclu_param => [$trf2proclu_bin, split /\s+/, $trf2proclu_param],
+    trf_param        => [ $trf_bin, split /\s+/, $trf_param ],
+    trf2proclu_param => [ $trf2proclu_bin, split /\s+/, $trf2proclu_param ],
 );
 
-# $max_processes
-#     = ( $seq_reader->{num_inputs} < $max_processes )
-#     ? $seq_reader->{num_inputs}
-#     : $max_processes;
 warn "Will use $max_processes processes\n";
 
 my $totreads = 0;
@@ -112,12 +101,5 @@ while ( my $reads = $seq_reader->get_reads() ) {
 say "Finished reading. Waiting for TRF processes...";
 $pm->wait_all_children;
 
-# Do stuff?
-
-# Make sure all readers are done before continuing with maybe more things
-# $seq_reader->wait_for_readers();
-
-warn "Processing complete -- processed $split_index file(s) and $totreads reads.\n";
-
-# my $exstring = qq(find "${output_dir}" -type f -size 0 -delete);
-# system($exstring);
+warn
+    "Processing complete -- processed $split_index file(s) and $totreads reads.\n";
