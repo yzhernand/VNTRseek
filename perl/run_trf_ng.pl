@@ -9,7 +9,7 @@
 use v5.24;
 use warnings;
 use FindBin;
-use lib ("$FindBin::RealBin/lib", "$FindBin::RealBin/local/lib");
+use lib ("$FindBin::RealBin/lib", "$FindBin::RealBin/local/lib/perl5");
 use Getopt::Std;
 use IO::Handle;
 use Carp;
