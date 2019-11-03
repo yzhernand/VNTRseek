@@ -488,7 +488,7 @@ GTHASH* CreateTripleHash(unsigned int size)
 
 void    DestroyTripleHash(GTHASH* hash,void (*destroy)(void *item))
 {
-    unsigned int i;
+    unsigned int *i;
     GTHITEM *curr;
 	EASY_NODE* iter;
 
@@ -497,13 +497,13 @@ void    DestroyTripleHash(GTHASH* hash,void (*destroy)(void *item))
     /* step trough and free all items in rack */
     for(iter=hash->walker->head; iter!=NULL; iter=iter->next)
     {
-		i = (unsigned int)EasyListItem(iter);
+		i = (unsigned int*)EasyListItem(iter);
 
         /* free all items in that slot of the rack */
-        while(hash->rack[i])
+        while(hash->rack[*i])
         {
-            curr = hash->rack[i];
-            hash->rack[i] = curr->next;
+            curr = hash->rack[*i];
+            hash->rack[*i] = curr->next;
 			if (destroy) destroy(curr->data);
             free(curr);
         }
@@ -518,7 +518,7 @@ void    DestroyTripleHash(GTHASH* hash,void (*destroy)(void *item))
 }
 
 void	ClearTripleHash(GTHASH* hash,void (*destroy)(void *item)) {
-    unsigned int i;
+    unsigned int *i;
     GTHITEM *curr;
 	EASY_NODE* iter;
 
@@ -529,14 +529,14 @@ void	ClearTripleHash(GTHASH* hash,void (*destroy)(void *item)) {
     for(iter=hash->walker->head; iter!=NULL; iter=iter->next)
 	//for(i=0;i<hash->size;i++)
     {
-		i = (unsigned int)EasyListItem(iter);
+		i = (unsigned int*)EasyListItem(iter);
 		//printf(" %d(",i); fflush(stdout);
 		//printf("size: %d, item %d\n",hash->size,i); fflush(stdout);
         // free all items in that slot of the rack 
-        while(hash->rack[i])
+        while(hash->rack[*i])
         {
-            curr = hash->rack[i];
-            hash->rack[i] = curr->next;
+            curr = hash->rack[*i];
+            hash->rack[*i] = curr->next;
 			//printf(" zz"); fflush(stdout);
 			if (destroy) destroy(curr->data);
 			free(curr);
@@ -568,16 +568,16 @@ void*     GetTripleHashItem(GTHASH* hash, unsigned int key1, unsigned int key2,u
 int     SetTripleHashItem(GTHASH* hash, unsigned int key1, unsigned int key2,unsigned int key3, void *data)
 {
     GTHITEM* hitem;
-    unsigned int hkey;
+    unsigned int *hkey;
 
 	/* compute the hash key */
-    hkey = (rjhash(key1)+rjhash(key2)+rjhash(key3))%hash->size;
+    *hkey = (rjhash(key1)+rjhash(key2)+rjhash(key3))%hash->size;
 
 	/* set walker key on first rack item */
-	if (NULL == hash->rack[hkey])
-		EasyListInsertHead(hash->walker,(void*)hkey);
+	if (NULL == hash->rack[*hkey])
+		EasyListInsertHead(hash->walker, hkey);
 
-    for(hitem=hash->rack[hkey];hitem!=NULL;hitem=hitem->next)
+    for(hitem=hash->rack[*hkey];hitem!=NULL;hitem=hitem->next)
     {
         if(hitem->key1==key1 && hitem->key2==key2 && hitem->key3==key3) break;
     }
@@ -590,8 +590,8 @@ int     SetTripleHashItem(GTHASH* hash, unsigned int key1, unsigned int key2,uns
         hitem->key1 = key1;
         hitem->key2 = key2;
 		hitem->key3 = key3;
-        hitem->next = hash->rack[hkey];
-        hash->rack[hkey] = hitem;
+        hitem->next = hash->rack[*hkey];
+        hash->rack[*hkey] = hitem;
     } 
 	hitem->data = data;
 	
