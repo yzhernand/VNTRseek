@@ -9,4 +9,4 @@
 
 #define maxStringLengthForRegister 63
 
-int LCS_multiple_word(char *string1, char *string2, int n, int m);
+int LCS_multiple_word( char *string1, char *string2, int n, int m );
