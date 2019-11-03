@@ -91,6 +91,8 @@ SET(MISC_FILES
     COPYING CLUSTER
     README.md RUNNING
     sqlite_schema.sql
+    cpanfile
+    cpanfile.snapshot
     )
 install(FILES ${MISC_FILES}
     DESTINATION ${InstallSuffix}
