@@ -391,25 +391,23 @@ sub run_trf {
         return $res;
     };
 
-    my ( %reads, $trf_out );
+    my ( %reads, $trf_h, $trf_out );
     open my $trf_stdout, ">", "$output_prefix.index";
     my $proc_trf_output = sub {
         $trf_out .= $_[0];
 
         # Check if we got a whole line (or a chunk ending in a whole line)
         # That way, we can be sure we can get a whole header
-        if ( $trf_out =~ /\n$/s ) {
-            while ( $trf_out =~ m!^\d+\t([^/]+/[12])!mg ) {
+        if ( $trf_out =~ /\Z$/s ) {
+            while ( $trf_out =~ m!^\d+\t([^\t]+).*\n!mg ) {
                 $reads{$1} = 1;
 
-                # warn "Header " . $i++ . ": $1\n" if ($ENV{DEBUG});
+                warn "Header: $1\n" if ($ENV{DEBUG});
             }
             print $trf_stdout $trf_out;
             $trf_out = "";
         }
     };
-
-    my ( $trf_h, );
 
     try {
         $trf_h = start( \@trf_cmd, $trf_input, "|", \@trf2proclu_cmd,
@@ -422,6 +420,7 @@ sub run_trf {
 
     pump $trf_h;
     finish $trf_h;
+    close $trf_stdout;
 
     my $reads_processed = keys $read_href->%*;
 
@@ -444,7 +443,6 @@ sub run_trf {
         # .reads file gets one more line with the total number
         # of reads we read (different from reads with TRs count)
         say $reads_fh "totalreads\t$reads_processed";
-        close $trf_stdout;
         close $reads_fh;
     }
 
