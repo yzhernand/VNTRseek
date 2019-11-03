@@ -1,102 +1,93 @@
 /****************************************************************
-*   This library is free software; you can redistribute it and/or
-*   modify it under the terms of the GNU Lesser General Public
-*   License as published by the Free Software Foundation; either
-*   version 2.1 of the License, or (at your option) any later version.
-*
-*   This library is distributed in the hope that it will be useful,
-*   but WITHOUT ANY WARRANTY; without even the implied warranty of
-*   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-*   Lesser General Public License for more details.
-*
-*   You should have received a copy of the GNU Lesser General Public
-*   License along with this library; if not, write to the Free Software
-*   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-*
-*   Please direct all questions related to this program or bug reports or updates to
-*   Yevgeniy Gelfand (ygelfand@bu.edu)
-*
-****************************************************************/
+ *   This library is free software; you can redistribute it and/or
+ *   modify it under the terms of the GNU Lesser General Public
+ *   License as published by the Free Software Foundation; either
+ *   version 2.1 of the License, or (at your option) any later version.
+ *
+ *   This library is distributed in the hope that it will be useful,
+ *   but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ *   Lesser General Public License for more details.
+ *
+ *   You should have received a copy of the GNU Lesser General Public
+ *   License along with this library; if not, write to the Free Software
+ *   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ *
+ *   Please direct all questions related to this program or bug reports or
+ *updates to Yevgeniy Gelfand (ygelfand@bu.edu)
+ *
+ ****************************************************************/
 
 #ifndef _EASY_LIFE_H
 #define _EASY_LIFE_H
 
 #include <stdlib.h>
 
-//undefine this to execute in the debug mode!
+// undefine this to execute in the debug mode!
 //#define EASY_LIFE_DEBUG
 
 typedef struct {
-    char            *lastTBFDataPos;
+    char *lastTBFDataPos;
 } BSTREAM;
 
-
 typedef struct {
-    void            **array;
-    size_t             size;
-    void*           ( *copy )( const void *item );
-    void            ( *destroy )( void *item );
-    size_t             reserved; /* not to be used by the user */
+    void **array;
+    size_t size;
+    void *( *copy )( const void *item );
+    void ( *destroy )( void *item );
+    size_t reserved; /* not to be used by the user */
 } EASY_ARRAY;
 
-
 typedef struct tagEASY_NODE {
-    void                    *item;
-    struct tagEASY_NODE     *next;
-    struct tagEASY_NODE     *prev;
+    void *               item;
+    struct tagEASY_NODE *next;
+    struct tagEASY_NODE *prev;
 } EASY_NODE;
 
-
 typedef struct {
-    size_t          size;
-    EASY_NODE       *head;
-    EASY_NODE       *tail;
-    void*           ( *copy )( const void *item );
-    void            ( *destroy )( void *item );
+    size_t     size;
+    EASY_NODE *head;
+    EASY_NODE *tail;
+    void *( *copy )( const void *item );
+    void ( *destroy )( void *item );
 } EASY_LIST;
 
-
 typedef struct tagSHITEM {
-    char            *key;
-    void            *item;
+    char *            key;
+    void *            item;
     struct tagSHITEM *next;
 } SHITEM;
 
-
-typedef struct
-{
-    size_t          size;
-    void*           ( *copy )( const void *item );
-    void            ( *destroy )( void *item );
-    SHITEM**        rack;
+typedef struct {
+    size_t size;
+    void *( *copy )( const void *item );
+    void ( *destroy )( void *item );
+    SHITEM **rack;
 } EASY_STRING_HASH;
 
+double EL_GFSR( void );
+int    _el_roundG( double d, int min, int max );
 
-double EL_GFSR(void);
-int _el_roundG(double d, int min, int max);
+#define EASYLIFE_RANDRANGE( MIN, MAX ) ( EL_GFSR() * ( MAX - MIN ) + MIN )
 
-
-#define EASYLIFE_RANDRANGE(MIN,MAX) (EL_GFSR()*(MAX-MIN)+MIN)
-
-/* this is a bit cryptic, but it's to make sure good probablity distribution with small range */
-#define EASYLIFE_INT_RANDRANGE(MIN,MAX) (_el_roundG((EL_GFSR()*(MAX-MIN+1)+MIN-.5),MIN,MAX))
+/* this is a bit cryptic, but it's to make sure good probablity distribution
+ * with small range */
+#define EASYLIFE_INT_RANDRANGE( MIN, MAX ) \
+    ( _el_roundG( ( EL_GFSR() * ( MAX - MIN + 1 ) + MIN - .5 ), MIN, MAX ) )
 
 /******************************* StreamLibs ******************************\
 *
 * The functions below provide C++ like character stream capabilites
 *
-* Note: this input source for bopen is a '\0' terminated string 
+* Note: this input source for bopen is a '\0' terminated string
 *
 \*************************************************************************/
 
+BSTREAM *bopen( char *data );
 
-BSTREAM*             bopen                                      ( char *data );
+void bclose( BSTREAM *bp );
 
-void                 bclose                                     ( BSTREAM *bp );
-
-char*                bgets                                      ( char *buffer, int lineLength, BSTREAM *bp );
-
-
+char *bgets( char *buffer, int lineLength, BSTREAM *bp );
 
 /******************************* EasyArray *******************************\
 *
@@ -113,53 +104,56 @@ char*                bgets                                      ( char *buffer, 
 *
 \*************************************************************************/
 
+EASY_ARRAY *EasyArrayCreate( size_t initialSize,
+  void *( *copy )( const void *data ), void ( *destroy )( void *item ) );
 
-EASY_ARRAY*             EasyArrayCreate                         ( size_t initialSize, void* (*copy)(const void *data), void (*destroy)(void *item) );
+EASY_ARRAY *EasyArrayCreateFromList( EASY_LIST *easyList, int copyData );
 
-EASY_ARRAY*             EasyArrayCreateFromList                 ( EASY_LIST* easyList, int copyData ); 
+EASY_ARRAY *EasyArrayCopy( EASY_ARRAY *easyArray, int copyData );
 
-EASY_ARRAY*             EasyArrayCopy                           ( EASY_ARRAY* easyArray, int copyData );
+void EasyArrayDestroy( EASY_ARRAY *easyArray );
 
-void                    EasyArrayDestroy                        ( EASY_ARRAY* easyArray );
+void EasyArrayInsert( EASY_ARRAY *easyArray, void *item );
 
-void                    EasyArrayInsert                         ( EASY_ARRAY* easyArray, void *item );
+void EasyArrayRemove( EASY_ARRAY *easyArray, int position );
 
-void                    EasyArrayRemove                         ( EASY_ARRAY* easyArray, int position );
+void *EasyArrayItem( EASY_ARRAY *easyArray, int position );
 
-void*                   EasyArrayItem                           ( EASY_ARRAY* easyArray, int position );
-
-#define                 EasyArraySize( easyArray  )             ( (easyArray)->size )
-
-
+#define EasyArraySize( easyArray ) ( ( easyArray )->size )
 
 /************************ Sorting/Searching ******************************\
-*                                                                            
-* Various array sorting and searching algorithms 
-*
-* Some conventions:
-*
-*    when algorithm returns an index, -1 means the search value not found
-*                                                                            
-**************************************************************************/
+ *
+ * Various array sorting and searching algorithms
+ *
+ * Some conventions:
+ *
+ *    when algorithm returns an index, -1 means the search value not found
+ *
+ **************************************************************************/
 
+void EasyArrayInsertionSort( EASY_ARRAY *easyArray,
+  int ( *compare )( const void *item1, const void *item2 ) );
 
-void					EasyArrayInsertionSort					( EASY_ARRAY* easyArray, int (*compare)( const void *item1, const void *item2 ) );
+void EasyArrayQuickSort( EASY_ARRAY *easyArray,
+  int ( *compare )( const void *item1, const void *item2 ) );
 
-void					EasyArrayQuickSort						( EASY_ARRAY* easyArray, int (*compare)( const void *item1, const void *item2 ) );
+int EasyArraySearch( EASY_ARRAY *easyArray, int isSorted, const void *target,
+  int ( *compare )( const void *item1, const void *item2 ) );
 
-int						EasyArraySearch					    	( EASY_ARRAY* easyArray, int isSorted, const void *target, int (*compare)( const void *item1, const void *item2 ) ); 
+int EasyArrayComputeFrequency( EASY_ARRAY *easyArray, int         isSorted,
+  int ( *compare )( const void *item1, const void *item2 ), void *value );
 
-int                     EasyArrayComputeFrequency               ( EASY_ARRAY* easyArray, int isSorted, int (*compare)( const void *item1, const void *item2 ), void *value );	
+void *EasyArrayComputeMin( EASY_ARRAY *easyArray, int isSorted,
+  int ( *compare )( const void *item1, const void *item2 ) );
 
-void*                   EasyArrayComputeMin                     ( EASY_ARRAY* easyArray, int isSorted, int (*compare)( const void *item1, const void *item2 ) );	
+void *EasyArrayComputeMax( EASY_ARRAY *easyArray, int isSorted,
+  int ( *compare )( const void *item1, const void *item2 ) );
 
-void*                   EasyArrayComputeMax                     ( EASY_ARRAY* easyArray, int isSorted, int (*compare)( const void *item1, const void *item2 ) );	
+void *EasyArrayComputeMode( EASY_ARRAY *easyArray, int isSorted,
+  int ( *compare )( const void *item1, const void *item2 ) );
 
-void*                   EasyArrayComputeMode                    ( EASY_ARRAY* easyArray, int isSorted, int (*compare)( const void *item1, const void *item2 ) );
-
-void*                   EasyArrayComputeMedian                  ( EASY_ARRAY* easyArray, int isSorted, int (*compare)( const void *item1, const void *item2 ) );                       
-
-
+void *EasyArrayComputeMedian( EASY_ARRAY *easyArray, int isSorted,
+  int ( *compare )( const void *item1, const void *item2 ) );
 
 /******************************* EasyList ********************************\
 *
@@ -171,115 +165,115 @@ void*                   EasyArrayComputeMedian                  ( EASY_ARRAY* ea
 *
 \*************************************************************************/
 
+EASY_LIST *EasyListCreate(
+  void *( *copy )( const void *data ), void ( *destroy )( void *item ) );
 
-EASY_LIST*              EasyListCreate                          ( void* (*copy)(const void *data), void (*destroy)(void *item) );
+EASY_LIST *EasyListCopy( EASY_LIST *easyList, int copyData );
 
-EASY_LIST*              EasyListCopy                            ( EASY_LIST* easyList, int copyData );
+void EasyListAppend(
+  EASY_LIST *easyListTo, EASY_LIST *easyListFrom, int copyData );
 
-void                    EasyListAppend                          ( EASY_LIST* easyListTo, EASY_LIST* easyListFrom, int copyData );
+void EasyListDestroy( EASY_LIST *easyList );
 
-void                    EasyListDestroy                         ( EASY_LIST* easyList );
+#define EasyListSize( easyList ) ( ( easyList )->size )
 
-#define                 EasyListSize( easyList )                ( (easyList)->size )
+#define EasyListIsEmpty( easyList ) ( ( easyList )->size == 0 )
 
-#define                 EasyListIsEmpty( easyList    )          ( (easyList)->size == 0 )
+#define EasyListHead( easyList ) ( ( easyList )->head )
 
-#define                 EasyListHead( easyList )                ( (easyList)->head )
+#define EasyListTail( easyList ) ( ( easyList )->tail )
 
-#define                 EasyListTail( easyList )                ( (easyList)->tail )
+#define EasyListIsHead( easyList, easyNode ) \
+    ( ( easyNode ) == ( easyList )->head ? 1 : 0 )
 
-#define                 EasyListIsHead( easyList , easyNode )   ( (easyNode) == (easyList)->head ? 1 : 0 )
+#define EasyListIsTail( easyNode ) ( ( easyNode )->next == NULL ? 1 : 0 )
 
-#define                 EasyListIsTail( easyNode )              ( (easyNode)->next == NULL ? 1 : 0 )
+#define EasyListItem( easyNode ) ( ( easyNode )->item )
 
-#define                 EasyListItem( easyNode )                ( (easyNode)->item )
+#define EasyListNext( easyNode ) ( ( easyNode )->next )
 
-#define                 EasyListNext( easyNode )                ( (easyNode)->next )    
+#define EasyListPrevious( easyNode ) ( ( easyNode )->prev )
 
-#define                 EasyListPrevious( easyNode )            ( (easyNode)->prev )
+void EasyListInsertAfter(
+  EASY_LIST *easyList, EASY_NODE *easyNode, void *item );
 
+#define EasyListInsertBefore \
+    ( EasyListInsertAfter(   \
+      easyList, NULL != ( easyNode ) ? ( ( easyNode )->prev ) : NULL, item ) )
 
-void                    EasyListInsertAfter                     ( EASY_LIST* easyList, EASY_NODE* easyNode, void *item );
+#define EasyListInsertHead( easyList, item ) \
+    ( EasyListInsertAfter( easyList, NULL, item ) )
 
-#define                 EasyListInsertBefore                    ( EasyListInsertAfter( easyList, NULL != (easyNode) ? ( (easyNode)->prev ) : NULL , item ) )
+#define EasyListInsertTail( easyList, item ) \
+    ( EasyListInsertAfter( easyList, ( ( easyList )->tail ), item ) )
 
-#define                 EasyListInsertHead( easyList, item )    ( EasyListInsertAfter( easyList, NULL, item ) )
+void EasyListRemoveNode( EASY_LIST *easyList, EASY_NODE *easyNode );
 
-#define                 EasyListInsertTail( easyList, item )    ( EasyListInsertAfter( easyList, ( (easyList)->tail ) , item ) )    
+#define EasyListRemoveHead( easyList ) ( EasyListRemoveNode( easyList, NULL ) )
 
-
-void                    EasyListRemoveNode                      ( EASY_LIST* easyList, EASY_NODE* easyNode );
-
-#define                 EasyListRemoveHead( easyList )          ( EasyListRemoveNode( easyList, NULL ) )    
-
-#define                 EasyListRemoveTail( easyList )          ( EasyListRemoveNode( easyList, ( (easyList)->tail ) ) )            
-
-
+#define EasyListRemoveTail( easyList ) \
+    ( EasyListRemoveNode( easyList, ( ( easyList )->tail ) ) )
 
 /************************ Sorting/Searching ******************************\
-*                                                                            
-* Various link list sorting and searching algorithms                                       
-*                                                                            
-**************************************************************************/
+ *
+ * Various link list sorting and searching algorithms
+ *
+ **************************************************************************/
 
+void EasyListInsertionSort( EASY_LIST *easyList,
+  int ( *compare )( const void *item1, const void *item2 ) );
 
-void EasyListInsertionSort( EASY_LIST* easyList, int (*compare)( const void *item1, const void *item2 ) );
+void EasyListQuickSort( EASY_LIST *easyList,
+  int ( *compare )( const void *item1, const void *item2 ) );
 
-void EasyListQuickSort( EASY_LIST* easyList, int (*compare)( const void *item1, const void *item2 ) );
-
-
-            
 /******************************* EasyStack *******************************\
-*                                                                            
-*  Implement stacks as linked lists.                                         
-*                                                                            
-**************************************************************************/
-
+ *
+ *  Implement stacks as linked lists.
+ *
+ **************************************************************************/
 
 typedef EASY_LIST EASY_STACK;
 
+#define EasyStackCreate ( EasyListCreate )
 
-#define                 EasyStackCreate                         ( EasyListCreate )
+#define EasyStackDestroy ( EasyListDestroy )
 
-#define                 EasyStackDestroy                        ( EasyListDestroy )
+#define EasyStackPush( easyStack, item ) \
+    ( EasyListInsertAfter( easyStack, NULL, item ) )
 
-#define                 EasyStackPush( easyStack, item )        ( EasyListInsertAfter( easyStack, NULL, item ) )
+#define EasyStackPop( easyStack ) ( EasyListRemoveNode( easyStack, NULL ) )
 
-#define                 EasyStackPop( easyStack )               ( EasyListRemoveNode( easyStack, NULL ) )
+#define EasyStackPeek( easyStack ) \
+    ( ( easyStack )->head == NULL ? NULL : ( easyStack )->head->item )
 
-#define                 EasyStackPeek( easyStack )              ( (easyStack)->head == NULL ? NULL : (easyStack)->head->item )
+#define EasyStackSize( easyStack ) ( ( easyStack )->size )
 
-#define                 EasyStackSize( easyStack )              ( (easyStack)->size )
-
-
-            
 /******************************* EasyQueue *******************************\
-*                                                                            
-*  Implement queues as linked lists.                                         
-*                                                                            
-**************************************************************************/
-
+ *
+ *  Implement queues as linked lists.
+ *
+ **************************************************************************/
 
 typedef EASY_LIST EASY_QUEUE;
 
+#define EasyQueueCreate ( EasyListCreate )
 
-#define                 EasyQueueCreate                         ( EasyListCreate )
+#define EasyQueueDestroy ( EasyListDestroy )
 
-#define                 EasyQueueDestroy                        ( EasyListDestroy )
+#define EasyQueueInsert( easyQueue, item ) \
+    ( EasyListInsertAfter( easyQueue, NULL, item ) )
 
-#define                 EasyQueueInsert( easyQueue, item )      ( EasyListInsertAfter( easyQueue, NULL, item ) )
+#define EasyQueueRemove( easyQueue ) \
+    ( EasyListRemoveNode( easyQueue, ( ( easyQueue )->tail ) ) )
 
-#define                 EasyQueueRemove( easyQueue )            ( EasyListRemoveNode( easyQueue, ( (easyQueue)->tail ) ) )
+#define EasyQueuePeek( easyQueue ) \
+    ( ( easyQueue )->tail == NULL ? NULL : ( easyQueue )->tail->item )
 
-#define                 EasyQueuePeek( easyQueue )              ( (easyQueue)->tail == NULL ? NULL : (easyQueue)->tail->item )
-
-#define                 EasyQueueSize( easyQueue )              ( (easyQueue)->size )
-
-
+#define EasyQueueSize( easyQueue ) ( ( easyQueue )->size )
 
 /******************************* EasyStringHash *****************\
 *
-* Functions below let you maintain a hash that accepts a string as a 
+* Functions below let you maintain a hash that accepts a string as a
 * key. This string is used to generate a unique key based on some bit
 * shifting function. Collisions are resolved via a linked list.
 *
@@ -299,177 +293,177 @@ typedef EASY_LIST EASY_QUEUE;
 *
 \*****************************************************************/
 
+EASY_STRING_HASH *EasyStringHashCreate( size_t initialSize,
+  void *( *copy )( const void *data ), void ( *destroy )( void *item ) );
 
-EASY_STRING_HASH*       EasyStringHashCreate                    ( size_t initialSize, void* (*copy)(const void *data), void (*destroy)(void *item) );
+void EasyStringHashDestroy( EASY_STRING_HASH *easyStringHash );
 
-void                    EasyStringHashDestroy                   ( EASY_STRING_HASH* easyStringHash );
+void EasyStringHashSet(
+  EASY_STRING_HASH *easyStringHash, char *key, void *item );
 
-void                    EasyStringHashSet                       ( EASY_STRING_HASH* easyStringHash, char *key, void *item );
+void *EasyStringHashGet( EASY_STRING_HASH *easyStringHash, char *key );
 
-void*                   EasyStringHashGet                       ( EASY_STRING_HASH* easyStringHash, char *key );
+void EasyStringHashPrint( EASY_STRING_HASH *easyStringHash );
 
-void                    EasyStringHashPrint                     ( EASY_STRING_HASH* easyStringHash );
-
-#define                 EasyStringHashSize( easyStringHash  )   ( (easyStringHash)->size )
-
-
+#define EasyStringHashSize( easyStringHash ) ( ( easyStringHash )->size )
 
 /******************************* EasyIntsHash ***************\
 *
-* Functions below let you maintain a hash that accepts one or more 
-* integer keys. The keys are then written to a character buffer, 
+* Functions below let you maintain a hash that accepts one or more
+* integer keys. The keys are then written to a character buffer,
 * which is used as a key to the EasyStringHash. This is an example
 * of how easy a hash based on multiple values can be created using
 * the EASY_STRING_HASH.
-*  
+*
 \*****************************************************************/
-
 
 typedef EASY_STRING_HASH EASY_INTS_HASH;
 
+#define EasyIntsHashCreate ( EasyStringHashCreate )
 
-#define                 EasyIntsHashCreate                      ( EasyStringHashCreate )
-
-#define                 EasyIntsHashDestroy                     ( EasyStringHashDestroy )
-
-/* USE -1 as terminator, or else!!! */
-void                    EasyIntsHashSet                         ( EASY_INTS_HASH* easyIntsHash, void *item, int key1, ... );
+#define EasyIntsHashDestroy ( EasyStringHashDestroy )
 
 /* USE -1 as terminator, or else!!! */
-void*                   EasyIntsHashGet                         ( EASY_INTS_HASH* easyStringHash, int key1, ... );
+void EasyIntsHashSet( EASY_INTS_HASH *easyIntsHash, void *item, int key1, ... );
 
-#define                 EasyIntsHashPrint                       ( EasyStringHashPrint )
+/* USE -1 as terminator, or else!!! */
+void *EasyIntsHashGet( EASY_INTS_HASH *easyStringHash, int key1, ... );
 
-#define                 EasyIntsHashSize( easyIntsHash  )       ( (easyIntsHash)->size )
+#define EasyIntsHashPrint ( EasyStringHashPrint )
 
-
+#define EasyIntsHashSize( easyIntsHash ) ( ( easyIntsHash )->size )
 
 /******************************* SimpleArray *****************************\
 *
 * This is just a wrapper around regular ANSI funcs to maintain a regular
-* array. In debug mode (EASY_LIFE_DEBUG defined), they map to special 
+* array. In debug mode (EASY_LIFE_DEBUG defined), they map to special
 * bound checking functions, other time they map to C arrays with type
 * checking and allocation checking but no bound checking.
 *
 \*************************************************************************/
 
+void *simpleArrayCreateDebug( int ELEMENTS, int ESIZE, char *file, int line );
 
-void*                   simpleArrayCreateDebug                  ( int ELEMENTS, int ESIZE, char *file, int line );
+void *simpleArrayCreateRelease( int ELEMENTS, int ESIZE );
 
-void*                   simpleArrayCreateRelease                ( int ELEMENTS, int ESIZE );
+char *simpleArrayAtDebug( void *ARRAY, int POS );
 
-char*                   simpleArrayAtDebug                      ( void* ARRAY, int POS );
-
-void                    simpleArrayDestroyDebug                 ( void* ARRAY, char *file, int line );
-
+void simpleArrayDestroyDebug( void *ARRAY, char *file, int line );
 
 #ifdef EASY_LIFE_DEBUG
 
-    #define             saCreate( ELEMENTS, ESIZE )             ( simpleArrayCreateDebug( ELEMENTS, ESIZE, __FILE__, __LINE__ ) )
+#define saCreate( ELEMENTS, ESIZE ) \
+    ( simpleArrayCreateDebug( ELEMENTS, ESIZE, __FILE__, __LINE__ ) )
 
-    #define             saAt( ARRAY , POS, TYPE )               ( *(TYPE*)simpleArrayAtDebug( ARRAY , POS ) )
+#define saAt( ARRAY, POS, TYPE ) ( *(TYPE *) simpleArrayAtDebug( ARRAY, POS ) )
 
-    #define             saAtPtr( ARRAY , POS, TYPE )            ( (TYPE*)simpleArrayAtDebug( ARRAY , POS ) )
+#define saAtPtr( ARRAY, POS, TYPE ) \
+    ( (TYPE *) simpleArrayAtDebug( ARRAY, POS ) )
 
-    #define             saDestroy( ARRAY )                      ( simpleArrayDestroyDebug( ARRAY , __FILE__, __LINE__ ) )
+#define saDestroy( ARRAY ) \
+    ( simpleArrayDestroyDebug( ARRAY, __FILE__, __LINE__ ) )
 
 #else
 
-    #define             saCreate( ELEMENTS, ESIZE )             ( simpleArrayCreateRelease( ELEMENTS, ESIZE ) )
+#define saCreate( ELEMENTS, ESIZE ) \
+    ( simpleArrayCreateRelease( ELEMENTS, ESIZE ) )
 
-    #define             saAt( ARRAY , POS, TYPE )               ( ARRAY[POS] )
+#define saAt( ARRAY, POS, TYPE ) ( ARRAY[POS] )
 
-    #define             saAtPtr( ARRAY , POS, TYPE )            ( ARRAY + POS )
+#define saAtPtr( ARRAY, POS, TYPE ) ( ARRAY + POS )
 
-    #define             saDestroy( ARRAY )                      ( free( ARRAY ) )
+#define saDestroy( ARRAY ) ( free( ARRAY ) )
 
 #endif
-
-
 
 /******************************* SimpleMemory *****************************\
 *
 * Keeps track of your memory allocations. Does not let you Free wrong memory.
-* Allows you to view if you have unallocated stuff at the end and other 
+* Allows you to view if you have unallocated stuff at the end and other
 * statistics. In release mode maps to basic C functions but allocation
 * checking is still performed.
 *
 \*************************************************************************/
 
+void simpleMemorySummaryDebug( int printUnfreed );
 
-void                    simpleMemorySummaryDebug                ( int printUnfreed );
-
-void                    simpleMemorySummaryRelease              ( void );
-
+void simpleMemorySummaryRelease( void );
 
 #ifdef EASY_LIFE_DEBUG
 
-    #define             scalloc( ELEMENTS, ESIZE )              ( simpleArrayCreateDebug( ELEMENTS, ESIZE,  __FILE__, __LINE__ ) )
+#define scalloc( ELEMENTS, ESIZE ) \
+    ( simpleArrayCreateDebug( ELEMENTS, ESIZE, __FILE__, __LINE__ ) )
 
-    #define             smalloc( ESIZE )                        ( simpleArrayCreateDebug( 1, ESIZE,  __FILE__, __LINE__ ) )
+#define smalloc( ESIZE ) \
+    ( simpleArrayCreateDebug( 1, ESIZE, __FILE__, __LINE__ ) )
 
-    #define             sfree( MEMORY )                         ( simpleArrayDestroyDebug( MEMORY,  __FILE__, __LINE__ ) )
+#define sfree( MEMORY ) \
+    ( simpleArrayDestroyDebug( MEMORY, __FILE__, __LINE__ ) )
 
-    #define             sMemorySummary( PRINT_ALLOCATIONS )     ( simpleMemorySummaryDebug(PRINT_ALLOCATIONS) )
+#define sMemorySummary( PRINT_ALLOCATIONS ) \
+    ( simpleMemorySummaryDebug( PRINT_ALLOCATIONS ) )
 
 #else
 
-    #define             scalloc( ELEMENTS, ESIZE )              ( simpleArrayCreateRelease( ELEMENTS, ESIZE ) )
-//    #define             scalloc( ELEMENTS, ESIZE )              ( calloc( ELEMENTS, ESIZE ) )
+#define scalloc( ELEMENTS, ESIZE ) \
+    ( simpleArrayCreateRelease( ELEMENTS, ESIZE ) )
+//    #define             scalloc( ELEMENTS, ESIZE )              ( calloc(
+//    ELEMENTS, ESIZE ) )
 
-    #define             smalloc( ESIZE )                        ( simpleArrayCreateRelease( 1, ESIZE ) )
-//    #define             smalloc( ESIZE )                        ( malloc( ESIZE ) )
+#define smalloc( ESIZE ) ( simpleArrayCreateRelease( 1, ESIZE ) )
+//    #define             smalloc( ESIZE )                        ( malloc(
+//    ESIZE ) )
 
-    #define             sfree( MEMORY )                         ( free( MEMORY ) )
+#define sfree( MEMORY ) ( free( MEMORY ) )
 
-    #define             sMemorySummary( PRINT_ALLOCATIONS )     ( simpleMemorySummaryRelease() )
+#define sMemorySummary( PRINT_ALLOCATIONS ) ( simpleMemorySummaryRelease() )
 
 #endif
-
-
 
 /******************************* SimpleMatrix ****************************\
 *
 * This is just a wrapper around regular ANSI funcs to maintain a regular
-* matrix. In debug mode (EASY_LIFE_DEBUG defined), they map to special 
+* matrix. In debug mode (EASY_LIFE_DEBUG defined), they map to special
 * bound checking functions, other time they map to C arrays with type
 * checking and allocation checking  but no bound checking.
 *
 \*************************************************************************/
 
+void *simpleMatrixCreateDebug( int ROWS, int COLS, int ESIZE );
 
-void*                   simpleMatrixCreateDebug                 ( int ROWS, int COLS, int ESIZE );
+void *simpleMatrixCreateRelease( int ROWS, int COLS, int ESIZE );
 
-void*                   simpleMatrixCreateRelease               ( int ROWS, int COLS, int ESIZE );
+void simpleMatrixDestroyDebug( void *MATRIX );
 
-void                    simpleMatrixDestroyDebug                ( void* MATRIX );
-
-void                    simpleMatrixDestroyRelease              ( void* MATRIX );
-
+void simpleMatrixDestroyRelease( void *MATRIX );
 
 #ifdef EASY_LIFE_DEBUG
 
-    #define             smCreate( ROWS, COLS, ESIZE )           ( simpleMatrixCreateDebug( ROWS, COLS, ESIZE ) )
+#define smCreate( ROWS, COLS, ESIZE ) \
+    ( simpleMatrixCreateDebug( ROWS, COLS, ESIZE ) )
 
-    #define             smAt( MATRIX , ROW , COL, TYPE )        ( *(TYPE*)simpleArrayAtDebug( *(TYPE**)simpleArrayAtDebug( MATRIX , ROW ) , COL ) )
+#define smAt( MATRIX, ROW, COL, TYPE ) \
+    ( *(TYPE *) simpleArrayAtDebug(    \
+      *(TYPE **) simpleArrayAtDebug( MATRIX, ROW ), COL ) )
 
-    #define             smAtPtr( MATRIX , ROW , COL, TYPE )     ( (TYPE*)simpleArrayAtDebug( *(TYPE**)simpleArrayAtDebug( MATRIX , ROW ) , COL ) )
+#define smAtPtr( MATRIX, ROW, COL, TYPE ) \
+    ( (TYPE *) simpleArrayAtDebug(        \
+      *(TYPE **) simpleArrayAtDebug( MATRIX, ROW ), COL ) )
 
-    #define             smDestroy( MATRIX )                     ( simpleMatrixDestroyDebug( MATRIX ) )
+#define smDestroy( MATRIX ) ( simpleMatrixDestroyDebug( MATRIX ) )
 
 #else
 
-    #define             smCreate( ROWS, COLS, ESIZE )           ( simpleMatrixCreateRelease( ROWS, COLS, ESIZE ) )
+#define smCreate( ROWS, COLS, ESIZE ) \
+    ( simpleMatrixCreateRelease( ROWS, COLS, ESIZE ) )
 
-    #define             smAt( MATRIX , ROW , COL, TYPE )        ( MATRIX[ ROW ][ COL ] )
-    
-    #define             smAtPtr( MATRIX , ROW , COL, TYPE )     ( MATRIX[ ROW ] + COL )
+#define smAt( MATRIX, ROW, COL, TYPE ) ( MATRIX[ROW][COL] )
 
-    #define             smDestroy( MATRIX )                     ( simpleMatrixDestroyRelease( MATRIX ) )
+#define smAtPtr( MATRIX, ROW, COL, TYPE ) ( MATRIX[ROW] + COL )
+
+#define smDestroy( MATRIX ) ( simpleMatrixDestroyRelease( MATRIX ) )
 
 #endif
-
-
 
 /******************************* doCriticalErrorAndQuit ******************\
 *
@@ -477,7 +471,6 @@ void                    simpleMatrixDestroyRelease              ( void* MATRIX )
 * program flow.
 *
 \*************************************************************************/
-extern void doCriticalErrorAndQuit(const char *format, ... );
-
+extern void doCriticalErrorAndQuit( const char *format, ... );
 
 #endif
