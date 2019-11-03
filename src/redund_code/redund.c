@@ -66,6 +66,7 @@
 #include <strings.h>
 #include <sqlite3.h>
 #include <errno.h>
+#include <libgen.h>
 
 //#define _WIN_32_YES
 
@@ -341,7 +342,7 @@ int main(int argc, char **argv)
 {
     int SINGLE_OUTFILE, SORT_ONLY, IDENTICAL_ONLY;
     FILE   *fpto, *fpto2;
-    char    bigtempbuf[2000], inputfile[1000], outputfile[1000], outputfile2[1000], outdb[1000], *err_msg = 0;
+    char    *bigtempbuf, *inputfile, *outputdname, *outputbname, *outputfile, *outputfile2, *outdb, *err_msg = 0;
     int i, filescreated = 1, rc;
     time_t startTime;
     FITEM_STRUCT *fiptr, *fiptr2, *lastwrite;
@@ -368,7 +369,13 @@ int main(int argc, char **argv)
     init_complement_ascii();
 
     // parse parameters
-    strcpy(inputfile, argv[1]);
+    size_t indirlen = strlen(argv[1]);
+    if ('/' == argv[1][strlen(argv[1]) - 1]) indirlen--;
+    inputfile = strndup(argv[1], indirlen);
+    if (!inputfile) {
+        perror("Error copying input directory");
+        exit(1);
+    }
 
     IDENTICAL_ONLY = 0;
 
@@ -416,18 +423,33 @@ int main(int argc, char **argv)
         SINGLE_OUTFILE = 1;
     }
 
-    if (SINGLE_OUTFILE) {
-        sprintf(outputfile, "%s", argv[2]);
-        sprintf(outputfile2, "%s.rotindex", argv[2]);
-        sprintf(outdb, "%s.db", argv[2]);
+    if ( SINGLE_OUTFILE ) {
+        sprintf( outputfile, "%s", argv[2] );
+        sprintf( outputfile2, "%s.rotindex", argv[2] );
+        sprintf( outdb, "%s.db", argv[2] );
+    } else {
+        char *tmp   = strdup( argv[2] );
+        outputbname = strdup( basename( tmp ) );
+        outputdname = strdup( dirname( tmp ) );
+        
+        outputfile  = calloc(
+          strlen( outputdname ) + strlen( outputbname ) + 10, sizeof(*outputfile) );
+        outputfile2 = calloc(
+          strlen( outputdname ) + strlen( outputbname ) + 19, sizeof(*outputfile2) );
+        outdb =
+          calloc( strlen( outputdname ) + strlen( outputbname ) + 4, sizeof(*outdb) );
+        
+        sprintf( outputfile, "%s/1.%s", outputdname, outputbname );
+        sprintf( outputfile2, "%s/1.%s.rotindex", outputdname, outputbname );
+        sprintf( outdb, "%s/%s.db", outputdname, outputbname );
+        
+        if ( strcmp( "1", getenv( "DEBUG" ) ) == 0 ) {
+            printf(
+              "Dirname: %s, basename: %s\n", outputdname, outputbname );
+            fprintf( stderr, "outputfile %s\n", outputfile );
+            fprintf( stderr, "outputfile2 %s\n", outputfile2 );
+        }
     }
-    else {
-        sprintf(outputfile, "%s.1", argv[2]);
-        sprintf(outputfile2, "%s.rotindex.1", argv[2]);
-        sprintf(outdb, "%s.db.1", argv[2]);
-    }
-
-
 
     // create a file array
     FARRAY = EasyArrayCreate(1000, NULL, NULL);
@@ -437,18 +459,17 @@ int main(int argc, char **argv)
     d = opendir(inputfile);
 
     if (d != NULL) {
+        fprintf(stderr, "inputfile last char: %c\n", *(inputfile+strlen(inputfile) - 1));
+        bigtempbuf = calloc(indirlen + 20, sizeof(*bigtempbuf));
+        fprintf(stderr, "inputfile: %s\n", inputfile);
 
         while ((de = readdir(d)) != NULL) {
 
             if (strlen(de->d_name) > 17 && 0 == strcasecmp(".leb36.renumbered", de->d_name + strlen(de->d_name) - 17)) {
                 fiptr = smalloc(sizeof(FITEM_STRUCT));
 
-                bigtempbuf[0] = 0;
-                strcat(bigtempbuf, inputfile);
-
-                if ('/' != bigtempbuf[strlen(bigtempbuf) - 1]) strcat(bigtempbuf, "/");
-
-                strcat(bigtempbuf, de->d_name);
+                strcpy(bigtempbuf, inputfile);
+                snprintf(bigtempbuf, indirlen + 20, "%s/%s", inputfile, de->d_name);
 
                 fiptr->inputfile = strdup(bigtempbuf);
                 fiptr->d_name = strdup(de->d_name);
@@ -731,20 +752,20 @@ int main(int argc, char **argv)
                 filescreated++;
 
                 // open the output file for writing
-                sprintf(bigtempbuf, "%s.%d", argv[2], filescreated);
-                fpto = fopen(bigtempbuf, "w");
+                sprintf(outputfile, "%s/%d.%s", outputdname, filescreated, outputbname);
+                fpto = fopen(outputfile, "w");
 
                 if (fpto == NULL) {
-                    printf("\nERROR: Unable to open output file '%s'\n\n", bigtempbuf);
+                    printf("\nERROR: Unable to open output file '%s'\n\n", outputfile);
                     exit(1);
                 }
 
                 // open the index file for writing
-                sprintf(bigtempbuf, "%s.rotindex.%d", argv[2], filescreated);
-                fpto2 = fopen(bigtempbuf, "w");
+                sprintf(outputfile2, "%s/%d.%s.rotindex", outputdname, filescreated, outputbname);
+                fpto2 = fopen(outputfile2, "w");
 
                 if (fpto2 == NULL) {
-                    printf("\nERROR: Unable to open output file '%s'\n\n", bigtempbuf);
+                    printf("\nERROR: Unable to open output file '%s'\n\n", outputfile2);
                     exit(1);
                 }
             }
