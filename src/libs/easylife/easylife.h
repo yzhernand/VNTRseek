@@ -21,6 +21,8 @@
 #ifndef _EASY_LIFE_H
 #define _EASY_LIFE_H
 
+#include <stdlib.h>
+
 //undefine this to execute in the debug mode!
 //#define EASY_LIFE_DEBUG
 
@@ -31,10 +33,10 @@ typedef struct {
 
 typedef struct {
     void            **array;
-    int             size;
+    size_t             size;
     void*           ( *copy )( const void *item );
     void            ( *destroy )( void *item );
-    int             reserved; /* not to be used by the user */
+    size_t             reserved; /* not to be used by the user */
 } EASY_ARRAY;
 
 
@@ -46,7 +48,7 @@ typedef struct tagEASY_NODE {
 
 
 typedef struct {
-    int             size;
+    size_t          size;
     EASY_NODE       *head;
     EASY_NODE       *tail;
     void*           ( *copy )( const void *item );
@@ -63,7 +65,7 @@ typedef struct tagSHITEM {
 
 typedef struct
 {
-    int             size;
+    size_t          size;
     void*           ( *copy )( const void *item );
     void            ( *destroy )( void *item );
     SHITEM**        rack;
@@ -112,7 +114,7 @@ char*                bgets                                      ( char *buffer, 
 \*************************************************************************/
 
 
-EASY_ARRAY*             EasyArrayCreate                         ( int initialSize, void* (*copy)(const void *data), void (*destroy)(void *item) );
+EASY_ARRAY*             EasyArrayCreate                         ( size_t initialSize, void* (*copy)(const void *data), void (*destroy)(void *item) );
 
 EASY_ARRAY*             EasyArrayCreateFromList                 ( EASY_LIST* easyList, int copyData ); 
 
@@ -298,7 +300,7 @@ typedef EASY_LIST EASY_QUEUE;
 \*****************************************************************/
 
 
-EASY_STRING_HASH*       EasyStringHashCreate                    ( int initialSize, void* (*copy)(const void *data), void (*destroy)(void *item) );
+EASY_STRING_HASH*       EasyStringHashCreate                    ( size_t initialSize, void* (*copy)(const void *data), void (*destroy)(void *item) );
 
 void                    EasyStringHashDestroy                   ( EASY_STRING_HASH* easyStringHash );
 

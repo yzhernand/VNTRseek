@@ -100,7 +100,7 @@ VERSIONS:
 *
 \*************************************************************************/
 
-int EasyLifeGetPrime(int number);
+size_t EasyLifeGetPrime(size_t number);
 unsigned int EasyLifeElfUp(char *text);
 
 
@@ -249,7 +249,7 @@ char* bgets( char *buffer, int lineLength, BSTREAM *bp ) {
 #define		EASY_ARRAY_INITIAL_SIZE		500 
 
 /* --------------------------------------------------------------------- */
-EASY_ARRAY* EasyArrayCreate( int initialSize, void* (*copy)(const void *data), void (*destroy)(void *item) ) {
+EASY_ARRAY* EasyArrayCreate( size_t initialSize, void* (*copy)(const void *data), void (*destroy)(void *item) ) {
 
 	EASY_ARRAY *newEasyArray;
 
@@ -1421,7 +1421,7 @@ void* EasyArrayComputeMode( EASY_ARRAY* easyArray, int isSorted, int (*compare)(
 #define EASY_LIFE_INIT_STRING_HASH_SIZE 14591
 
 /* ---------------------------------------------------------------------- */
-EASY_STRING_HASH* EasyStringHashCreate( int initialSize, void* (*copy)(const void *data), void (*destroy)(void *item) ) {
+EASY_STRING_HASH* EasyStringHashCreate( size_t initialSize, void* (*copy)(const void *data), void (*destroy)(void *item) ) {
 
 	EASY_STRING_HASH *newEasyStringHash;
 
@@ -1721,7 +1721,7 @@ unsigned int EasyLifeElfUp(char *text)
     while(*text)
     {
         h = (h<<4)+ *text;
-        if(g = h & 0xF0000000)
+        if((g = h & 0xF0000000))
             h ^= g >>24;
         h &= ~g;
         text++;
@@ -1736,7 +1736,7 @@ unsigned int EasyLifeElfUp(char *text)
 * greater than the previous one up to roughly 10 million.
 * Read the description of EasyLifeGetPrime for more information.
 *******************************************************************/
-int EasyLifeSomePrimes[] =
+size_t EasyLifeSomePrimes[] =
 {
     1103,
     1327,
@@ -1797,9 +1797,9 @@ int EasyLifeSomePrimes[] =
 * requested. If size is too large returns the largest
 * prime in the list
 *******************************************************/
-int EasyLifeGetPrime(int number)
+size_t EasyLifeGetPrime(size_t number)
 {
-    int *p;
+    size_t *p;
 
     if(number<EasyLifeSomePrimes[0]) return EasyLifeSomePrimes[0];
 
