@@ -31,7 +31,6 @@ no cyclic alignment
 #endif
 
 #ifndef _WIN_32_YES
-#define __int64 unsigned long long int
 #define LARGE_INTEGER time_t
 #define I64d ld
 #endif
@@ -46,12 +45,6 @@ int REFLEN = 50; // for ref-vs-ref
 int  MAXFLANKCONSIDERED = 1000000;  // for ref-vs-read
 char OPTION = 0;  // for ref-vs-ref
 char OPTION2 = 0; // v1.9, for mapfile
-
-
-#define max3(a,b,c) (((a)>=(b))?(((a)>=(c))?(a):(c)):(((b)>=(c))?(b):(c)))
-#define min3(a,b,c) (((a)<=(b))?(((a)<=(c))?(a):(c)):(((b)<=(c))?(b):(c)))
-#define max(a,b) (((a)>=(b))?(a):(b))
-#define min(a,b) (((a)<=(b))?(a):(b))
 
 static time_t startTime;
 
@@ -139,7 +132,7 @@ CLUSTERBASE *doSearchSimilarities(FILE *fpi, FILE *fpi2, FILE *fpirot, FILE *fpi
     CLUSTERBASE     *cb;
     PROFILE     *prof1, *prof2, *prof1rc, *prof2rc;
     int         off1, i, j, pmin, TRANGE, NEWRANGE, lowerpat, higherpat, readcount, readpercent;
-    unsigned int    ui, uj;
+    size_t    ui, uj;
     char        *src, *sequence;
 
 
@@ -303,7 +296,7 @@ CLUSTERBASE *doSearchSimilarities(FILE *fpi, FILE *fpi2, FILE *fpirot, FILE *fpi
     }
 
     fprintf(stderr, "(total time: %.1lf secs)", (double)(time(NULL) - startTime));
-    fprintf(stderr, "\nLoaded %d profiles from reference file!", profileList->size / 2); fflush(stderr);
+    fprintf(stderr, "\nLoaded %zu profiles from reference file!", profileList->size / 2); fflush(stderr);
 
 
     // read read profiles into list
@@ -324,7 +317,7 @@ CLUSTERBASE *doSearchSimilarities(FILE *fpi, FILE *fpi2, FILE *fpirot, FILE *fpi
     }
 
     fprintf(stderr, "(total time: %.1lf secs)", (double)(time(NULL) - startTime));
-    fprintf(stderr, "\nLoaded %d profiles from reads file!", profileList2->size / 2); fflush(stderr);
+    fprintf(stderr, "\nLoaded %zu profiles from reads file!", profileList2->size / 2); fflush(stderr);
 
 
     // creating profile lookup hash
@@ -404,7 +397,7 @@ CLUSTERBASE *doSearchSimilarities(FILE *fpi, FILE *fpi2, FILE *fpirot, FILE *fpi
         EasyListDestroy(profileList);
         profileList = tempList;
 
-        fprintf(stderr, "new ref list size %d!", profileList->size / 2);
+        fprintf(stderr, "new ref list size %zu!", profileList->size / 2);
     }
 
     if (fpi2rot) {
@@ -430,7 +423,7 @@ CLUSTERBASE *doSearchSimilarities(FILE *fpi, FILE *fpi2, FILE *fpirot, FILE *fpi
         EasyListDestroy(profileList2);
         profileList2 = tempList;
 
-        fprintf(stderr, "new read list size %d!", profileList2->size / 2);
+        fprintf(stderr, "new read list size %zu!", profileList2->size / 2);
     }
 
 
@@ -529,7 +522,7 @@ CLUSTERBASE *doSearchSimilarities(FILE *fpi, FILE *fpi2, FILE *fpirot, FILE *fpi
         if (TRANGE <= MAX_ARRAY_TRANGE) {
 
             for (ui = 0; ui < Trange_N_Codes[TRANGE]; ui++) {
-                if (artemp = Easy_Array_Tuples[TRANGE][ui]) {
+                if ((artemp = Easy_Array_Tuples[TRANGE][ui])) {
                     EasyArrayQuickSort(artemp, patcmp);
                 }
             }
@@ -538,7 +531,7 @@ CLUSTERBASE *doSearchSimilarities(FILE *fpi, FILE *fpi2, FILE *fpirot, FILE *fpi
         else {
 
             for (iter = Hash_Tuples[TRANGE]->walker->head; iter != NULL; iter = iter->next) {
-                ui = (unsigned int)EasyListItem(iter);
+                ui = *(size_t*)EasyListItem(iter);
                 gdrack = Hash_Tuples[TRANGE]->rack[ui];
 
                 while (gdrack) {
@@ -568,12 +561,12 @@ CLUSTERBASE *doSearchSimilarities(FILE *fpi, FILE *fpi2, FILE *fpirot, FILE *fpi
 
             int prev_pat;
 
-            Array_Tuples[TRANGE] = (SEED_HIT **)scalloc(Trange_N_Codes[TRANGE], sizeof(SEED_HIT *));
-            Array_Tuples_Length[TRANGE] = (unsigned int *)scalloc(Trange_N_Codes[TRANGE], sizeof(unsigned int));
+            Array_Tuples[TRANGE] = (SEED_HIT **)scalloc(Trange_N_Codes[TRANGE], sizeof(*(Array_Tuples[TRANGE])));
+            Array_Tuples_Length[TRANGE] = scalloc(Trange_N_Codes[TRANGE], sizeof(*(Array_Tuples_Length[TRANGE])));
             Array_Tuples_Index[TRANGE]   = (EASY_ARRAY **) scalloc( Trange_N_Codes[TRANGE], sizeof(EASY_ARRAY **) );
 
             for (ui = 0; ui < Trange_N_Codes[TRANGE]; ui++) {
-                if (artemp = Easy_Array_Tuples[TRANGE][ui]) {
+                if ((artemp = Easy_Array_Tuples[TRANGE][ui])) {
                     Array_Tuples[TRANGE][ui] = (shtemp = (SEED_HIT *)scalloc(artemp->size, sizeof(SEED_HIT)));
                     Array_Tuples_Index[TRANGE][ui] = (iatemp = EasyArrayCreate(2, NULL, NULL));
 
@@ -604,7 +597,7 @@ CLUSTERBASE *doSearchSimilarities(FILE *fpi, FILE *fpi2, FILE *fpirot, FILE *fpi
             Array_Tuples_Index[TRANGE] = NULL;
 
             for (iter = Hash_Tuples[TRANGE]->walker->head; iter != NULL; iter = iter->next) {
-                ui = (unsigned int)EasyListItem(iter);
+                ui = *(size_t*)EasyListItem(iter);
 
                 gdrack = Hash_Tuples[TRANGE]->rack[ui];
 
@@ -648,7 +641,7 @@ CLUSTERBASE *doSearchSimilarities(FILE *fpi, FILE *fpi2, FILE *fpirot, FILE *fpi
         gdtemp = (GDHASH *) CreateDoubleHash(Hash_Tuples[TRANGE]->nitems * 2);
 
         for (iter = Hash_Tuples[TRANGE]->walker->head; iter != NULL; iter = iter->next) {
-            ui = (unsigned int)EasyListItem(iter);
+            ui = *(size_t*)EasyListItem(iter);
             gdrack = Hash_Tuples[TRANGE]->rack[ui];
 
             while (gdrack) {
@@ -1112,7 +1105,7 @@ int doEdgesBruteForce(FILE *fpi, FILE *fpi2, FILE *edgesIn, unsigned char *dt1, 
         off1 = prof1->nextoffset;
     }
 
-    fprintf(stdout, "\nLoaded %d profiles from 1st file", profileList->size / 2);
+    fprintf(stdout, "\nLoaded %zu profiles from 1st file", profileList->size / 2);
 
     // read 2nd file profiles into list
     off1 = 0;
@@ -1130,7 +1123,7 @@ int doEdgesBruteForce(FILE *fpi, FILE *fpi2, FILE *edgesIn, unsigned char *dt1, 
         off1 = prof1->nextoffset;
     }
 
-    fprintf(stdout, "\nLoaded %d profiles from 2nd file", profileList2->size / 2);
+    fprintf(stdout, "\nLoaded %zu profiles from 2nd file", profileList2->size / 2);
 
 
 

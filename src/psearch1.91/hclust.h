@@ -24,7 +24,10 @@
 #include <math.h>
 
 #include "../libs/easylife/easylife.h"
+#include "bitwise edit distance alignment multiple word no end penalty.h"
+#include "bitwise LCS multiple word.h"
 #include "profile.h"
+#include "doublehash.h"
 
 //#pragma pack(push)  /* push current alignment to stack */
 //#pragma pack(1)     /* set alignment to 1 byte boundary */
@@ -65,7 +68,7 @@ EASY_ARRAY  **Easy_Array_Tuples [MAX_LIST_TRANGE + 1];  // range 1 - MAX_ARRAY_T
 
 SEED_HIT    **Array_Tuples      [MAX_LIST_TRANGE + 1];  // range 1 - MAX_ARRAY_TRANGE
 EASY_ARRAY  **Array_Tuples_Index    [MAX_LIST_TRANGE + 1];  // range 1 - MAX_ARRAY_TRANGE
-int     *Array_Tuples_Length    [MAX_LIST_TRANGE + 1];  // range 1 - MAX_ARRAY_TRANGE
+unsigned int     *Array_Tuples_Length    [MAX_LIST_TRANGE + 1];  // range 1 - MAX_ARRAY_TRANGE
 unsigned int    Trange_N_Codes      [MAX_LIST_TRANGE + 1];  // range 1 - MAX_ARRAY_TRANGE
 
 GDHASH      *Hash_Tuples        [MAX_LIST_TRANGE + 1];  // range (MAX_ARRAY_TRANGE+1) - MAX_LIST_TRANGE
@@ -252,7 +255,8 @@ int _HCLUST_find_candidates(char *Sequence, FASTASEQUENCE *pseq, SEED_STRUCT *pS
     int where;
     int g = 0, badcharindex = -1;
     int offset;
-    unsigned int seedcode, seedcode2, length;
+    unsigned int seedcode, seedcode2;
+    size_t length;
     int i;
     int *SeedSeenHash = NULL;
     int code1Bad = 0, code2Bad = 0;
@@ -285,7 +289,7 @@ int _HCLUST_find_candidates(char *Sequence, FASTASEQUENCE *pseq, SEED_STRUCT *pS
 
             SEED_HIT *start_hit = NULL, *end_hit = NULL, *temp_hit;
             GDHITEM *gdhit;
-            unsigned int uj;
+            size_t uj;
 
 
             /* produce code */

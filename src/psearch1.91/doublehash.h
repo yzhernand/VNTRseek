@@ -30,6 +30,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <error.h>
 #include "../libs/easylife/easylife.h"
 
 
@@ -42,7 +43,7 @@ typedef struct tagGSHITEM {
 
 
 typedef struct {
-    unsigned int size;
+    size_t size;
     GSHITEM **rack;
 } GSHASH;
 
@@ -59,31 +60,31 @@ typedef struct tagGDHITEM {
     unsigned int key1;
     unsigned int key2;
     void *data;          // array of SEED_HIT structures
-    unsigned int length; // length of the data array
+    size_t length; // length of the data array
     void *index;         // easy array pointing to data at different pattern sizes
     struct tagGDHITEM *next;
 } GDHITEM;
 
 
 typedef struct {
-    unsigned int size;
+    size_t size;
     unsigned int nitems;
     GDHITEM **rack;
     EASY_LIST *walker;
 } GDHASH;
 
 
-GDHASH  *CreateDoubleHash(unsigned int size);
+GDHASH  *CreateDoubleHash(size_t size);
 void    DestroyDoubleHash(GDHASH *hash, void (*destroy)(void *item));
 void   *GetDoubleHashItem(GDHASH *hash, unsigned int key1, unsigned int key2);
-int     SetDoubleHashItem(GDHASH *hash, unsigned int key1, unsigned int key2, void *data, void *index, unsigned int length);
+int     SetDoubleHashItem(GDHASH *hash, unsigned int key1, unsigned int key2, void *data, void *index, size_t length);
 
 
 /****************************************************
 *               function definition
 *****************************************************/
 
-int EasyLifeGetPrime(int size);
+size_t EasyLifeGetPrime(size_t size);
 
 
 /* Robert Jenkins' 32 bit integer hash function */
@@ -239,12 +240,12 @@ int     ClearSingleHashItem(GSHASH *hash, unsigned int key)
 *               2 key hash
 *****************************************************/
 
-GDHASH *CreateDoubleHash(unsigned int size)
+GDHASH *CreateDoubleHash(size_t size)
 {
     GDHASH *hash;
 
     /* allocate the hash structure */
-    hash = (GDHASH *) malloc(sizeof(GDHASH));
+    hash = malloc(sizeof(*hash));
 
     if (hash == NULL) return NULL;
 
@@ -255,7 +256,7 @@ GDHASH *CreateDoubleHash(unsigned int size)
     }
 
     /* allocate the item rack with zeroes */
-    hash->rack = (GDHITEM **) calloc(size, sizeof(GDHITEM *));
+    hash->rack = calloc(size, sizeof(*hash->rack));
 
     if (hash->rack == NULL) {
         free(hash);
@@ -274,7 +275,7 @@ GDHASH *CreateDoubleHash(unsigned int size)
 
 void    DestroyDoubleHash(GDHASH *hash, void (*destroy)(void *item))
 {
-    unsigned int i;
+    unsigned int *i;
     GDHITEM *curr;
     EASY_NODE *iter;
 
@@ -282,12 +283,12 @@ void    DestroyDoubleHash(GDHASH *hash, void (*destroy)(void *item))
 
     /* step trough and free all items in rack */
     for (iter = hash->walker->head; iter != NULL; iter = iter->next) {
-        i = (unsigned int)EasyListItem(iter);
+        i = EasyListItem(iter);
 
         /* free all items in that slot of the rack */
-        while (hash->rack[i]) {
-            curr = hash->rack[i];
-            hash->rack[i] = curr->next;
+        while (hash->rack[*i]) {
+            curr = hash->rack[*i];
+            hash->rack[*i] = curr->next;
 
             if (destroy) destroy(curr->data);
 
@@ -305,7 +306,7 @@ void    DestroyDoubleHash(GDHASH *hash, void (*destroy)(void *item))
 
 void    ClearDoubleHash(GDHASH *hash, void (*destroy)(void *item))
 {
-    unsigned int i;
+    unsigned int *i;
     GDHITEM *curr;
     EASY_NODE *iter;
 
@@ -316,14 +317,14 @@ void    ClearDoubleHash(GDHASH *hash, void (*destroy)(void *item))
     for (iter = hash->walker->head; iter != NULL; iter = iter->next)
         //for(i=0;i<hash->size;i++)
     {
-        i = (unsigned int)EasyListItem(iter);
+        i = EasyListItem(iter);
 
         //printf(" %d(",i); fflush(stdout);
         //printf("size: %d, item %d\n",hash->size,i); fflush(stdout);
         // free all items in that slot of the rack
-        while (hash->rack[i]) {
-            curr = hash->rack[i];
-            hash->rack[i] = curr->next;
+        while (hash->rack[*i]) {
+            curr = hash->rack[*i];
+            hash->rack[*i] = curr->next;
 
             //printf(" zz"); fflush(stdout);
             if (destroy) destroy(curr->data);
@@ -369,32 +370,37 @@ GDHITEM     *GetDoubleHash(GDHASH *hash, unsigned int key1, unsigned int key2)
 }
 
 
-int     SetDoubleHashItem(GDHASH *hash, unsigned int key1, unsigned int key2, void *data, void *index, unsigned int length)
+int     SetDoubleHashItem(GDHASH *hash, unsigned int key1, unsigned int key2, void *data, void *index, size_t length)
 {
     GDHITEM *hitem;
-    unsigned int hkey;
+    size_t *hkey = calloc(1, sizeof(*hkey));
 
     /* compute the hash key */
-    hkey = (rjhash(key1) + rjhash(key2)) % hash->size;
+    *hkey = (rjhash(key1) + rjhash(key2)) % hash->size;
+
+    if (*hkey > hash->size) {
+        error_at_line(1, 0, __FILE__, __LINE__,
+            "bad hash key generated: %zu exceeds hash size %zu", *hkey, hash->size);
+    }
 
     /* set walker key on first rack item */
-    if (NULL == hash->rack[hkey])
-        EasyListInsertHead(hash->walker, (void *)hkey);
+    if (NULL == hash->rack[*hkey])
+        EasyListInsertHead(hash->walker, hkey);
 
-    for (hitem = hash->rack[hkey]; hitem != NULL; hitem = hitem->next) {
+    for (hitem = hash->rack[*hkey]; hitem != NULL; hitem = hitem->next) {
         if (hitem->key1 == key1 && hitem->key2 == key2) break;
     }
 
     /* if item is not in list insert */
     if (hitem == NULL) {
-        hitem = (GDHITEM *) malloc(sizeof(GDHITEM));
+        hitem = malloc(sizeof(*hitem));
 
         if (hitem == NULL) return -1;
 
         hitem->key1 = key1;
         hitem->key2 = key2;
-        hitem->next = hash->rack[hkey];
-        hash->rack[hkey] = hitem;
+        hitem->next = hash->rack[*hkey];
+        hash->rack[*hkey] = hitem;
         hash->nitems++;
     }
 
