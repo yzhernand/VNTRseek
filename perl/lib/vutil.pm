@@ -145,6 +145,11 @@ sub get_config {
 sub set_config {
     my %in_hash = @_;
 
+    if ( $ENV{DEBUG} ) {
+        use Data::Dumper;
+        warn Dumper( \%in_hash );
+    }
+
     # Validation
     unless ( $in_hash{SERVER} ) {
         croak(
