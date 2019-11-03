@@ -158,8 +158,6 @@ for my $k ( keys %conf_vars ) {
         if ( !exists $opts{$k} );
 }
 
-( $ENV{DEBUG} ) && warn Dumper( \%opts );
-
 # Send config back to vutil lib and validate, after including CLI options
 set_config(%opts);
 
@@ -360,7 +358,12 @@ sub GetNextStep {
 
     my %stat_hash = %{ get_statistics(@stats) };
     my @vals      = @stat_hash{@stats};
-    ( $ENV{DEBUG} ) && warn "GetNextStep vals: " . Dumper( \@vals ) . "\n";
+    
+    if ( $ENV{DEBUG} ) {
+        use Data::Dumper;
+        warn "GetNextStep vals: " . Dumper( \@vals ) . "\n";
+    }
+
     for ( my $idx = @vals - 1; $idx >= 0; --$idx ) {
         if ( defined $vals[$idx] ) {
             say min( $idx + 1, 20 );
