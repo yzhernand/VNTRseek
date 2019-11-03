@@ -87,18 +87,21 @@ typedef struct {
 
 } REP_STRUCT;
 
-static char* usage = "Usage: trf2proclu-ngs.exe -f <num> -m <num> -s <num> -i <num> -o <string> -p <num> "
-    "-l <num> [input.dat]\nWhere:\n\t-f specifies the id assigned to the "
-    "first record in the file (must be greater than or equal to "
-    "1),\n\t-m must be equal to the matching weight parameter of the "
-    "corresponding TRF run,\n\t-s must be equal to the mismatch penalty "
-    "parameter of the corresponding TRF run,\n\t-i must be equal to the "
-    "indel penalty parameter of the corresponding TRF run,\n\t-o "
-    "specifies the prefix of the output files,\n\t-p specifies "
-    "minimum patsize to keep TR,\n\t-l specifies minimum flanksize "
-    "(either side) to keep TR\ntrf2proclu-ngs.exe reads a DAT file output by the TRF and "
-    "produces an LEB36 file and an index file that contains records from "
-    "the DAT file each preceded by a unique id.\n";
+static char *usage =
+  "Usage: trf2proclu-ngs.exe -f <num> -m <num> -s <num> -i <num> -o <string> "
+  "-p <num> "
+  "-l <num> [input.dat]\nWhere:\n\t-f specifies the id assigned to the "
+  "first record in the file (must be greater than or equal to "
+  "1),\n\t-m must be equal to the matching weight parameter of the "
+  "corresponding TRF run,\n\t-s must be equal to the mismatch penalty "
+  "parameter of the corresponding TRF run,\n\t-i must be equal to the "
+  "indel penalty parameter of the corresponding TRF run,\n\t-o "
+  "specifies the prefix of the output files,\n\t-p specifies "
+  "minimum patsize to keep TR,\n\t-l specifies minimum flanksize "
+  "(either side) to keep TR\ntrf2proclu-ngs.exe reads a DAT file output by the "
+  "TRF and "
+  "produces an LEB36 file and an index file that contains records from "
+  "the DAT file each preceded by a unique id.\n";
 
 /********************************	doCriticalErrorAndQuit
  * ****************************/
@@ -298,9 +301,9 @@ int main( int argc, char **argv ) {
     int    i, c, j, error, firstindex, lastindex, period, patsize, matchperc,
       indelperc, score, acount, ccount, gcount, tcount, cRes, lenleft, lenright,
       headerlen, rcyes;
-    int            thecount;
-    float          copynum = 0, entropy = 0;
-    FILE *         fp, *fph;
+    int   thecount;
+    float copynum = 0, entropy = 0;
+    FILE *fp, *fph;
     // FILE *         *logfp; // reenable, perhaps with some verbose mode
     char *         header, *flankleft, *flankright;
     unsigned char *sequence, *pattern;
@@ -351,7 +354,7 @@ int main( int argc, char **argv ) {
             break;
 
         case 'h':
-            fprintf( stderr, "%s", usage);
+            fprintf( stderr, "%s", usage );
             return ( 3 );
 
         case 'f':
@@ -412,43 +415,43 @@ int main( int argc, char **argv ) {
 
     if ( outfile_prefix == NULL || strlen( outfile_prefix ) == 0 ) {
         fputs( "No name given for output files. Aborting.\n", stderr );
-        fprintf( stderr, "%s", usage);
+        fprintf( stderr, "%s", usage );
         return ( 5 );
     }
 
     if ( minperiod <= -1000000 ) {
         fputs( "No minperiod provided. Aborting.\n", stderr );
-        fprintf( stderr, "%s", usage);
+        fprintf( stderr, "%s", usage );
         return ( 6 );
     }
 
     if ( minflank <= -1000000 ) {
         fputs( "No minflank provided. Aborting.\n", stderr );
-        fprintf( stderr, "%s", usage);
+        fprintf( stderr, "%s", usage );
         return ( 7 );
     }
 
     if ( match <= -1000000 ) {
         fputs( "No match weight provided. Aborting.\n", stderr );
-        fprintf( stderr, "%s", usage);
+        fprintf( stderr, "%s", usage );
         return ( 8 );
     }
 
     if ( mismatch <= -1000000 ) {
         fputs( "No mismatch weight provided. Aborting.\n", stderr );
-        fprintf( stderr, "%s", usage);
+        fprintf( stderr, "%s", usage );
         return ( 9 );
     }
 
     if ( indel <= -1000000 ) {
         fputs( "No indel weight provided. Aborting.\n", stderr );
-        fprintf( stderr, "%s", usage);
+        fprintf( stderr, "%s", usage );
         return ( 10 );
     }
 
     if ( startid <= -1000000 ) {
         fputs( "No startng id provided. Aborting.\n", stderr );
-        fprintf( stderr, "%s", usage);
+        fprintf( stderr, "%s", usage );
         return ( 11 );
     }
 
@@ -851,7 +854,8 @@ int main( int argc, char **argv ) {
             theid++;
 
             // if ( ( thecount % 10000 ) == 0 )
-            //     fprintf( logfp, "TRF output lines processed: %d\n", thecount );
+            //     fprintf( logfp, "TRF output lines processed: %d\n", thecount
+            //     );
         }
     }
 
@@ -868,11 +872,13 @@ int main( int argc, char **argv ) {
 
     /* output indexed .dat, leb36 files */
     if ( verbose )
-        fprintf( stderr, "done (%d items)\nwriting indexed .dat and leb36 files... ",
+        fprintf( stderr,
+          "done (%d items)\nwriting indexed .dat and leb36 files... ",
           repList->size );
 
-    leb36file = calloc(strlen(outfile_prefix)+7, sizeof(*leb36file));
-    snprintf(leb36file, strlen(outfile_prefix)+7, "%s.leb36", outfile_prefix);
+    leb36file = calloc( strlen( outfile_prefix ) + 7, sizeof( *leb36file ) );
+    snprintf(
+      leb36file, strlen( outfile_prefix ) + 7, "%s.leb36", outfile_prefix );
     fp = fopen( leb36file, "w" );
 
     if ( fp == NULL ) {
@@ -881,7 +887,8 @@ int main( int argc, char **argv ) {
     }
 
     theid = startid;
-    EASY_STRING_HASH *headerHash = EasyStringHashCreate(repList->size, NULL, free);
+    EASY_STRING_HASH *headerHash =
+      EasyStringHashCreate( repList->size, NULL, free );
     size_t readCount = 0, ge7ReadCount = 0, TRCount = 0, ge7TRCount = 0;
     for ( tnode = repList->head; tnode != NULL; tnode = tnode->next ) {
         repPtr = (REP_STRUCT *) ( tnode->item );
@@ -893,7 +900,7 @@ int main( int argc, char **argv ) {
                         repPtr->entropy, repPtr->pattern, repPtr->sequence );*/
 
         if ( repPtr->spanning ) {
-            repPtr->id = theid;
+            repPtr->id        = theid;
             repPtr->prof->key = theid;
             theid++;
             /* output index to standard output */
@@ -908,23 +915,25 @@ int main( int argc, char **argv ) {
         // We've not seen this header before. Set and increment the
         // ge7ReadCount.
         int *hval;
-        if ((hval = EasyStringHashGet(headerHash, repPtr->header)) == NULL) {
+        if ( ( hval = EasyStringHashGet( headerHash, repPtr->header ) ) ==
+             NULL ) {
             readCount++;
-            ge7ReadCount += ((repPtr->patsize >= 7) && ( repPtr->spanning ));
-            int *flag = malloc(sizeof(int));
-            *flag = ((repPtr->patsize >= 7) && ( repPtr->spanning ));
-            EasyStringHashSet(headerHash, repPtr->header, flag);
+            ge7ReadCount +=
+              ( ( repPtr->patsize >= 7 ) && ( repPtr->spanning ) );
+            int *flag = malloc( sizeof( int ) );
+            *flag     = ( ( repPtr->patsize >= 7 ) && ( repPtr->spanning ) );
+            EasyStringHashSet( headerHash, repPtr->header, flag );
         }
         // We've seen this header before. Only increment ge7ReadCount
         // if value in hash was not already set to 1.
         else {
-            ge7ReadCount += (*hval == 0 );
+            ge7ReadCount += ( *hval == 0 );
             *hval = 1;
         }
 
-        TRCount ++;
+        TRCount++;
         // Increment the ge7TRCount if TR pattern >= 7 and spanning
-        ge7TRCount += ((repPtr->patsize >= 7) && ( repPtr->spanning ));
+        ge7TRCount += ( ( repPtr->patsize >= 7 ) && ( repPtr->spanning ) );
 
         // fprintf( fph, "%d\t%s\t%d\t%d\t%.1f\t%d\t%s\n", repPtr->id,
         //   repPtr->header, repPtr->firstindex, repPtr->lastindex,
@@ -935,8 +944,9 @@ int main( int argc, char **argv ) {
 
     /* this is a file summarizing all results, including nonspanning and
      * all patsizes, needed for statistics at the end */
-    indexfileh = calloc(strlen(outfile_prefix)+11, sizeof(*indexfileh));
-    snprintf(indexfileh, strlen(outfile_prefix)+11, "%s.indexhist", outfile_prefix);
+    indexfileh = calloc( strlen( outfile_prefix ) + 11, sizeof( *indexfileh ) );
+    snprintf( indexfileh, strlen( outfile_prefix ) + 11, "%s.indexhist",
+      outfile_prefix );
     fph = fopen( indexfileh, "w" );
 
     if ( fph == NULL ) {
@@ -944,12 +954,14 @@ int main( int argc, char **argv ) {
           "Unable to open indexhist file for writing. Aborting.\n", stderr );
         return ( 18 );
     }
-    fprintf(fph, "%zu\t%zu\t%zu\t%zu\n", ge7TRCount, TRCount, ge7ReadCount, readCount);
+    fprintf( fph, "%zu\t%zu\t%zu\t%zu\n", ge7TRCount, TRCount, ge7ReadCount,
+      readCount );
     fclose( fph );
 
     // /* output leb36 to standard output */
     // if ( verbose )
-    //     fputs( "done\ngenerating profiles and writing leb36 file... ", stderr );
+    //     fputs( "done\ngenerating profiles and writing leb36 file... ", stderr
+    //     );
 
     // for ( tnode = repList->head; tnode != NULL; tnode = tnode->next ) {
     //     repPtr = (REP_STRUCT *) ( tnode->item );
