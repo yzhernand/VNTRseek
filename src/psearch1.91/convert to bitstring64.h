@@ -7,4 +7,4 @@
  *
  */
 
-char *convertToBitString64(unsigned long long int number);
+char *convertToBitString64( unsigned long long int number );
