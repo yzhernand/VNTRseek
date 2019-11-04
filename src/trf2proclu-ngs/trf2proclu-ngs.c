@@ -873,7 +873,7 @@ int main( int argc, char **argv ) {
     /* output indexed .dat, leb36 files */
     if ( verbose )
         fprintf( stderr,
-          "done (%d items)\nwriting indexed .dat and leb36 files... ",
+          "done (%zu items)\nwriting indexed .dat and leb36 files... ",
           repList->size );
 
     leb36file = calloc( strlen( outfile_prefix ) + 7, sizeof( *leb36file ) );
