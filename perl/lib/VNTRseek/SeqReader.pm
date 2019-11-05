@@ -507,6 +507,7 @@ sub read_fastaq {
         return () unless ($fasta_rec);
         my ( $header, $seq ) = split( /\n+/, $fasta_rec );
         chomp $header;
+        $header =~ s/^>//;
         $header =~ s/\s+$//;
         chomp $seq;
 
