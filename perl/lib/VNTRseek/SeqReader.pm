@@ -360,7 +360,7 @@ sub run_trf {
     my $start_id      = $args{start_id};
     my $stat_diag     = "Writing with prefix = $output_prefix";
 
-    use IPC::Run qw( run start pump finish timeout );
+    use IPC::Run qw( run new_chunker );
 
     my @trf_cmd        = ( $self->{trf_param}->@*, );
     my @trf2proclu_cmd = (
@@ -391,35 +391,34 @@ sub run_trf {
         return $res;
     };
 
-    my ( %reads, $trf_h, $trf_out );
+    my ( %reads, $trf_h );
     open my $trf_stdout, ">", "$output_prefix.index";
+
     my $proc_trf_output = sub {
-        $trf_out .= $_[0];
+        chomp(my $line = $_[0]);
+        print $trf_stdout $_[0];
+        warn "Chunk: $line\n" if ( $ENV{DEBUG} );
 
-        # Check if we got a whole line (or a chunk ending in a whole line)
-        # That way, we can be sure we can get a whole header
-        if ( $trf_out =~ /\Z$/s ) {
-            while ( $trf_out =~ m!^\d+\t([^\t]+).*\n!mg ) {
-                $reads{$1} = 1;
+        my @f = split /\t/, $line;
+        if ( @f == 7 ) {
+            $reads{ $f[1] } = 1;
 
-                warn "Header: $1\n" if ($ENV{DEBUG});
-            }
-            print $trf_stdout $trf_out;
-            $trf_out = "";
+            warn "Header: $f[1]\n" if ( $ENV{DEBUG} );
+            return;
         }
+
+        croak "Invalid output from TRF2PROCLU\n";
     };
 
     try {
-        $trf_h = start( \@trf_cmd, $trf_input, "|", \@trf2proclu_cmd,
-            $proc_trf_output );
+        run( \@trf_cmd, $trf_input, "|", \@trf2proclu_cmd,
+            '>', new_chunker, $proc_trf_output);
     }
     catch {
         # Try/catch just in case
         die "Cannot start TRF+trf2proclu pipe: $_\n";
     };
 
-    pump $trf_h;
-    finish $trf_h;
     close $trf_stdout;
 
     my $reads_processed = keys $read_href->%*;
