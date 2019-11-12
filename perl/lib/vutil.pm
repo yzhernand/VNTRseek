@@ -465,16 +465,18 @@ sub get_dbh {
         write_sqlite();
     }
 
-    $dbh = DBI->connect(
-        "DBI:SQLite:dbname=$dbfile",
-        undef, undef,
-        {   AutoCommit                 => 1,
-            RaiseError                 => 1,
-            PrintError                 => 0,
-            sqlite_see_if_its_a_number => 1,
-            ReadOnly => 1 * ( exists $opts->{readonly} && $opts->{readonly} )
-        }
-    ) or die "Could not connect to database $dbfile: $DBI::errstr";
+    my %dbi_opts = (
+        AutoCommit                 => 1,
+        RaiseError                 => 1,
+        PrintError                 => 0,
+        sqlite_see_if_its_a_number => 1,
+        ReadOnly => 1 * ( exists $opts->{readonly} && $opts->{readonly} )
+    );
+
+    $dbh
+        = DBI->connect( "DBI:SQLite:dbname=$dbfile",
+        undef, undef, \%dbi_opts, )
+        or die "Could not connect to database $dbfile: $DBI::errstr";
 
     my ($stats_schema) = $dbh->selectrow_array(
         q{SELECT sql FROM sqlite_master
@@ -485,16 +487,15 @@ sub get_dbh {
     unless ($stats_schema) {
         write_sqlite();
     }
-    if ( $stats_schema =~ /_DB_INSTERT_/ ) {
+
+    my ($schema_ver) = $dbh->selectrow_array(q{PRAGMA user_version});
+
+    if ( $schema_ver < 1 ) {
         $dbh->disconnect;
-        $dbh = DBI->connect(
-            "DBI:SQLite:dbname=$dbfile",
-            undef, undef,
-            {   AutoCommit                 => 1,
-                RaiseError                 => 1,
-                sqlite_see_if_its_a_number => 1
-            }
-        ) or die "Could not connect to database $dbfile: $DBI::errstr";
+        $dbh
+            = DBI->connect( "DBI:SQLite:dbname=$dbfile", undef, undef,
+            { %dbi_opts, ReadOnly => 0, } )
+            or die "Could not connect to database $dbfile: $DBI::errstr";
         $dbh->do(q{PRAGMA foreign_keys = off});
         $dbh->begin_work;
         $dbh->do(q{ALTER TABLE stats RENAME TO _old_stats});
@@ -601,17 +602,13 @@ sub get_dbh {
         $dbh->do(q{DROP TABLE _old_stats});
         $dbh->commit;
         $dbh->do(q{PRAGMA foreign_keys = on});
+        $dbh->do(q{PRAGMA user_version = 1});
+        $schema_ver = 1;
         $dbh->disconnect;
-        $dbh = DBI->connect(
-            "DBI:SQLite:dbname=$dbfile",
-            undef, undef,
-            {   AutoCommit                 => 1,
-                RaiseError                 => 1,
-                sqlite_see_if_its_a_number => 1,
-                ReadOnly                   => 1
-                    * ( exists $opts->{readonly} && $opts->{readonly} )
-            }
-        ) or die "Could not connect to database $dbfile: $DBI::errstr";
+        $dbh
+            = DBI->connect( "DBI:SQLite:dbname=$dbfile",
+            undef, undef, \%dbi_opts, )
+            or die "Could not connect to database $dbfile: $DBI::errstr";
     }
 
     # Set default journal to write-ahead log

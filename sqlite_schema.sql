@@ -1,6 +1,7 @@
 -- Pragmas used when creating tables in the database only
 PRAGMA synchronous = OFF;
 PRAGMA journal_mode = MEMORY;
+PRAGMA user_version = 1;
 BEGIN TRANSACTION;
 CREATE TABLE IF NOT EXISTS `clusterlnk` (
   `clusterid` integer NOT NULL,
@@ -31,10 +32,11 @@ CREATE TABLE IF NOT EXISTS `clusters` (
   PRIMARY KEY (`cid`)
 );
 CREATE TABLE IF NOT EXISTS `fasta_reads` (
-  `sid` integer  NOT NULL PRIMARY KEY AUTOINCREMENT,
+  `sid` integer  NOT NULL,
   `head` varchar(500) NOT NULL,
   `dna` varchar(8000) DEFAULT NULL,
   `qual` varchar(8000) DEFAULT NULL,
+  PRIMARY KEY (`sid`),
   UNIQUE (`head`)
 );
 -- sequence data moved to external db
@@ -68,7 +70,7 @@ CREATE TABLE IF NOT EXISTS `flank_connection` (
   CONSTRAINT `flank_connection_ibfk_1` FOREIGN KEY (`paramsetid`) REFERENCES `flank_params` (`paramsetid`)
 );
 CREATE TABLE IF NOT EXISTS `flank_params` (
-  `paramsetid` integer NOT NULL PRIMARY KEY AUTOINCREMENT,
+  `paramsetid` integer NOT NULL PRIMARY KEY,
   `flength` integer NOT NULL,
   `ferrors` integer NOT NULL
 );

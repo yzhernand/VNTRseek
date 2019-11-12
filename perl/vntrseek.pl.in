@@ -41,7 +41,7 @@ use File::Temp;
 # use POSIX qw(strftime);
 use Getopt::Long qw(GetOptionsFromArray);
 use List::Util qw(min max);
-use lib ("$FindBin::RealBin/lib", "$FindBin::RealBin/local/lib/perl5");
+use lib ( "$FindBin::RealBin/lib", "$FindBin::RealBin/local/lib/perl5" );
 use vutil
     qw(get_config set_config set_statistics get_statistics write_sqlite get_dbh get_ref_dbh set_datetime print_config create_blank_file run_redund trim);
 
@@ -135,8 +135,7 @@ if ( !exists $opts{"DBSUFFIX"} ) {
         exit;
     }
 
-    die("Please set run name (RUN) variable using command line.\n"
-    );
+    die("Please set run name (RUN) variable using command line.\n");
 }
 
 # Die if no starting step is supplied
@@ -359,7 +358,7 @@ sub GetNextStep {
 
     my %stat_hash = %{ get_statistics(@stats) };
     my @vals      = @stat_hash{@stats};
-    
+
     if ( $ENV{DEBUG} ) {
         use Data::Dumper;
         warn "GetNextStep vals: " . Dumper( \@vals ) . "\n";
@@ -538,11 +537,13 @@ if ( $STEP == 2 ) {
 
 if ( $STEP == 3 ) {
 
-    if (-d $read_profiles_folder_clean) {
-        remove_tree($read_profiles_folder_clean, { safe => 1, error => \my $err});
-        if ($err && @$err) {
-            my $errstr = "Error removing clean read profiles directory: ". $err->[0];
-            SetError($STEP, $errstr, -1);
+    if ( -d $read_profiles_folder_clean ) {
+        remove_tree( $read_profiles_folder_clean,
+            { safe => 1, error => \my $err } );
+        if ( $err && @$err ) {
+            my $errstr = "Error removing clean read profiles directory: "
+                . $err->[0];
+            SetError( $STEP, $errstr, -1 );
             die $errstr, "\n";
         }
     }
@@ -581,6 +582,7 @@ if ( $STEP == 3 ) {
         SetError( $STEP, "could not enter clean profiles directory", -1 );
         die("read profiles dir does not exist!");
     }
+
     # opendir( my $dirh, $read_profiles_folder_clean );
     # my @files = readdir($dirh);
     # closedir($dirh);
@@ -631,14 +633,16 @@ if ( $STEP == 4 ) {
 
     my $exstring;
 
-
     unlink glob "${read_profiles_folder_clean}/*.clu";
+
     # system($exstring);
 
     unlink glob "${read_profiles_folder_clean}/*.cnf";
+
     # system($exstring);
 
     unlink glob "${read_profiles_folder_clean}/*.proclu_log";
+
     # system($exstring);
 
     $timestart = time();
@@ -675,7 +679,7 @@ if ( $STEP == 4 ) {
         JOIN minreporder USING (rid)
     ORDER BY minreporder.idx ASC};
     my $get_filtered_set_profiles_sth = $dbh->prepare($get_ref_leb36);
-    my $reference_folder = File::Temp->newdir();
+    my $reference_folder              = File::Temp->newdir();
 
     $get_filtered_set_profiles_sth->execute;
     open my $tmp_filt_file_fh, ">", "$reference_folder/reference.leb36";
@@ -685,13 +689,15 @@ if ( $STEP == 4 ) {
     close $tmp_filt_file_fh;
 
     # Get rotindex saved in db
-    my ($rotindex_str) = $dbh->selectrow_array(q{SELECT rotindex
-        FROM files});
+    my ($rotindex_str) = $dbh->selectrow_array(
+        q{SELECT rotindex
+        FROM files}
+    );
     die
         "Error getting rotindex file from filtered set. Try rerunning with --redo option\n"
         unless ($rotindex_str);
     $dbh->disconnect();
-    
+
     # Need to negate all indices
     open my $tmp_rotindex, ">", "$reference_folder/reference.leb36.rotindex";
     $rotindex_str =~ s/(\d+)/-$1/g;
@@ -1346,7 +1352,7 @@ if ( $STEP == 19 ) {
     # distribution, image and latex files
     my $exstring = "perl";
     my @exargs   = (
-        "updaterefs.pl",
+        "./updaterefs.pl",
         "$read_profiles_folder",
         "$read_profiles_folder_clean",
         "$opts{DBSUFFIX}",
@@ -1355,7 +1361,7 @@ if ( $STEP == 19 ) {
         "${read_profiles_folder_clean}/result/${DBNAME}",
         "$VERSION"
     );
-    system( $exstring, @exargs );
+    system( @exargs );
     if ( $? == -1 ) {
         SetError( $STEP, "command failed: $!", -1 );
         die "command failed: $!\n";
