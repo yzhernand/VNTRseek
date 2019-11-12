@@ -352,67 +352,65 @@ two values are a FASTA header and a sequence string, in that order.
 =cut
 
 sub run_trf {
-    my $self = shift;
-    my %args = @_;
-
-    my $read_href     = $args{input};
-    my $output_prefix = $args{output_prefix};
-    my $start_id      = $args{start_id};
-    my $stat_diag     = "Writing with prefix = $output_prefix";
-
     use IPC::Run qw( run new_chunker );
 
+    my $self           = shift;
+    my %args           = @_;
+    my $read_href      = $args{input};
+    my $output_prefix  = $args{output_prefix};
+    my $start_id       = $args{start_id};
     my @trf_cmd        = ( $self->{trf_param}->@*, );
     my @trf2proclu_cmd = (
         $self->{trf2proclu_param}->@*,
         "-f", $start_id, "-o", "$output_prefix",
     );
 
-    my @headers = ( keys $read_href->%* );
+    my @headers   = ( keys $read_href->%* );
+    my $num_reads = 0;
 
     my $trf_input = sub {
-        state $i = 0;
-        return if $i >= @headers;
+        return if $num_reads >= @headers;
 
-        # warn "$headers[$i]\t" . $read_href->{$headers[$i]} . "\n";
         my $rchead
-            = $headers[$i] . "_"
-            . length( $read_href->{ $headers[$i] } )
+            = $headers[$num_reads] . "_"
+            . length( $read_href->{ $headers[$num_reads] } )
             . "_RCYES";
 
         # NOTE: Must print reverse complement AFTER the forward read
         my $res
             = ">"
-            . $headers[$i] . "\n"
-            . $read_href->{ $headers[$i] }
+            . $headers[$num_reads] . "\n"
+            . $read_href->{ $headers[$num_reads] }
             . "\n>$rchead\n"
-            . reverse_complement( $read_href->{ $headers[$i] } );
-        $i++;
+            . (
+            reverse( $read_href->{ $headers[$num_reads] } )
+                =~ tr/ACGTacgt/TGCAtgca/r );
+        $num_reads++;
         return $res;
     };
 
-    my ( %reads, $trf_h );
+    my ( %tr_reads, $trf_h );
     open my $trf_stdout, ">", "$output_prefix.index";
 
     my $proc_trf_output = sub {
-        chomp(my $line = $_[0]);
+        chomp( my $line = $_[0] );
         print $trf_stdout $_[0];
         warn "Chunk: $line\n" if ( $ENV{DEBUG} );
 
         my @f = split /\t/, $line;
         if ( @f == 7 ) {
-            $reads{ $f[1] } = 1;
+            $tr_reads{ $f[1] } = 1;
 
             warn "Header: $f[1]\n" if ( $ENV{DEBUG} );
             return;
         }
 
-        croak "Invalid output from TRF2PROCLU\n";
+        croak "Invalid output from TRF2PROCLU ($_[0])\n";
     };
 
     try {
         run( \@trf_cmd, $trf_input, "|", \@trf2proclu_cmd,
-            '>', new_chunker, $proc_trf_output);
+            '>', new_chunker, $proc_trf_output );
     }
     catch {
         # Try/catch just in case
@@ -421,12 +419,13 @@ sub run_trf {
 
     close $trf_stdout;
 
-    my $reads_processed = keys $read_href->%*;
+    my %res = ( reads => $num_reads, index => $args{index} );
 
-    if (%reads) {
+    # If there were any reads with TRs, dump those reads to a file
+    if (%tr_reads) {
         open my $reads_fh, ">", "$output_prefix.reads";
 
-        for my $header ( keys %reads ) {
+        for my $header ( keys %tr_reads ) {
             unless ( exists $read_href->{$header} ) {
                 die "Error: unlogged read (header $header) found in index. ",
                     "Possibly a bug in the sequence reading code. ",
@@ -441,11 +440,24 @@ sub run_trf {
 
         # .reads file gets one more line with the total number
         # of reads we read (different from reads with TRs count)
-        say $reads_fh "totalreads\t$reads_processed";
+        # say $reads_fh "totalreads\t$num_reads";
         close $reads_fh;
+
+        # Get stats from indexhist file
+        open my $fh, "<", "$output_prefix.indexhist";
+        chomp( my $line = <$fh> );
+        @res{
+            qw(
+                num_trs_ge7
+                num_trs
+                num_reads_trs_ge7
+                num_reads_trs
+                )
+        } = split(/\t/, $line);
+        close $fh;
     }
 
-    return { reads => $reads_processed, index => $args{index} };
+    return \%res;
 }
 
 =item I<reverse_complement()>
