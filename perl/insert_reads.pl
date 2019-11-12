@@ -178,13 +178,6 @@ foreach my $ifile (@indexfiles) {
 
                 $id      = $1;
                 $head    = $2;
-                $first   = 0;
-                $last    = 0;
-                $copy    = 0.0;
-                $pat     = 0;
-                $pattern = "";
-
-               #   if ($3 =~  /\s(\d+)\s(\d+)\s(\d+\.\d)\s(\d+)\s([A-Z]+)/ ) {
                 $first   = $3;
                 $last    = $4;
                 $copy    = $5;
