@@ -5,14 +5,15 @@ use warnings;
 use 5.010;
 use Cwd;
 use DBI;
-use POSIX qw(strftime);
-use FindBin;
 use File::Basename;
+use POSIX qw(strftime);
+use FindBin qw($RealBin);
+use lib "$RealBin/lib";
+use lib "$RealBin/local/lib/perl5";
 use Try::Tiny;
-use lib "$FindBin::RealBin/lib";
-use ProcInputReads
-    qw(get_reader init_bam formats_regexs compressed_formats_regexs set_install_dir);
-set_install_dir("$FindBin::RealBin");
+# use ProcInputReads
+    # qw(get_reader init_bam formats_regexs compressed_formats_regexs set_install_dir);
+# set_install_dir("$FindBin::RealBin");
 
 use vutil
     qw(get_config get_dbh set_statistics get_trunc_query gen_exec_array_cb vs_db_insert);
@@ -65,6 +66,7 @@ $timestart = time();
 system("cp $clusterfile $rotatedfolder/allwithdups.clusters");
 
 # load the RHASH now with new values added
+# 
 # read clusters to see what values we will store (so we don't have to store all)
 print STDERR
     "\n\nreading clusterfile allwithdups.clusters to hash clustered ids (with added rotated repeats)...";
@@ -370,7 +372,7 @@ $dbh->do("PRAGMA synchronous = ON");
 # disconnect
 $dbh->disconnect();
 
-set_statistics( { NUMBER_READS => $totalReads } );
+set_statistics( { NUMBER_READS => $totalReads } ) if ($totalReads);
 
 # check
 if ( $inserted == keys(%HEADHASH) ) {
