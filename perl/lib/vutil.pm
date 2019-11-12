@@ -23,8 +23,103 @@ our @EXPORT_OK
 # Provide functions for database management, configuration
 # reading/writing, and miscellaneous common utilities.
 
-my %VSCNF_FILE = ();
-my $VSREAD     = 0;
+my %VSCNF_FILE  = ();
+my $VSREAD      = 0;
+my %valid_stats = (
+    MAP_ROOT                                            => 1,
+    PARAM_TRF                                           => 1,
+    PARAM_PROCLU                                        => 1,
+    FOLDER_FASTA                                        => 1,
+    FOLDER_PROFILES                                     => 1,
+    FOLDER_PROFILES_CLEAN                               => 1,
+    FOLDER_REFERENCE                                    => 1,
+    FILE_REFERENCE_LEB                                  => 1,
+    FILE_REFERENCE_SEQ                                  => 1,
+    NUMBER_READS                                        => 1,
+    NUMBER_TRS_IN_READS                                 => 1,
+    NUMBER_TRS_IN_READS_GE7                             => 1,
+    NUMBER_READS_WITHTRS                                => 1,
+    NUMBER_READS_WITHTRS_GE7                            => 1,
+    NUMBER_READS_WITHTRS_GE7_AFTER_REDUND               => 1,
+    NUMBER_TRS_IN_READS_AFTER_REDUND                    => 1,
+    NUMBER_REF_TRS                                      => 1,
+    NUMBER_REFS_TRS_AFTER_REDUND                        => 1,
+    CLUST_NUMBER_OF_PROCLU_CLUSTERS                     => 1,
+    CLUST_NUMBER_OF_PROCLU_CLUSTERS_BEFORE_REJOIN       => 1,
+    CLUST_NUMBER_OF_EXACTPAT_CLUSTERS                   => 1,
+    CLUST_NUMBER_OF_REF_REPS_IN_CLUSTERS                => 1,
+    CLUST_NUMBER_OF_READ_REPS_IN_CLUSTERS               => 1,
+    CLUST_LARGEST_NUMBER_OF_TRS_IN_PROCLU_CLUSTER       => 1,
+    CLUST_LARGEST_NUMBER_OF_REFS_IN_PROCLU_CLUSTER      => 1,
+    CLUST_LARGEST_PATRANGE_IN_PROCLU_CLUSTER            => 1,
+    CLUST_LARGEST_NUMBER_OF_TRS_IN_EXACTPAT_CLUSTER     => 1,
+    CLUST_LARGEST_NUMBER_OF_REFS_IN_EXACTPAT_CLUSTER    => 1,
+    CLUST_NUMBER_OF_REFS_WITH_PREDICTED_VNTR            => 1,
+    CLUST_NUMBER_OF_CLUSTERS_WITH_PREDICTED_VNTR        => 1,
+    NUMBER_REFS_VNTR_SPAN_N                             => 1,
+    NUMBER_REFS_SINGLE_REF_CLUSTER                      => 1,
+    NUMBER_REFS_SINGLE_REF_CLUSTER_WITH_READS_MAPPED    => 1,
+    NUMBER_REFS_SINGLE_REF_CLUSTER_WITH_NO_READS_MAPPED => 1,
+    NUMBER_MAPPED                                       => 1,
+    NUMBER_RANK                                         => 1,
+    NUMBER_RANKFLANK                                    => 1,
+    INTERSECT_RANK_AND_RANKFLANK                        => 1,
+    INTERSECT_RANK_AND_RANKFLANK_BEFORE_PCR             => 1,
+    BBB_WITH_MAP_DUPS                                   => 1,
+    BBB                                                 => 1,
+    RANK_EDGES_OVERCUTOFF                               => 1,
+    RANK_REMOVED_SAMEREF                                => 1,
+    RANK_REMOVED_SAMESEQ                                => 1,
+    RANK_REMOVED_PCRDUP                                 => 1,
+    RANKFLANK_EDGES_INSERTED                            => 1,
+    RANKFLANK_REMOVED_SAMEREF                           => 1,
+    RANKFLANK_REMOVED_SAMESEQ                           => 1,
+    RANKFLANK_REMOVED_PCRDUP                            => 1,
+    TIME_MYSQLCREATE                                    => 1,
+    TIME_TRF                                            => 1,
+    TIME_RENUMB                                         => 1,
+    TIME_REDUND                                         => 1,
+    TIME_PROCLU                                         => 1,
+    TIME_JOINCLUST                                      => 1,
+    TIME_DB_INSERT_REFS                                 => 1,
+    TIME_DB_INSERT_READS                                => 1,
+    TIME_WRITE_FLANKS                                   => 1,
+    TIME_MAP_FLANKS                                     => 1,
+    TIME_MAP_REFFLANKS                                  => 1,
+    TIME_MAP_INSERT                                     => 1,
+    TIME_EDGES                                          => 1,
+    TIME_INDEX_PCR                                      => 1,
+    TIME_PCR_DUP                                        => 1,
+    TIME_MAP_DUP                                        => 1,
+    TIME_VNTR_PREDICT                                   => 1,
+    TIME_ASSEMBLYREQ                                    => 1,
+    TIME_REPORTS                                        => 1,
+    DATE_MYSQLCREATE                                    => 1,
+    DATE_TRF                                            => 1,
+    DATE_RENUMB                                         => 1,
+    DATE_REDUND                                         => 1,
+    DATE_PROCLU                                         => 1,
+    DATE_JOINCLUST                                      => 1,
+    DATE_DB_INSERT_REFS                                 => 1,
+    DATE_DB_INSERT_READS                                => 1,
+    DATE_WRITE_FLANKS                                   => 1,
+    DATE_MAP_FLANKS                                     => 1,
+    DATE_MAP_REFFLANKS                                  => 1,
+    DATE_MAP_INSERT                                     => 1,
+    DATE_EDGES                                          => 1,
+    DATE_INDEX_PCR                                      => 1,
+    DATE_PCR_DUP                                        => 1,
+    DATE_MAP_DUP                                        => 1,
+    DATE_VNTR_PREDICT                                   => 1,
+    DATE_ASSEMBLYREQ                                    => 1,
+    DATE_REPORTS                                        => 1,
+    ERROR_STEP                                          => 1,
+    ERROR_DESC                                          => 1,
+    ERROR_CODE                                          => 1,
+    N_MIN_SUPPORT                                       => 1,
+    MIN_FLANK_REQUIRED                                  => 1,
+    MAX_FLANK_CONSIDERED                                => 1,
+);
 
 ################################################################
 sub trim {
@@ -321,6 +416,7 @@ sub set_statistics {
     ( $ENV{DEBUG} ) && warn Dumper($stats) . "\n";
 
     while ( my ( $key, $val ) = each %$stats ) {
+        next unless exists $valid_stats{$key};
         ( $ENV{DEBUG} ) && warn "Setting stat: $key to $val\n";
         push @sql_qual, "$key=?";
         push @sql_bind, $val;
@@ -370,16 +466,15 @@ sub get_statistics {
     }
 
     # my $DBSUFFIX = shift;
-    my @stats = @_;
-    my $dbh   = get_dbh( { readonly => 1 } );
+    my @stats = grep { exists $valid_stats{$_} } @_;
+    my $dbh = get_dbh( { readonly => 1 } );
     my $sql_clause;
     ( $ENV{DEBUG} ) && warn Dumper( \@stats ) . "\n";
 
     $sql_clause = join ", ", @stats;
     ( $ENV{DEBUG} ) && warn "Getting stats: " . $sql_clause . "\n";
 
-    my $sql_res = $dbh->selectrow_hashref("SELECT $sql_clause FROM stats")
-        or croak "Couldn't execute statement: " . $dbh->errstr;
+    my $sql_res = $dbh->selectrow_hashref("SELECT $sql_clause FROM stats");
 
     $dbh->disconnect();
     return $sql_res;
