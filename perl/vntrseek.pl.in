@@ -441,28 +441,28 @@ if ( $STEP == 0 ) {
 }
 
 if ( $STEP == 1 ) {
+    unlink glob "${read_profiles_folder}/*.clu";
 
-    my $exstring = "rm -f ${read_profiles_folder}/*";
-    system($exstring);
-
-    $timestart = time();
     warn
         "\n\nExecuting step #$STEP (searching for tandem repeats in reads, producing profiles and sorting)...\n";
     my $extra_param  = ( $opts{STRIP_454_KEYTAGS} ) ? '-s' : '';
     my $extra_param2 = ( $opts{IS_PAIRED_READS} )   ? '-r' : '';
-    system(
-        "./run_trf_ng.pl -t \"$TRF_PARAM\" -u \"$TRF2PROCLU_PARAM\" $extra_param $extra_param2 -p $opts{NPROCESSES} $opts{INPUT_DIR} $read_profiles_folder"
+
+    $timestart = time();
+    my $trf_out = qx(
+        $install_dir/run_trf_ng.pl -t \"$TRF_PARAM\" -u \"$TRF2PROCLU_PARAM\" $extra_param $extra_param2 -p $opts{NPROCESSES} $opts{INPUT_DIR} $read_profiles_folder
     );
     if ( $? == -1 ) {
         SetError( $STEP, "command failed: $!", -1 );
         die "command failed: $!\n";
     }
-    #elsif ($? & 127) {
-    #    my $rc = ( $? & 127 );
-    #    SetError( $STEP, "Died with signal $rc while running TRF and TRF2PROCLU", $rc );
-    #    die sprintf("died with signal %d, %s coredump\n",
-    #    $rc,  ($? & 128) ? 'with' : 'without');
-    #}
+
+#elsif ($? & 127) {
+#    my $rc = ( $? & 127 );
+#    SetError( $STEP, "Died with signal $rc while running TRF and TRF2PROCLU", $rc );
+#    die sprintf("died with signal %d, %s coredump\n",
+#    $rc,  ($? & 128) ? 'with' : 'without');
+#}
     else {
         my $rc = ( $? >> 8 );
         if ( 0 != $rc ) {
@@ -471,11 +471,29 @@ if ( $STEP == 1 ) {
         }
     }
 
+    my %trf_res = (
+        reads             => 0,
+        num_trs_ge7       => 0,
+        num_trs           => 0,
+        num_reads_trs_ge7 => 0,
+        num_reads_trs     => 0,
+    );
+
+    while ( $trf_out =~ /(\w+):(\d+),?/mg ) {
+        next unless exists $trf_res{$1};
+        $trf_res{$1} = $2;
+    }
+
     set_statistics(
-        {   PARAM_TRF       => $TRF_PARAM,
-            FOLDER_FASTA    => $opts{INPUT_DIR},
-            FOLDER_PROFILES => $read_profiles_folder,
-            TIME_TRF        => time() - $timestart,
+        {   PARAM_TRF                => $TRF_PARAM,
+            FOLDER_FASTA             => $opts{INPUT_DIR},
+            FOLDER_PROFILES          => $read_profiles_folder,
+            TIME_TRF                 => time() - $timestart,
+            NUMBER_READS             => $trf_res{reads},
+            NUMBER_TRS_IN_READS_GE7  => $trf_res{num_trs_ge7},
+            NUMBER_TRS_IN_READS      => $trf_res{num_trs},
+            NUMBER_READS_WITHTRS_GE7 => $trf_res{num_reads_trs_ge7},
+            NUMBER_READS_WITHTRS     => $trf_res{num_reads_trs},
         }
     );
     set_datetime("DATE_TRF");
