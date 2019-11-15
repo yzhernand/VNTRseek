@@ -483,10 +483,10 @@ int main( int argc, char **argv ) {
     d = opendir( inputfile );
 
     if ( d != NULL ) {
-        fprintf( stderr, "inputfile last char: %c\n",
-          *( inputfile + strlen( inputfile ) - 1 ) );
+        // fprintf( stderr, "inputfile last char: %c\n",
+        //   *( inputfile + strlen( inputfile ) - 1 ) );
         bigtempbuf = calloc( indirlen + 20, sizeof( *bigtempbuf ) );
-        fprintf( stderr, "inputfile: %s\n", inputfile );
+        // fprintf( stderr, "inputfile: %s\n", inputfile );
 
         while ( ( de = readdir( d ) ) != NULL ) {
 
