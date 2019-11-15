@@ -978,9 +978,10 @@ void GetCompositionCounts( int id, int *counts ) {
         return;
     }
 
-    for ( i = 0; i < 4; i++ ) {
-        counts[i] = cmp_counts[id][i];
-    }
+    // for ( i = 0; i < 4; i++ ) {
+    //     counts[i] = cmp_counts[id][i];
+    // }
+    memcpy(counts, cmp_counts[id], sizeof(*counts)*4);
 
     counts[4] = 10 - counts[0] - counts[1] - counts[2] - counts[3];
 
