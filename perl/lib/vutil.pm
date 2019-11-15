@@ -487,19 +487,18 @@ sub _init_ref_dbh {
     my $refseq    = $refbase . ".seq";
     my $refleb36  = $refbase . ".leb36";
     my $refindist = $refbase . ".indist";
+    my %dbi_opts  = (
+        AutoCommit                 => 1,
+        RaiseError                 => 1,
+        PrintError                 => 0,
+        sqlite_see_if_its_a_number => 1,
+    );
 
     # TODO Maybe first connect to a temp location, backup database
     # to that location then return handle to that location. This
     # is primarily for running on clusters/over NFS.
-    my $dbh = DBI->connect(
-        "DBI:SQLite:dbname=" . $refdbfile,
-        undef, undef,
-        {   AutoCommit                 => 1,
-            RaiseError                 => 1,
-            PrintError                 => 0,
-            sqlite_see_if_its_a_number => 1,
-        }
-        )
+    my $dbh = DBI->connect( "DBI:SQLite:dbname=" . $refdbfile,
+        undef, undef, \%dbi_opts )
         or die "Could not connect to database "
         . $refdbfile
         . ": $DBI::errstr";
@@ -525,9 +524,16 @@ sub _init_ref_dbh {
     }
 
     # END TODO
+    $dbh->disconnect();
 
     # Return the db handle
-    return $dbh;
+    return DBI->connect(
+        "DBI:SQLite:dbname=" . $refdbfile,
+        undef, undef,
+        {   %dbi_opts,
+            ReadOnly => ( exists $opts->{readonly} ) ? $opts->{readonly} : 0
+        }
+    );
 }
 ################################################################
 sub get_ref_dbh {
