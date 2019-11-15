@@ -70,7 +70,7 @@ add_subdirectory(scripts)
 
 # Install required perl modules locally
 install(CODE "
-    message(STATUS \"Installing required perl modules (using ${CPANM_CMD}\")
+    message(STATUS \"Installing required perl modules (using ${CPANM_CMD})\")
     execute_process(COMMAND ${CPANM_CMD} -L local --from \"${CMAKE_SOURCE_DIR}/vendor/cache\" --installdeps --notest --quiet .
         WORKING_DIRECTORY ${CMAKE_INSTALL_PREFIX}/${InstallSuffix}
         )
