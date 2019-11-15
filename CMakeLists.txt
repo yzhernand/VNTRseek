@@ -49,6 +49,7 @@ GLIBC_REQ_VER(2.14)
 PERL_REQ_VER(5.8.8)
 SAMTOOLS_REQ_VER(1.8)
 BEDTOOLS_REQ_VER(2.15.0)
+find_cpanm()
 
 message(STATUS "Your processor is ${CMAKE_SYSTEM_PROCESSOR} and you are running ${CMAKE_SYSTEM_NAME}. This means we'll download ${TRFDLName}")
 # May need to change if other platforms are supported
@@ -56,16 +57,24 @@ message(STATUS "Your processor is ${CMAKE_SYSTEM_PROCESSOR} and you are running 
 SET(TRFBin "trf${TRFVer}-ngs.linux.exe")
 
 ## Check for required Perl modules
-find_package(PerlModules COMPONENTS DBI DBD::SQLite Try::Tiny)
-IF(NOT PERLMODULES_FOUND)
-    message(FATAL_ERROR "Not all required perl modules were found on your system")
-ENDIF(NOT PERLMODULES_FOUND)
+# find_package(PerlModules COMPONENTS DBI DBD::SQLite Try::Tiny)
+# IF(NOT PERLMODULES_FOUND)
+#     message(FATAL_ERROR "Not all required perl modules were found on your system")
+# ENDIF(NOT PERLMODULES_FOUND)
 
 # Build files in src
 add_subdirectory(src)
 add_subdirectory(perl)
 add_subdirectory(scripts)
 #ADD_SUBDIRECTORY(etc)
+
+# Install required perl modules locally
+install(CODE "
+    message(STATUS \"Installing required perl modules (using ${CPANM_CMD}\")
+    execute_process(COMMAND ${CPANM_CMD} -L local --from \"${CMAKE_SOURCE_DIR}/vendor/cache\" --installdeps --notest --quiet .
+        WORKING_DIRECTORY ${CMAKE_INSTALL_PREFIX}/${InstallSuffix}
+        )
+")
 
 # Post install message
 add_subdirectory(postinst)

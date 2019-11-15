@@ -52,7 +52,12 @@ ENDFUNCTION(GLIBC_REQ_VER)
 # Check for samtools
 FUNCTION(SAMTOOLS_REQ_VER VER)
     MESSAGE(STATUS "Checking samtools version...")
-    EXECUTE_PROCESS(COMMAND samtools --version | head -1
+    find_program(SAMTOOLS_CMD samtools)
+    if(NOT SAMTOOLS_CMD) 
+        message(FATAL_ERROR "samtools not found!")
+    endif()
+
+    EXECUTE_PROCESS(COMMAND ${SAMTOOLS_CMD} --version | head -1
         OUTPUT_VARIABLE SAMTOOLS_VERSION)
     STRING(REGEX MATCH "[0-9]\\.[0-9][0-9]?" SAMTOOLS_VERSION "${SAMTOOLS_VERSION}")
 
@@ -66,7 +71,12 @@ ENDFUNCTION(SAMTOOLS_REQ_VER)
 # Check for bedtools
 FUNCTION(BEDTOOLS_REQ_VER VER)
     MESSAGE(STATUS "Checking bedtools version...")
-    EXECUTE_PROCESS(COMMAND bedtools --version | head -1
+    find_program(BEDTOOLS_CMD bedtools)
+    if(NOT BEDTOOLS_CMD) 
+        message(FATAL_ERROR "Bedtools not found!")
+    endif()
+
+    EXECUTE_PROCESS(COMMAND ${BEDTOOLS_CMD} --version | head -1
         OUTPUT_VARIABLE BEDTOOLS_VERSION)
     STRING(REGEX MATCH "[0-9]\\.[0-9][0-9]?\\.[0-9]" BEDTOOLS_VERSION "${BEDTOOLS_VERSION}")
 
@@ -76,3 +86,11 @@ FUNCTION(BEDTOOLS_REQ_VER VER)
         MESSAGE(FATAL_ERROR "Error: bedtools version must be >= ${VER}. You have ${BEDTOOLS_VERSION}")
     ENDIF()
 ENDFUNCTION(BEDTOOLS_REQ_VER)
+
+function(find_cpanm)
+    find_program(CPANM_CMD cpanm)
+    if(NOT CPANM_CMD)
+        # Use bundled cpanm
+        set(CPANM_CMD "${CMAKE_SOURCE_DIR}/perl/cpanm")
+    endif()
+endfunction()

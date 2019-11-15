@@ -1,3 +1,4 @@
+requires 'perl', '>= 5.24.0';
 requires 'Try::Tiny';
 requires 'IPC::Run';
 requires 'DBD::SQLite', '>= 1.58';
