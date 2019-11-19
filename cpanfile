@@ -1,5 +1,6 @@
 requires 'perl', '>= 5.24.0';
 requires 'Try::Tiny';
+requires 'Set::IntSpan';
 requires 'IPC::Run';
 requires 'DBD::SQLite', '>= 1.58';
 requires 'Parallel::ForkManager', '>= 2.01';

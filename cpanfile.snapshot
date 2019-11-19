@@ -345,6 +345,12 @@ DISTRIBUTIONS
     requirements:
       Exporter 5.57
       perl 5.006
+  Set-IntSpan-1.19
+    pathname: S/SW/SWMCD/Set-IntSpan-1.19.tar.gz
+    provides:
+      Set::IntSpan 1.19
+    requirements:
+      ExtUtils::MakeMaker 0
   Struct-Dumb-0.09
     pathname: P/PE/PEVANS/Struct-Dumb-0.09.tar.gz
     provides:
