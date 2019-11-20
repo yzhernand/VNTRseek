@@ -448,29 +448,29 @@ int main( int argc, char **argv ) {
         SINGLE_OUTFILE = 1;
     }
 
+    char *tmp   = strdup( argv[2] );
+    outputbname = strdup( basename( tmp ) );
+    outputdname = strdup( dirname( tmp ) );
+    free(tmp);
+    outputfile = calloc( strlen( outputdname ) + strlen( outputbname ) + 10,
+      sizeof( *outputfile ) );
+    outputfile2 =
+      calloc( strlen( outputdname ) + strlen( outputbname ) + 19,
+        sizeof( *outputfile2 ) );
+    outdb = calloc(
+      strlen( outputdname ) + strlen( outputbname ) + 4, sizeof( *outdb ) );
+
     if ( SINGLE_OUTFILE ) {
         sprintf( outputfile, "%s", argv[2] );
         sprintf( outputfile2, "%s.rotindex", argv[2] );
         sprintf( outdb, "%s.db", argv[2] );
     } else {
-        char *tmp   = strdup( argv[2] );
-        outputbname = strdup( basename( tmp ) );
-        outputdname = strdup( dirname( tmp ) );
-
-        outputfile = calloc( strlen( outputdname ) + strlen( outputbname ) + 10,
-          sizeof( *outputfile ) );
-        outputfile2 =
-          calloc( strlen( outputdname ) + strlen( outputbname ) + 19,
-            sizeof( *outputfile2 ) );
-        outdb = calloc(
-          strlen( outputdname ) + strlen( outputbname ) + 4, sizeof( *outdb ) );
-
         sprintf( outputfile, "%s/1.%s", outputdname, outputbname );
         sprintf( outputfile2, "%s/1.%s.rotindex", outputdname, outputbname );
         sprintf( outdb, "%s/%s.db", outputdname, outputbname );
 
-        if ( strcmp( "1", getenv( "DEBUG" ) ) == 0 ) {
-            printf( "Dirname: %s, basename: %s\n", outputdname, outputbname );
+        if ( getenv( "DEBUG" ) && strcmp( "1", getenv( "DEBUG" ) ) == 0 ) {
+            fprintf( stderr, "Dirname: %s, basename: %s\n", outputdname, outputbname );
             fprintf( stderr, "outputfile %s\n", outputfile );
             fprintf( stderr, "outputfile2 %s\n", outputfile2 );
         }
@@ -893,6 +893,12 @@ int main( int argc, char **argv ) {
         // reorder
         EasyArrayQuickSort( FARRAY, arsize_and_min_rep_cmp );
     }
+
+    free(outputbname);
+    free(outputdname);
+    free(outputfile);
+    free(outputfile2);
+    free(outdb);
 
     printf( "\n\n%llu profiles read, %llu profiles marked nonredundant. (time: "
             "%ld seconds)\n\n",

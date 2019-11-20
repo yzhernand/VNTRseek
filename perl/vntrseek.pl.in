@@ -578,10 +578,10 @@ if ( $STEP == 3 ) {
         }
     }
 
-    if ( !chdir("$read_profiles_folder_clean") ) {
-        SetError( $STEP, "could not enter clean profiles directory", -1 );
-        die("read profiles dir does not exist!");
-    }
+    # if ( !chdir("$read_profiles_folder_clean") ) {
+    #     SetError( $STEP, "could not enter clean profiles directory", -1 );
+    #     die("read profiles dir does not exist!");
+    # }
 
     # opendir( my $dirh, $read_profiles_folder_clean );
     # my @files = readdir($dirh);
@@ -596,10 +596,10 @@ if ( $STEP == 3 ) {
     #     }
     # }
 
-    if ( !chdir("$install_dir") ) {
-        SetError( $STEP, "could not enter install directory", -1 );
-        die("install dir does not exist!\n");
-    }
+    # if ( !chdir("$install_dir") ) {
+    #     SetError( $STEP, "could not enter install directory", -1 );
+    #     die("install dir does not exist!\n");
+    # }
 
     warn "setting additional statistics...\n";
     system(
@@ -1161,8 +1161,8 @@ if ( $STEP == 13 ) {
         }
     }
 
-    $exstring = qq(find "${edges_folder}" -type f -delete);
-    system($exstring);
+    # $exstring = qq(find "${edges_folder}" -type f -delete);
+    system(qq(find "${edges_folder}" -type f -delete));
 
     set_statistics( { TIME_EDGES => time() - $timestart } );
     set_datetime("DATE_EDGES");

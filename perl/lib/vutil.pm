@@ -1,5 +1,5 @@
 package vutil;
-use strict;
+use v5.24;
 use Cwd;
 use DBI;
 use Carp;
@@ -1027,7 +1027,21 @@ sub load_refprofiles_db {
         $dbh->commit;
 
         # Run redund
-        run_redund( $dbh, $refleb36, "reference.leb36", 0, 0 );
+        try {
+            warn "Running redund on ref set\n";
+            run_redund( $dbh, $refleb36, "reference.leb36", 0, 0 );
+        }
+        catch {
+            warn "Error running redund on reference set: $_\n";
+            # if (/DBD::SQLite::db/) {
+            # }
+
+            $dbh->rollback;
+            $dbh->do(q{DROP TABLE IF EXISTS `ref_profiles`});
+            $dbh->disconnect;
+
+            die "\n";
+        };
         return 1;
     }
 
@@ -1178,7 +1192,15 @@ sub run_redund {
     my ($minrep_sql) = $dbh->selectrow_array(
         q{SELECT sql FROM minrep.sqlite_master
         WHERE name = 'minreporder'}
-    ) or carp "Couldn't do statement: $DBI::errstr\n";
+    );
+    
+    unless ($minrep_sql) {
+        my $res = $dbh->selectall_arrayref(q{SELECT * FROM minrep.sqlite_master});
+        use Data::Dumper;
+        say Dumper($res);
+        die "unable to get CREATE TABLE statement for minreporder from redund db\n";
+    }
+
     $minrep_sql =~ s/minreporder/main.minreporder/;
     $dbh->do(q{DROP TABLE IF EXISTS main.minreporder})
         or carp "Couldn't do statement: $DBI::errstr\n";
