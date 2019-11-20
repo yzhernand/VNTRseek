@@ -449,7 +449,7 @@ if ( $STEP == 1 ) {
 
     $timestart = time();
     my $trf_out = qx(
-        $install_dir/run_trf_ng.pl -t \"$TRF_PARAM\" -u \"$TRF2PROCLU_PARAM\" $extra_param $extra_param2 -p $opts{NPROCESSES} $opts{INPUT_DIR} $read_profiles_folder
+        $install_dir/run_trf_ng.pl -t "$TRF_PARAM" -u "$TRF2PROCLU_PARAM" $extra_param $extra_param2 -p $opts{NPROCESSES} "$opts{INPUT_DIR}" "$read_profiles_folder"
     );
     if ( $? == -1 ) {
         SetError( $STEP, "command failed: $!", -1 );
@@ -856,7 +856,7 @@ if ( $STEP == 8 ) {
     close $tmp_rotindex;
 
     my $exstring
-        = "./insert_reads.pl $read_profiles_folder_clean/all.clusters $read_profiles_folder  $opts{INPUT_DIR} $read_profiles_folder_clean $reference_folder/reference.leb36.rotindex $extra_param $opts{DBSUFFIX} $run_dir $opts{TMPDIR} $opts{IS_PAIRED_READS}";
+        = qq{./insert_reads.pl $read_profiles_folder_clean/all.clusters "$read_profiles_folder"  "$opts{INPUT_DIR}" "$read_profiles_folder_clean" "$reference_folder/reference.leb36.rotindex" $extra_param $opts{DBSUFFIX} "$run_dir" $opts{TMPDIR} $opts{IS_PAIRED_READS}};
     system($exstring);
     if ( $? == -1 ) {
         SetError( $STEP, "command failed: $!", -1 );
