@@ -451,13 +451,12 @@ int main( int argc, char **argv ) {
     char *tmp   = strdup( argv[2] );
     outputbname = strdup( basename( tmp ) );
     outputdname = strdup( dirname( tmp ) );
-    free(tmp);
-    outputfile = calloc( strlen( outputdname ) + strlen( outputbname ) + 10,
+    free( tmp );
+    outputfile  = calloc( strlen( outputdname ) + strlen( outputbname ) + 10,
       sizeof( *outputfile ) );
-    outputfile2 =
-      calloc( strlen( outputdname ) + strlen( outputbname ) + 19,
-        sizeof( *outputfile2 ) );
-    outdb = calloc(
+    outputfile2 = calloc( strlen( outputdname ) + strlen( outputbname ) + 19,
+      sizeof( *outputfile2 ) );
+    outdb       = calloc(
       strlen( outputdname ) + strlen( outputbname ) + 4, sizeof( *outdb ) );
 
     if ( SINGLE_OUTFILE ) {
@@ -470,7 +469,8 @@ int main( int argc, char **argv ) {
         sprintf( outdb, "%s/%s.db", outputdname, outputbname );
 
         if ( getenv( "DEBUG" ) && strcmp( "1", getenv( "DEBUG" ) ) == 0 ) {
-            fprintf( stderr, "Dirname: %s, basename: %s\n", outputdname, outputbname );
+            fprintf(
+              stderr, "Dirname: %s, basename: %s\n", outputdname, outputbname );
             fprintf( stderr, "outputfile %s\n", outputfile );
             fprintf( stderr, "outputfile2 %s\n", outputfile2 );
         }
@@ -496,8 +496,7 @@ int main( int argc, char **argv ) {
                 fiptr = smalloc( sizeof( FITEM_STRUCT ) );
 
                 // strcpy( bigtempbuf, inputfile );
-                sprintf(
-                  bigtempbuf, "%s/%s", inputfile, de->d_name );
+                sprintf( bigtempbuf, "%s/%s", inputfile, de->d_name );
 
                 fiptr->inputfile = strdup( bigtempbuf );
                 fiptr->d_name    = strdup( de->d_name );
@@ -894,11 +893,11 @@ int main( int argc, char **argv ) {
         EasyArrayQuickSort( FARRAY, arsize_and_min_rep_cmp );
     }
 
-    free(outputbname);
-    free(outputdname);
-    free(outputfile);
-    free(outputfile2);
-    free(outdb);
+    free( outputbname );
+    free( outputdname );
+    free( outputfile );
+    free( outputfile2 );
+    free( outdb );
 
     printf( "\n\n%llu profiles read, %llu profiles marked nonredundant. (time: "
             "%ld seconds)\n\n",
