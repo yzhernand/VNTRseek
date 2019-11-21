@@ -485,7 +485,7 @@ int main( int argc, char **argv ) {
     if ( d != NULL ) {
         // fprintf( stderr, "inputfile last char: %c\n",
         //   *( inputfile + strlen( inputfile ) - 1 ) );
-        bigtempbuf = calloc( indirlen + 20, sizeof( *bigtempbuf ) );
+        bigtempbuf = calloc( indirlen + 30, sizeof( *bigtempbuf ) );
         // fprintf( stderr, "inputfile: %s\n", inputfile );
 
         while ( ( de = readdir( d ) ) != NULL ) {
@@ -495,9 +495,9 @@ int main( int argc, char **argv ) {
                         de->d_name + strlen( de->d_name ) - 17 ) ) {
                 fiptr = smalloc( sizeof( FITEM_STRUCT ) );
 
-                strcpy( bigtempbuf, inputfile );
-                snprintf(
-                  bigtempbuf, indirlen + 20, "%s/%s", inputfile, de->d_name );
+                // strcpy( bigtempbuf, inputfile );
+                sprintf(
+                  bigtempbuf, "%s/%s", inputfile, de->d_name );
 
                 fiptr->inputfile = strdup( bigtempbuf );
                 fiptr->d_name    = strdup( de->d_name );
