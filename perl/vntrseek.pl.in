@@ -76,9 +76,11 @@ if ( !chdir("$install_dir") ) {
 }
 
 my $HELPSTRING
-    = "\nUsage: $0 --DBSUFFIX <run_name> <start step> <end step> To tell the master script what step to execute. The first step is 0, last step is 19. \n\nOPTIONS:\n\n"
+    = "\nUsage: $0 --DBSUFFIX <run_name> <start step> <end step> To tell the master script what step to execute. The first step is 0, last step is 19."
+    . "\n\nOPTIONS:\n\n"
     . "\t--HELP                        prints this help message\n"
-    . "\t--DBSUFFIX                    suffix for database name\n"
+    . "\t--DBSUFFIX                    suffix for database name (this is the name of your analysis)\n"
+    . "\t--NAME                        synonym for DBSUFFIX\n"
     . "\t--NPROCESSES                  number of processors on your system\n"
     . "\t--MIN_FLANK_REQUIRED          minimum required flank on both sides for a read TR to be considered (default 10)\n"
     . "\t--MAX_FLANK_CONSIDERED        maximum flank length used in flank alignments, set to big number to use full flank (default 50)\n"
@@ -100,7 +102,8 @@ my $HELPSTRING
     . "\t\n\nADDITIONAL USAGE:\n\n"
     . "\t$0 100                       clear error\n"
     . "\t$0 100 N                     clear error and set NextRunStep to N (0-19, this is only when running on a cluster using the advanced cluster script that checks for NextRunStep)\n"
-    . "\n\n";
+    . "\t$0 --REFERENCE </path/to/reference/basename> [--REDO_REFDB] to initialize a reference set.\n"
+    . "This only needs to be done once for a reference set. Supply --REDO_REFDB to force a recreation of the database.\n\n";
 
 # get dbsuffix from command line
 my %opts = ();
@@ -111,13 +114,13 @@ GetOptions(
     \%opts,                   "HELP",
     "NPROCESSES=i",           "MIN_FLANK_REQUIRED=i",
     "MAX_FLANK_CONSIDERED=i", "MIN_SUPPORT_REQUIRED=i",
-    "KEEPPCRDUPS=i",          "DBSUFFIX|RUN=s",
+    "KEEPPCRDUPS=i",          "DBSUFFIX|NAME=s",
     "SERVER=s",               "STRIP_454_KEYTAGS=i",
     "IS_PAIRED_READS=i",      "PLOIDY=i",
     "REDO_REFDB",             "INPUT_DIR|FASTA_DIR=s",
     "OUTPUT_ROOT=s",          "TMPDIR=s",
     "REFERENCE=s",            "REFERENCE_INDIST_PRODUCE=i",
-    "CLEAN"
+    "CLEAN",                  "STATS"
 );
 
 # print help if asked
@@ -127,6 +130,7 @@ if ( $opts{"HELP"} ) {
 }
 
 if ( !exists $opts{"DBSUFFIX"} ) {
+    # Initialize a reference set db if --reference was given, but not --dbsuffix
     if ( exists $opts{REFERENCE} ) {
         print "\nPreparing reference set $opts{REFERENCE}...\n";
         my $dbh
@@ -135,13 +139,8 @@ if ( !exists $opts{"DBSUFFIX"} ) {
         exit;
     }
 
-    die("Please set run name (RUN) variable using command line.\n");
+    die("Please set run name (--name) variable using command line.\n");
 }
-
-# Die if no starting step is supplied
-die "$HELPSTRING\n" unless @ARGV;
-
-my $STEP = shift;
 
 # where config file will go
 # Convert any input for DBSUFFIX to lower case.
@@ -158,6 +157,36 @@ for my $k ( keys %conf_vars ) {
         if ( !exists $opts{$k} );
 }
 
+# Print a nicely formatted table with all stats if "STATS" flag is given
+if ( exists $opts{STATS} ) {
+    my $dbh = get_dbh();
+    my $stat_sth = $dbh->prepare(qq{SELECT * FROM stats WHERE id = 1});
+    $stat_sth->execute;
+    my @stat_cols = $stat_sth->{NAME}->@*;
+    my $min_width = max(map { length($_) } @stat_cols);
+    my %run_stats = $stat_sth->fetchrow_hashref()->%*;
+    
+    for my $s (@stat_cols) {
+        if ($s =~ /^TIME_/) {
+            my ($d, $h, $m);
+            $d = int($run_stats{$s} / (24*3600));
+            $run_stats{$s} %= (24*3600);
+            $h = int($run_stats{$s} / 3600);
+            $run_stats{$s} %= 3600;
+            $m = int($run_stats{$s} / 60);
+            $run_stats{$s} %= 60;
+            $run_stats{$s} = sprintf "%02d:%02d:%02d", $h, $m, $run_stats{$s};
+            $run_stats{$s} = "$d days " . $run_stats{$s} if ($d);
+        }
+
+        say sprintf("%${min_width}s\t%20s", $s, ( $run_stats{$s} // "undef" ));
+    }
+    exit;
+}
+
+# Die if no starting step is supplied
+die "$HELPSTRING\n" unless @ARGV;
+
 # Send config back to vutil lib and validate, after including CLI options
 set_config(%opts);
 
@@ -167,6 +196,7 @@ print_config($run_dir);
 # print Dumper(\%opts);
 # print Dumper(@ARGV);
 
+my $STEP = shift;
 my $STEPEND = -1;
 if (   (@ARGV)
     && ( $ARGV[0] =~ /^\d+?$/ )
