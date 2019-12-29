@@ -78,7 +78,7 @@ int LoadRotated( FILE *fp );
 #include "bitwise LCS single word.h"
 #include "bitwise edit distance alignment multiple word no end penalty.h"
 
-int doEdgesBruteForce( FILE *fpi, FILE *fpi2, FILE *edgesIn, unsigned char *dt1,
+void doEdgesBruteForce( FILE *fpi, FILE *fpi2, FILE *edgesIn, unsigned char *dt1,
   int fixed, char *outputfile );
 
 /*******************************************************************************************/
@@ -1220,7 +1220,7 @@ void doCriticalErrorAndQuit( const char *format, ... ) {
 }
 
 /*******************************************************************************************/
-int doEdgesBruteForce( FILE *fpi, FILE *fpi2, FILE *edgesIn, unsigned char *dt1,
+void doEdgesBruteForce( FILE *fpi, FILE *fpi2, FILE *edgesIn, unsigned char *dt1,
   int fixed, char *outputfile ) {
 
     char       buffer[1010] = "";
