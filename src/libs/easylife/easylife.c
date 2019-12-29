@@ -1494,7 +1494,7 @@ void EasyStringHashPrint( EASY_STRING_HASH *easyStringHash ) {
 
         for ( hitem = easyStringHash->rack[i]; hitem != NULL;
               hitem = hitem->next ) {
-            printf( "  %s (%d)", hitem->key,
+            printf( "  %s (%p)", hitem->key,
               hitem
                 ->item ); /* prints the address of the item, not item itself */
         }
