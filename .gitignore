@@ -1,2 +1,7 @@
 build/
 *.sublime-*
+.vscode
+.vstags
+*.code-workspace
+*.tar.gz
+*.log
