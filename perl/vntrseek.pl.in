@@ -167,7 +167,7 @@ if ( exists $opts{STATS} ) {
     my %run_stats = $stat_sth->fetchrow_hashref()->%*;
     
     for my $s (@stat_cols) {
-        if ($s =~ /^TIME_/ && $run_stats{$s}) {
+        if ($s =~ /^TIME_/ && defined $run_stats{$s}) {
             my ($d, $h, $m);
             $d = int($run_stats{$s} / (24*3600));
             $run_stats{$s} %= (24*3600);
@@ -179,7 +179,7 @@ if ( exists $opts{STATS} ) {
             $run_stats{$s} = "$d days " . $run_stats{$s} if ($d);
         }
 
-        say sprintf("%${min_width}s\t%20s", $s, ( $run_stats{$s} // "undef" ));
+        say sprintf("%-${min_width}s\t%20s", $s, ( $run_stats{$s} // "undef" ));
     }
     exit;
 }
