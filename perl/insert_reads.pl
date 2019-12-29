@@ -11,8 +11,9 @@ use FindBin qw($RealBin);
 use lib "$RealBin/lib";
 use lib "$RealBin/local/lib/perl5";
 use Try::Tiny;
+
 # use ProcInputReads
-    # qw(get_reader init_bam formats_regexs compressed_formats_regexs set_install_dir);
+# qw(get_reader init_bam formats_regexs compressed_formats_regexs set_install_dir);
 # set_install_dir("$FindBin::RealBin");
 
 use vutil
@@ -66,7 +67,7 @@ $timestart = time();
 system("cp $clusterfile $rotatedfolder/allwithdups.clusters");
 
 # load the RHASH now with new values added
-# 
+#
 # read clusters to see what values we will store (so we don't have to store all)
 print STDERR
     "\n\nreading clusterfile allwithdups.clusters to hash clustered ids (with added rotated repeats)...";
@@ -249,7 +250,7 @@ foreach my $ifile (@indexfiles) {
 
 # Remaining rows
 if (@replnk_rows) {
-    my $cb = gen_exec_array_cb( \@replnk_rows );
+    my $cb   = gen_exec_array_cb( \@replnk_rows );
     my $rows = vs_db_insert( $dbh, $sth, $cb, "Error inserting read TRs." );
     if ($rows) {
         $inserted += $rows;
@@ -330,7 +331,7 @@ for my $read_file (@readfiles) {
                 [ $HEADHASH{"$headstr"}, "$headstr", "$dnastr" ];
 
             if ( $processed % $RECORDS_PER_INFILE_INSERT == 0 ) {
-                my $cb = gen_exec_array_cb( \@fasta_reads_rows );
+                my $cb   = gen_exec_array_cb( \@fasta_reads_rows );
                 my $rows = vs_db_insert( $dbh, $sth, $cb,
                     "Error inserting reads. row dump: "
                         . Dumper( \@fasta_reads_rows ) );
