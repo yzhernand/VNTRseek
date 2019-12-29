@@ -639,7 +639,7 @@ int main( int argc, char *argv[] ) {
                 fprintf( fp, "<?xml-stylesheet type=\"text/xsl\" "
                              "href=\"../family.xsl\"?>\n" );
                 fprintf( fp,
-                  "<cluster trim=\"%d\" read_count=\"%lld\" ref_count=\"%d\" "
+                  "<cluster trim=\"%d\" read_count=\"%lld\" ref_count=\"%zu\" "
                   "report=\"all\" maxedits=\"%d\" id=\"%d_%d\">\n",
                   REFLEN, read_count, ref_list->size, MAXERRORS, a1, a2 );
 
