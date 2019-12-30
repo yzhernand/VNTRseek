@@ -148,7 +148,7 @@ sub print_vcf {
         NUMBER_READS
         NUMBER_TRS_IN_READS);
     my $stat_hash = get_statistics(@stats);
-    my $dbh = get_dbh( { readonly => 1, userefdb => 1 } );
+    my $dbh       = get_dbh( { readonly => 1, userefdb => 1 } );
 
     # Get total number of TRs supported
     my $numsup_sth
@@ -1450,7 +1450,8 @@ sub print_latex {
         die
             "Error: mismatch of sum of mapped read TRs by distinguishablility and total read TRs mapped. "
             . "(Expected $readTRsMapped, got "
-            . ($readTRsMappedToIndistinguishable + $readTRsMappedToSingleton)
+            . (
+            $readTRsMappedToIndistinguishable + $readTRsMappedToSingleton )
             . ")\n";
     }
 
@@ -1509,7 +1510,7 @@ sub print_latex {
         die
             "Error: mismatch of sum of mapped ref TRs by distinguishablility and total ref TRs mapped. "
             . "(Expected $refTRsMapped, got '$refTRsMappedIndistinguishable' + '$refTRsMappedSingleton' = '"
-            . ($refTRsMappedIndistinguishable + $refTRsMappedSingleton)
+            . ( $refTRsMappedIndistinguishable + $refTRsMappedSingleton )
             . "')\n";
     }
 
@@ -1901,13 +1902,13 @@ sub calc_entropy {
         ) + (
             ( $diversity[1] == 0 ) ? 0
             : ( $diversity[1] * ( log( $diversity[1] ) / log(2) ) )
-            ) + (
+        ) + (
             ( $diversity[2] == 0 ) ? 0
             : ( $diversity[2] * ( log( $diversity[2] ) / log(2) ) )
-            ) + (
+        ) + (
             ( $diversity[3] == 0 ) ? 0
             : ( $diversity[3] * ( log( $diversity[3] ) / log(2) ) )
-            )
+        )
     );
 
     if ( $entropy < 0 ) { $entropy = -$entropy; }
@@ -2104,7 +2105,7 @@ while ( my @data = $get_supported_reftrs_sth->fetchrow_array() ) {
     );
 
     if ( @supported_refTRs % $RECORDS_PER_INFILE_INSERT == 0 ) {
-        my $cb = gen_exec_array_cb( \@supported_refTRs );
+        my $cb   = gen_exec_array_cb( \@supported_refTRs );
         my $rows = vs_db_insert( $dbh, $update_ref_table_sth, $cb,
             "Error when inserting entries into our supported reference TRs table. Row dump: "
                 . Dumper( \@supported_refTRs ) );
@@ -2122,7 +2123,7 @@ my $updfromtable = $i;
 
 # Insert last rows:
 if (@supported_refTRs) {
-    my $cb = gen_exec_array_cb( \@supported_refTRs );
+    my $cb   = gen_exec_array_cb( \@supported_refTRs );
     my $rows = vs_db_insert( $dbh, $update_ref_table_sth, $cb,
         "Error when inserting entries into our supported reference TRs table. Row dump: "
             . Dumper( \@supported_refTRs ) );
